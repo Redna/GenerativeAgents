@@ -1,0 +1,45 @@
+
+
+world:
+    name: Awesome World
+    description: It is all awesome here.
+    connections:
+        - townhall: jims_cafe
+        - johnson_house: townhall
+    locations:
+        townhall:
+            name: Jims Townhall
+            description: The place to be ;)
+        jims_cafe:
+            name: Jims Cafe
+            description: Cozy coffee
+            locations:
+                kitchen: 
+                    name: Kitchen
+                    description: Place where the meal is prepared
+                    locations: 
+                        fride:
+                            name: Fridge
+                            description: "Let's the food stay cool"
+                        oven:
+                            name: Oven
+                            description: "Can cook some meal"
+                living_room:
+                    name: Living Room
+                    description: Place where the Guests are relaxing
+                entrance:
+                    name: Entrance
+                    description: Wait here until you will get your table
+                restroom:
+                    name: Restroom
+                    description: Refresh yourself there
+            connections:
+                - living_room: kitchen
+                - restroom: entrance
+                - entrance: living_room
+        johnson_house:
+            name: Johnson House
+            description: The Johnson Family lives here
+        
+            
+
