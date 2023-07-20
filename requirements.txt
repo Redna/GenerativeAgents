@@ -1,0 +1,8 @@
+pathfinding==1.0.4
+python-socketio==5.8.0
+aiohttp==3.8.5
+pydantic==2.2.1
+torch
+transformers
+sentence_transformers
+accelerate
