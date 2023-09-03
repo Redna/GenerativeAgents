@@ -1,4 +1,5 @@
 import csv
+from enum import Enum
 from functools import lru_cache
 import heapq
 import random
@@ -18,6 +19,12 @@ from pathfinding.finder.a_star import AStarFinder
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)) + "/..")
 
+class Level(Enum):
+    WORLD = "world"
+    SECTOR = "sector"
+    ARENA = "arena"
+    GAME_OBJECT = "game_object"
+    SPAWNING_LOCATION = "spawning_location"
 
 class Tile:
     def __init__(self, x,y, world, sector, arena, game_object, spawning_location, collision, events):
@@ -48,6 +55,26 @@ class Tile:
 
         return address
     
+    def get_path(self, level: Level):
+        path = f"{self.world}"
+
+        if level == level.WORLD: 
+            return path
+        else: 
+            path += f":{self.sector}"
+        
+        if level == level.SECTOR: 
+            return path
+        else: 
+            path += f":{self.sector}"
+
+        if level == level.ARENA: 
+            return path
+        else: 
+            path += f":{self.game_object}"
+
+        return path
+        
     def is_sector(self):
         return self.sector != ""
     
@@ -336,10 +363,10 @@ class Maze:
                 if tile.x + i < 0 or tile.x + i >= self.maze_width or tile.y + j < 0 or tile.y + j >= self.maze_height:
                     continue
                 
-                tile = self.get_tile(tile.x + i, tile.y + j)
+                nearby_tile = self.get_tile(tile.x + i, tile.y + j)
 
                 if tile.is_walkable():
-                    nearby_tiles += [tile]
+                    nearby_tiles += [nearby_tile]
 
         return nearby_tiles
 

@@ -1,27 +1,7 @@
-import asyncio
-from typing import Callable, Coroutine, List
-import uuid
+from typing import Callable, Coroutine
 from aiohttp import web
-from pydantic import BaseModel
 import socketio
 
-
-class MovementDTO(BaseModel):
-    col: int
-    row: int
-
-class AgentDTO(BaseModel):
-    name: str
-    description: str
-    location: str
-    emoji: str
-    activity: str
-    movement: MovementDTO
-
-class RoundUpdateDTO(BaseModel):
-    round: int
-    time: str
-    agents: List[AgentDTO]
 
 sids = set()
 sio = socketio.AsyncServer(cors_allowed_origins="*")
@@ -47,7 +27,7 @@ async def updater():
     while True:   
         update = await update_simulation()
         # emit pydantic model as json dict
-        await sio.emit('update', update.model_dump())     
+        await sio.emit('update', update.dict())     
 
 async def init_app():
     sio.start_background_task(updater)
