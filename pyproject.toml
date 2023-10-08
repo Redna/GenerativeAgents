@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "generative-agents"
+authors = [
+    {name = "Alexander Gruhl", email = "gruhl.alexander@gmail.com"},
+]
+description = "A simulation framework for generative agents."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["generative agents", "llm", "sim"]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "generative_agents.version"}
