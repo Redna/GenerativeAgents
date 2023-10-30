@@ -11,6 +11,15 @@ class ArenaMemory(BaseModel):
             return
 
         self.game_objects += [tile.game_object]
+    
+    def __getitem__(self, key):
+        return self.game_objects.get(key)
+
+    def __setitem__(self, key, value):
+        self.game_objects[key] = value
+
+    def __getattr__(self, name):
+        return getattr(self.game_objects, name)
 
 
 class SectorMemory(BaseModel):
@@ -25,6 +34,14 @@ class SectorMemory(BaseModel):
 
         self.arenas[tile.arena].add(tile)
 
+    def __getitem__(self, key):
+        return self.arenas.get(key)
+
+    def __setitem__(self, key, value):
+        self.arenas[key] = value
+
+    def __getattr__(self, name):
+        return getattr(self.arenas, name)
 
 class WorldMemory(BaseModel):
     sectors: Dict[str, List[SectorMemory]] = {}
@@ -38,6 +55,14 @@ class WorldMemory(BaseModel):
 
         self.sectors[tile.sector].add(tile)
 
+    def __getitem__(self, key):
+        return self.sectors.get(key)
+
+    def __setitem__(self, key, value):
+        self.sectors[key] = value
+
+    def __getattr__(self, name):
+        return getattr(self.sectors, name)
 
 class MemoryTree(BaseModel):
     tree: Dict[str, List[WorldMemory]] = {}
@@ -50,6 +75,15 @@ class MemoryTree(BaseModel):
             self.tree[tile.world] = WorldMemory()
 
         self.tree[tile.world].add(tile)
+    
+    def __getitem__(self, key):
+        return self.tree.get(key)
+
+    def __setitem__(self, key, value):
+        self.tree[key] = value
+
+    def __getattr__(self, name):
+        return getattr(self.tree, name)
 
     def get_str_accessible_sectors(self, curr_world):
         """
@@ -90,7 +124,7 @@ class MemoryTree(BaseModel):
         x = ", ".join(list(self.tree[curr_world][curr_sector].keys()))
         return x
 
-    def get_str_accessible_arena_game_object_s(self, arena):
+    def get_str_accessible_arena_game_objects(self, arena):
         """
         Get a str list of all accessible game object_s that are in the arena. If 
         temp_address is specified, we return the object_s that are available in
@@ -110,8 +144,7 @@ class MemoryTree(BaseModel):
             return ""
 
         try:
-            x = ", ".join(list(self.tree[curr_world][curr_sector][curr_arena]))
+            x = ", ".join(list(self.tree[curr_world][curr_sector][curr_arena].game_objects))
         except:
-            x = ", ".join(
-                list(self.tree[curr_world][curr_sector][curr_arena.lower()]))
+            return None
         return x

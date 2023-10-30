@@ -1,3 +1,6 @@
+import re
+from pydantic import BaseModel
+from generative_agents import global_state
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
@@ -26,8 +29,32 @@ Input: {name} is {action_description}.
 Output: ({name},"""
 
 
-_prompt = PromptTemplate(input_variables=["name",
-                                          "action_description"],
-                            template=_template)
+class ActionEventTriple(BaseModel):
+    name: str
+    address: str = None
+    action_description: str
 
-action_event_triple_chain = LLMChain(prompt=_prompt, llm=llm)
+    async def run(self): 
+      _prompt = PromptTemplate(input_variables=["name",
+                                                "action_description"],
+                                    template=_template)
+
+      _action_event_triple_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
+                                                        "max_new_tokens":20,
+                                                        "do_sample": True,
+                                                        "top_p": 0.95,
+                                                        "top_k": 10,
+                                                        "temperature": 0.4,
+                                                        "cache_key": f"3action_event_triple_chain_{self.name}_{self.action_description}_{global_state.tick}"},
+                                                        verbose=True)
+
+      completion = await _action_event_triple_chain.arun(name=self.name, action_description=self.action_description)
+      
+      pattern = rf"Output: \(({self.name})\,(.*)\,(.*)\)"
+      match = re.search(pattern, completion)
+      
+      if match:
+        subject , predicate, object_ = match.groups()
+        return (self.address if self.address else subject.strip(), predicate.strip(), object_.strip())
+      
+      return None

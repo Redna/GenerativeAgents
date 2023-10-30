@@ -1,3 +1,6 @@
+import re
+from pydantic import BaseModel
+from generative_agents import global_state
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
@@ -26,13 +29,40 @@ Area options: [{available_sectors_nearby}].
 For {curr_action_description}, {agent_name} should go to the following area: ["""
 
 
-_prompt = PromptTemplate(input_variables=["agent_name",
-                                            "agent_home",
-                                            "agent_home_arenas",
-                                            "agent_current_sector",
-                                            "agent_current_sector_arenas",
-                                            "available_sectors_nearby",
-                                            "curr_action_description"],
-                            template=_template)
+class ActionSectorLocations(BaseModel):
+    agent_name: str
+    agent_home: str
+    agent_home_arenas: str
+    agent_current_sector: str
+    agent_current_sector_arenas: str
+    available_sectors_nearby: str
+    curr_action_description: str
 
-action_sector_locations_chain = LLMChain(prompt=_prompt, llm=llm)
+    async def run(self):
+        _prompt = PromptTemplate(input_variables=["agent_name",
+                                                  "agent_home",
+                                                  "agent_home_arenas",
+                                                  "agent_current_sector",
+                                                  "agent_current_sector_arenas",
+                                                  "available_sectors_nearby",
+                                                  "curr_action_description"],
+                                 template=_template)
+
+        _action_sector_locations_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
+            "max_new_tokens": 10,
+            "do_sample": True,
+            "top_p": 0.95,
+            "top_k": 60,
+            "temperature": 0.4,
+            "cache_key": f"2action_sector_locations_{self.agent_name}_{global_state.tick}"}, verbose=True)
+
+        completion = await _action_sector_locations_chain.arun(agent_name=self.agent_name,
+                                                               agent_home=self.agent_home,
+                                                               agent_home_arenas=self.agent_home_arenas,
+                                                               agent_current_sector=self.agent_current_sector,
+                                                               agent_current_sector_arenas=self.agent_current_sector_arenas,
+                                                               available_sectors_nearby=self.available_sectors_nearby,
+                                                               curr_action_description=self.curr_action_description)
+
+        pattern = rf"{self.agent_name} should go to the following area: \[(.*)\]"
+        return re.findall(pattern, completion)[-1]

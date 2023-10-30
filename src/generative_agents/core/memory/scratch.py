@@ -14,12 +14,12 @@ class Scratch():
     age: int
     tile: Tile
     home: Tile
-    time: SimulationTime
     innate_traits: List[str]
 
+    time: SimulationTime = None
     action: Action = None  
     learned_traits: List[str] = field(default_factory=list)
-    vision_radius: int = 4
+    vision_radius: int = 8
     attention_bandwith: int = 3
     retention: int = 5
     reflection_trigger_counter: int = 255
@@ -103,18 +103,15 @@ class Scratch():
         today_min_elapsed += advance
 
         x = 0
-        for _, duration in self.daily_schedule: 
-            x += duration
-            x = 0
             
         for _, duration in self.daily_schedule_hourly_organzied: 
-            x += duration
+            x += int(duration)
 
         # We then calculate the current index based on that. 
         curr_index = 0
         elapsed = 0
         
-        for _, duration in self.f_daily_schedule: 
+        for _, duration in self.daily_schedule: 
             elapsed += duration
             if elapsed > today_min_elapsed: 
                 return curr_index
@@ -141,7 +138,8 @@ class Scratch():
         commonset += f"Age: {self.age}\n"
         commonset += f"Innate traits: {self.innate_traits}\n"
         commonset += f"Learned traits: {self.learned_traits}\n"
-        commonset += f"Currently: {self.action.event.description}\n"
+        if self.action:
+            commonset += f"Currently: {self.action.event.description}\n"
         commonset += f"Lifestyle: {self.lifestyle}\n"
         commonset += f"Daily plan requirement: {self.daily_requirements}\n"
         commonset += f"Current Date: {self.time.today}\n"

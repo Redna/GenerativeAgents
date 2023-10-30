@@ -37,8 +37,8 @@ class PerceivedEvent(Event):
     created: datetime.datetime = datetime.datetime.now()
     expiration: datetime.datetime = None
     last_accessed: datetime.datetime = datetime.datetime.now()
-    filling: List[ConversationFilling | str] = field(default_factory=[])
-    keywords: List[str] = field(default_factory=[])
+    filling: List[ConversationFilling | str] = field(default_factory=list)
+    keywords: List[str] = field(default_factory=list)
 
     @classmethod
     def from_db_entry(cls, entry: MemoryEntry):
@@ -57,9 +57,9 @@ class PerceivedEvent(Event):
                    keywords=entry.keywords)
 
     def to_db_entry(self):
-        return MemoryEntry(id=self.id,
+        return MemoryEntry(
                            content=self.description,
-                           memory_type=self.type.value,
+                           memory_type=self.event_type.value,
                            depth=self.depth,
                            created=self.created,
                            expiration=self.expiration,

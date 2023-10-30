@@ -32,7 +32,7 @@ class MemoryEntry(TimeAndImportanceBaseSchema):
 
     subject: str
     predicate: str
-    object: str
+    object_: str
 
     poignancy: float = .5
     keywords: List[str] = []
@@ -83,7 +83,7 @@ def initialize_agent(agent_name: str):
         raise Exception(f"Agent {agent_name} already exists")
 
     _collections[agent_name] = TimeAndImportanceWrapper(
-        client=_client, collection_name="John Doe", data_schema=MemoryEntry)
+        client=_client, collection_name=agent_name, data_schema=MemoryEntry)
 
 
 def add(agent_name: str, memory_entry: MemoryEntry) -> MemoryEntry:

@@ -2,6 +2,8 @@
 import datetime
 from enum import Enum
 
+from generative_agents import global_state
+
 class DayType(Enum):
     FIRST_DAY = 1
     NEW_DAY = 2
@@ -14,12 +16,20 @@ class SimulationTime():
     certain amount of time. 
     """
 
-    def __init__(self, increment: int):
+    def __init__(self, increment: int, from_time_string: str = None):
         self.increment = increment
-        self.time = datetime.datetime.now()
+        self.time = datetime.datetime.today()
+
+        if from_time_string:
+            date_string = self.time.strftime('%Y-%m-%d')
+            datetime_string = f"{date_string} {from_time_string}"
+            self.time = datetime.datetime.strptime(datetime_string, '%Y-%m-%d %H:%M')
+
+
 
     def tick(self):
         self.time += datetime.timedelta(seconds=self.increment)
+        global_state.tick += 1
 
     def get(self):
         return self.time

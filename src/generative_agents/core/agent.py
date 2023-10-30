@@ -5,20 +5,20 @@ from operator import itemgetter
 import random
 from typing import Dict, List, Tuple
 from generative_agents.communication.models import AgentDTO, MovementDTO
+from generative_agents.conversational.chain.action_event_triple import ActionEventTriple
+from generative_agents.conversational.chain.action_location_arena import ActionArenaLocations
+from generative_agents.conversational.chain.action_location_game_object import ActionLocationGameObject
+from generative_agents.conversational.chain.action_location_sector import ActionSectorLocations
+from generative_agents.conversational.chain.action_pronunciatio import ActionPronunciatio
+from generative_agents.conversational.chain.first_daily_plan import FirstDailyPlan
+from generative_agents.conversational.chain.object_event import ObjectActionDescription
+from generative_agents.conversational.chain.task_decomposition import TaskDecomposition
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
 from generative_agents.simulation.maze import Level, Maze, Tile
 from generative_agents.conversational.chain import (poignance_chain, wake_up_hour_chain,
-                                                    first_daily_plan_chain,
                                                     daily_plan_and_status_chain,
-                                                    action_sector_locations_chain,
-                                                    task_decomposition_chain,
-                                                    action_arena_locations_chain,
-                                                    action_location_game_object_chain,
-                                                    action_pronunciatio_chain,
-                                                    action_event_triple_chain,
-                                                    object_event_chain,
                                                     decide_to_talk_chain,
                                                     decide_to_react_chain,
                                                     new_decomposition_schedule_chain,
@@ -51,7 +51,7 @@ class Agent():
         self.emoji = emoji
         self.activity = activity
         self.scratch = Scratch(name=name, tile=tile, home=tile,
-                               time=time, innate_traits=innate_traits, age=age)
+                               innate_traits=innate_traits, age=age)
         self.spatial_memory = MemoryTree()
         self.associative_memory = AssociativeMemory(self.name, self.scratch.retention)
         self.time = time
@@ -301,6 +301,7 @@ class Agent():
         # Step 3: Chat-related state clean up.
         # If the persona is not chatting with anyone, we clean up any of the
         # chat-related states here.
+
         if self.scratch.action.event.predicate != "chat with":
             self.scratch.chatting_with = None
             self.scratch.chat = None
@@ -493,7 +494,7 @@ class Agent():
     def _add_reflection_thought(self, thought: str, evidence: List[str]):
         created = self.scratch.time
         expiration = created + datetime.timedelta(days=30)
-        s, p, o = action_event_triple_chain(self.name, thought)
+        s, p, o = ActionEventTriple(self.name, thought)
         thought_poignancy = poignance_chain(
             self.name, self.description, thought, EventType.THOUGHT.value)
 
@@ -1048,13 +1049,13 @@ class Agent():
             # also invoked during the first hour of the day -- to double up so we can
             # decompose two hours in one go). Of course, we need to have something to
             # decompose as well, so we check for that too.
-            if self.scratch.time.hour < 23:
+            if self.scratch.time.time.hour < 23:
                 # And we don't want to decompose after 11 pm.
                 action_description, action_duration = self.scratch.daily_schedule[next_hour_index]
                 if action_duration >= 60:
                     if needs_decomposition(action_description, action_duration):
                         self.scratch.daily_schedule[next_hour_index:next_hour_index+1] = (
-                            await self._decompose_action(next_hour_index, action_description, action_description))
+                            await self._decompose_action(next_hour_index, action_description, action_duration))
 
         # * End of Decompose *
 
@@ -1094,51 +1095,67 @@ class Agent():
                                      event=Event(subject=subject,
                                                  predicate=predicate,
                                                  object_=object_,
-                                                 description=action_object_desctiption))
+                                                 description=action_object_desctiption,
+                                                 depth=0))
 
         next_action = Action(address=action_game_object,
-                             start_time=self.scratch.time,
+                             start_time=self.scratch.time.time,
                              duration=action_duration,
                              emoji=action_pronouncio,
                              event=Event(subject=self.name,
                                          predicate=action_event[1],
                                          object_=action_event[2],
-                                         description=action_description
+                                         description=action_description,
+                                         depth=0
                                          ),
                              object_action=object_action)
 
-        self.scratch.action_queue.put(next_action)
+        self.scratch.action = next_action
 
     async def _generate_action_object_event_triple(self, action_game_object, action_object_description):
-        action_object_event_triple = await action_event_triple_chain.arun(agent_name=action_game_object,
-                                                                          action_description=action_object_description)
-        # TODO parse this triple
+        object_name = action_game_object.split(":")[-1]
+        
+        action_object_event_triple = await ActionEventTriple(name=object_name, address=object_name, action_description=action_object_description).run()
+
         return action_object_event_triple
 
     async def _generate_action_object_description(self, action_game_object, action_description):
-        action_object_description = await object_event_chain.arun(action_game_object=action_game_object,
-                                                                  action_description=action_description)
-        # TODO parse this output
+        
+        object_name = action_game_object.split(":")[-1]
+
+        action_object_description = await ObjectActionDescription(name=self.name, 
+                                                                  object_name=object_name,
+                                                                  action_description=action_description).run()
         return action_object_description
 
     async def _generate_action_event_triple(self, action_description):
-        action_event = await action_event_triple_chain.arun(agent_name=self.name,
-                                                            action_description=action_description)
+        action_event = await ActionEventTriple(name=self.name,
+                                               action_description=action_description).run()
 
-        # TODO parse this triple
         return action_event
 
     async def _generate_action_pronunciatio(self, action_description):
-        action_pronouncio = await action_pronunciatio_chain.arun(
-            action_description=action_description)
+        action_pronouncio = await ActionPronunciatio(action_description=action_description).run()
         return action_pronouncio
 
     async def _generate_next_action_game_object(self, action_description, action_arena):
-        available_objects = self.spatial_memory.get_str_accessible_arena_game_object_s(
+        available_objects = self.spatial_memory.get_str_accessible_arena_game_objects(
             action_arena)
+        
+        if not available_objects:
+            current_arena = self.scratch.tile.get_path(Level.ARENA)
+            available_objects = self.spatial_memory.get_str_accessible_arena_game_objects(current_arena)
 
-        game_object = await action_location_game_object_chain.arun(
-            action_description=action_description, available_objects=available_objects)
+        game_object = "-------"
+        retry = 0
+        while game_object not in available_objects:
+            game_object = await ActionLocationGameObject(action_description=action_description, 
+                                                     available_objects=available_objects,
+                                                     retry=str(retry)).run()
+            retry += 1
+            if retry > 5:
+                game_object = random.choice(available_objects)
+        
         return f"{action_arena}:{game_object}"
 
     async def _generate_next_action_arena(self, action_description, action_sector):
@@ -1147,13 +1164,13 @@ class Agent():
         current_area = self.scratch.tile.arena
         sector = action_sector.split(":")[-1]
 
-        arena = await action_arena_locations_chain.arun(agent_name=name,
-                                                        current_area=current_area,
-                                                        current_sector=current_sector,
-                                                        sector=sector,
-                                                        sector_arenas=self.spatial_memory.get_str_accessible_sector_arenas(
-                                                            action_sector),
-                                                        action_description=action_description)
+        arena = await ActionArenaLocations(name=name,
+                                            current_area=current_area,
+                                            current_sector=current_sector,
+                                            sector=sector,
+                                            sector_arenas=self.spatial_memory.get_str_accessible_sector_arenas(action_sector),
+                                            available_sectors_nearby=self.spatial_memory.get_str_accessible_sectors(list(self.spatial_memory.tree.keys())[-1]),
+                                            action_description=action_description).run()
 
         return f"{action_sector}:{arena}"
 
@@ -1161,20 +1178,20 @@ class Agent():
         name = self.name
         home = self.scratch.home.sector
         home_arenas = self.spatial_memory.get_str_accessible_sector_arenas(
-            home.get_path(Level.SECTOR))
+            self.scratch.home.get_path(Level.SECTOR))
         current_sector = self.scratch.tile.sector
         current_sector_arenas = self.spatial_memory.get_str_accessible_sector_arenas(
             self.scratch.tile.get_path(Level.SECTOR))
         nearby_sectors = self.spatial_memory.get_str_accessible_sectors(
             self.scratch.tile.get_path(Level.WORLD))
 
-        next_sector = await action_sector_locations_chain.arun(agent_name=name,
-                                                               agent_home=home,
-                                                               agent_home_arenas=home_arenas,
-                                                               agent_current_sector=current_sector,
-                                                               agent_current_sector_arenas=current_sector_arenas,
-                                                               available_sectors_nearby=nearby_sectors,
-                                                               curr_action_description=action_description)
+        next_sector = await ActionSectorLocations(agent_name=name,
+                                                    agent_home=home,
+                                                    agent_home_arenas=home_arenas,
+                                                    agent_current_sector=current_sector,
+                                                    agent_current_sector_arenas=current_sector_arenas,
+                                                    available_sectors_nearby=nearby_sectors,
+                                                    curr_action_description=action_description).run()
 
         return f"{self.scratch.tile.world}:{next_sector}"
 
@@ -1210,7 +1227,7 @@ class Agent():
         task_ids += [current_index]
         if current_index+1 <= len(self.scratch.daily_schedule):
             task_ids += [current_index+1]
-        if current_index+2 <= len(self.scratch.daily_schedule):
+        if current_index+2 < len(self.scratch.daily_schedule):
             task_ids += [current_index+2]
 
         task_sumaries = []
@@ -1240,19 +1257,18 @@ class Agent():
         task_context = f"From {', and '.join(task_sumaries)}."
 
         start_time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S")
-                      + datetime.timedelta(minutes=start_min))
+                      + datetime.timedelta(minutes=start_min)).strftime("%H:%M:%S")
         end_time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S")
-                    + datetime.timedelta(minutes=end_min))
+                    + datetime.timedelta(minutes=end_min)).strftime("%H:%M:%S")
 
-        return await task_decomposition_chain.arun(agent_name=self.name,
-                                                   agent_identity=self.scratch.identity,
-                                                   today=self.scratch.time.today,
-                                                   task_context=task_context,
-                                                   task_description=action_description,
-                                                   task_duration=action_duration,
-                                                   task_start_time=task_start_time,
-                                                   task_end_time=task_end_time
-                                                   )
+        return await TaskDecomposition(name=self.name,
+                                        identity=self.scratch.identity,
+                                        today=self.scratch.time.today,
+                                        task_context=task_context,
+                                        task_description=action_description,
+                                        task_duration=str(action_duration),
+                                        task_start_time=start_time,
+                                        task_end_time=end_time).run()
 
     async def _long_term_planning(self, daytype: DayType):
         """
@@ -1279,14 +1295,11 @@ class Agent():
             # if this is the start of generation (so there is no previous day's
             # daily requirement, or if we are on a new day, we want to create a new
             # set of daily requirements.
-
-            # TODO parse this to a list
-            result = await first_daily_plan_chain.arun(agent_name=self.name,
-                                                       agent_identity=self.scratch.identity,
-                                                       agent_lifestyle=self.scratch.lifestyle,
-                                                       current_day=self.scratch.time.today,
-                                                       wake_up_hour=wake_up_hour)
-            self.scratch.daily_requirements = result["first_daily_plan"]
+            self.scratch.daily_requirements = await FirstDailyPlan(agent_name=self.name,
+                                                                    agent_identity=self.scratch.identity,
+                                                                    agent_lifestyle=self.scratch.lifestyle,
+                                                                    current_day=self.scratch.time.today,
+                                                                    wake_up_hour=wake_up_hour).run()
         elif daytype == DayType.NEW_DAY:
             # TODO parse daily_plan to a list
             daily_plan, current_status = self._generate_daily_plan_and_current_status()
@@ -1298,31 +1311,28 @@ class Agent():
         # which is a list of todo items with a time duration (in minutes) that
         # add up to 24 hours.
 
-        # TODO parse output properly
         self.scratch.daily_schedule = await HourlyBreakdown(identity=self.scratch.identity,
+                                                            wake_up_hour=wake_up_hour,
                                                             current_hour=self.scratch.time.hour,
                                                             name=self.name,
                                                             today=self.scratch.time.today,
                                                             hourly_organized_activities=self.scratch.daily_requirements,
                                                             actual_activities=self.scratch.hourly_activity_history,
                                                             current_status=self.scratch.current_status).run()
-
-        # TODO see where this is used
-        # complete nonsense so far.. :D
-        # persona.scratch.f_daily_schedule_hourly_org = (persona.scratch
-        #                                                .f_daily_schedule[:])
+        self.scratch.daily_schedule_hourly_organzied = self.scratch.daily_schedule
 
         daily_plan = " ,".join(self.scratch.daily_requirements)
-        description = f"This is {self.name}'s plan for {self.scratch.time}: {daily_plan}."
+        description = f"This is {self.name}'s plan for {self.scratch.time.today}: {daily_plan}."
 
         perceived_plan = PerceivedEvent(event_type=EventType.PLAN,
                                         poignancy=0.5,
+                                        depth=1,
                                         description=description,
                                         subject=self.name,
                                         predicate="plan",
                                         object_=self.scratch.time.today,
-                                        created=self.scratch.time,
-                                        expiration=self.scratch.time + datetime.timedelta(days=30))
+                                        created=self.scratch.time.time,
+                                        expiration=self.scratch.time.time + datetime.timedelta(days=30))
 
         self.associative_memory.add(perceived_plan)
 

@@ -67,7 +67,7 @@ class Tile:
         if level == level.SECTOR: 
             return path
         else: 
-            path += f":{self.sector}"
+            path += f":{self.arena}"
 
         if level == level.ARENA: 
             return path

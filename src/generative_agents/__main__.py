@@ -42,8 +42,8 @@ class Simulation():
         initialize_database(True)
         self.maze = Maze()
         self.agents: List[Agent] = dict()
-        self.simulated_time = SimulationTime(5)
-        self.agents["Test Agent"] = Agent(name="Test Agent",
+        self.simulated_time = SimulationTime(120, from_time_string="06:00")
+        self.agents["Giorgio Rossi"] = Agent(name="Giorgio Rossi",
                                           time=self.simulated_time,
                                           description="A test agent",
                                           innate_traits=["Easy going", "Competitive", "Confident"],
@@ -52,6 +52,18 @@ class Simulation():
                                           emoji="🤖",
                                           activity="idle",
                                           tile=self.maze.address_tiles["the Ville:Giorgio Rossi's apartment:bathroom:shower"][0])
+        
+        self.agents["John Lin"] = Agent(name="John Lin",
+                                          time=self.simulated_time,
+                                          description="A test agent",
+                                          innate_traits=["Easy going", "Competitive", "Confident"],
+                                          age=25,
+                                          location="the Ville:Lin family's house:Mei and John Lin's bedroom",
+                                          emoji="🤖",
+                                          activity="idle",
+                                          tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0])
+        
+        
         self.round_updates = round_updates
 
     def spawn_agent(self, data: AgentDTO):
@@ -64,9 +76,13 @@ class Simulation():
         self.simulated_time.tick()
         print(
             f"round: {self.round_updates.current_round} time: {self.simulated_time.as_string()}")
+        
+        updates = []
         for name, agent in self.agents.items():
-            print(f"updating {name}")
-            await agent.update(self.simulated_time, self.maze, self.agents)
+            print(f"scheduling update for {name}")
+            updates.append(agent.update(self.simulated_time, self.maze, self.agents))
+
+        await asyncio.gather(*updates)
 
         self.round_updates.add(self.simulated_time, self.agents)
 

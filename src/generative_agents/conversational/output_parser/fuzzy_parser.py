@@ -9,7 +9,9 @@ class PatternWithDefault(NamedTuple):
     default: str
 
 class FuzzyOutputParser(BaseLLMOutputParser):
-    output_definitions: Dict[str, PatternWithDefault]
+
+    def __init__(self, output_definitions: Dict[str, PatternWithDefault]):
+        self.output_definitions = output_definitions
 
     def parse_result(self, result: List[Generation]) -> Dict[str, str]:
         outputs = {}

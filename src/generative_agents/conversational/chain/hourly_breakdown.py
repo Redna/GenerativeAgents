@@ -1,6 +1,8 @@
+import re
 from typing import List, Tuple
 
 from pydantic import BaseModel
+from generative_agents import global_state
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
@@ -21,50 +23,69 @@ Here the originally intended hourly breakdown
 {intended_schedule}
 
 {prior_schedule}
-{current_activity}
-"""
-
-_prompt = PromptTemplate(input_variables=["hourly_schedule_format", "identity", "name", "intended_schedule", "prior_schedule", "current_activity"],
-                         template=_template)
+{current_activity}"""
 
 class HourlyBreakdown(BaseModel):
     
     identity: str
     current_hour: str
+    wake_up_hour: str
     name: str
     today: str
     hourly_organized_activities: List[str]
     actual_activities: List[str]
-    current_activity: str
 
     def _build_hourly_schedule_format(self) -> str:
-        formatted_hours += [f"{self.today} -- {hour} | Activity: [Fill in]" for hour in hours]
+        formatted_hours = [f"{self.today} -- {hour} | Activity: [Fill in]" for hour in hours]
         return "\n".join(formatted_hours)
 
     def _build_intended_schedule(self) -> str: 
-        formatted_hours = [f"{self.today} -- {hour} | Activity: {activity}" for hour, activity in zip(hours, self.hourly_organized_activities)]
-        return "\n".join(formatted_hours)
+        statements = [f"{i+1}) {hourly_organized_activity}" for i, hourly_organized_activity in enumerate(self.hourly_organized_activities)]
+        return ", ".join(statements)
 
-    def _build_prior_schedule(self) -> str: 
-        formatted_hours = [f"{self.today} -- {hour} | Activity: {activity}" for hour, activity in zip(hours, self.actual_activities)]
+    def _build_prior_schedule(self, activities) -> str: 
+        formatted_hours = [f"{self.today} -- {hour} | Activity: {activity[0]}" for hour, activity in zip(hours, activities)]
         return "\n".join(formatted_hours)
-
-    def _build_current_activity(self) -> str: 
-        return f"{self.current_hour} | Activity: {self.name} is {self.current_activity}"
 
     async def run(self): 
-        chain = LLMChain(prompt=_prompt, llm=llm)
-        
+        wake_up_index = hours.index(self.wake_up_hour.zfill(8))
         hourly_schedule_format = self._build_hourly_schedule_format()
-        intended_schedule = self._build_intended_schedule()
-        prior_schedule = self._build_prior_schedule()
-        current_activity = self._build_current_activity()
+
+        # TODO think about asyncio tasks and make 3 plans in parallel - Use the llm to rate the best fitting plan
+        activities_hourly_organized = []
+
+        _prompt = PromptTemplate(input_variables=["hourly_schedule_format", "identity", "name", "intended_schedule", "prior_schedule", "current_activity"],
+                                template=_template)
+        _hourly_breakdown_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
+                                                "max_new_tokens":50,
+                                                "do_sample": True,
+                                                "top_p": 0.95,
+                                                "top_k": 60,
+                                                "temperature": 0.4}
+                                                , verbose=True)
         
-        return await chain.arun(hourly_schedule_format=hourly_schedule_format, 
-                         identity=self.identity, 
-                         name=self.name, 
-                         intended_schedule=intended_schedule, 
-                         prior_schedule=prior_schedule, 
-                         current_activity=current_activity)
+        for i, hour in enumerate(hours):
+            
+            if i < wake_up_index:
+                activities_hourly_organized += [("sleeping", 60)]
+            else:
+                intended_schedule = self._build_intended_schedule()
+                prior_schedule = self._build_prior_schedule(activities_hourly_organized)
+                current_activity = f"{self.today} -- {hour} | Activity: {self.name} is"
+
+
+                _hourly_breakdown_chain.llm_kwargs["cache_key"] = f"hourly_breakdown_{self.name}_{hour}_{global_state.tick}"
+
+                completion = await _hourly_breakdown_chain.arun(hourly_schedule_format=hourly_schedule_format, 
+                                                                identity=self.identity, 
+                                                                name=self.name, 
+                                                                intended_schedule=intended_schedule, 
+                                                                prior_schedule=prior_schedule, 
+                                                                current_activity=current_activity)
+
+                pattern = rf"{hour} \| Activity: {self.name} is (.*)"
+                activities_hourly_organized += [(re.findall(pattern, completion)[-1], 60)]
+
+        return activities_hourly_organized
 
 
