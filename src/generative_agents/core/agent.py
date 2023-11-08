@@ -1250,10 +1250,6 @@ class Agent():
             summary = f"{start_time_str} ~ {end_time_str}, {self.name} is planning on {taks_name}"
             task_sumaries += [summary]
 
-            if task_id == action_index:
-                task_start_time = start_time
-                task_end_time = end_time
-
         task_context = f"From {', and '.join(task_sumaries)}."
 
         start_time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S")

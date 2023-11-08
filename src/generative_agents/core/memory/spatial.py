@@ -1,22 +1,19 @@
-from typing import Dict, List
+from typing import Dict, List, Set
 from pydantic import BaseModel
 
 from generative_agents.simulation.maze import Tile
 
 class ArenaMemory(BaseModel):
-    game_objects: List[str] = []
+    game_objects: Set[str] = set()
 
     def add(self, tile: Tile):
         if not tile.game_object:
             return
 
-        self.game_objects += [tile.game_object]
+        self.game_objects.add(tile.game_object)
     
     def __getitem__(self, key):
         return self.game_objects.get(key)
-
-    def __setitem__(self, key, value):
-        self.game_objects[key] = value
 
     def __getattr__(self, name):
         return getattr(self.game_objects, name)

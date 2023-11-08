@@ -75,4 +75,5 @@ class TaskDecomposition(BaseModel):
                                                           task_duration=self.task_duration)
 
         pattern = rf"\d+\) {self.name} is (.*) \(duration in minutes: (\d+).*"
-        return [list(task) for task in re.findall(pattern, completion)]
+
+        return [(task, int(duration)) for task, duration in re.findall(pattern, completion)]

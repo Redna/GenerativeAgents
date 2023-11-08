@@ -366,7 +366,7 @@ class Maze:
                 
                 nearby_tile = self.get_tile(tile.x + i, tile.y + j)
 
-                if tile.is_walkable():
+                if nearby_tile.is_walkable():
                     nearby_tiles += [nearby_tile]
 
         return nearby_tiles

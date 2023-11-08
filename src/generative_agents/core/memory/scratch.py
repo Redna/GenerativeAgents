@@ -105,7 +105,7 @@ class Scratch():
         x = 0
             
         for _, duration in self.daily_schedule_hourly_organzied: 
-            x += int(duration)
+            x += duration
 
         # We then calculate the current index based on that. 
         curr_index = 0
