@@ -15,12 +15,13 @@ _model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 class BaseSchema(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     content: str
+    vector: List[float] = None
 
 
 class TimeAndImportanceBaseSchema(BaseSchema):
     created_at: datetime = datetime.now()
     last_accessed_at: datetime = datetime.now()
-    expiration_date: datetime = datetime.now()
+    expiration_date: Optional[datetime] = None
     importance: float = 0.5
 
 
@@ -55,13 +56,15 @@ class QdrantCollection:
         points = self.client.search(collection_name=self.collection_name,
                                     query_filter=filter,
                                     limit=limit,
-                                    query_vector=query_vector)
+                                    query_vector=query_vector, 
+                                    with_vectors=True)
 
         result = []
         for point in points:
             _id = point.id
             score = point.score
             payload = point.payload
+            payload["vector"] = point.vector
             result.append((self.data_schema(id=_id, **payload), score))
 
         return result
@@ -120,13 +123,13 @@ class TimeAndImportanceWrapper(QdrantCollection):
     def __init__(self, client: QdrantClient, collection_name: str, data_schema: Type[K], decay_rate: float = 0.01):
         self.collection = super().__init__(client, collection_name, data_schema, decay_rate=decay_rate)
 
-    def add(self, entries: List[K]) -> List[K]:
+    def add(self, entries: List[K], new_vectors=True) -> List[K]:
         current_time = datetime.now()
 
         for entry in entries:
             entry.last_accessed_at = current_time
 
-        return super().add(entries)
+        return super().add(entries, new_vectors)
 
     def get_relevant_entries(self, query, filter=None, limit=5) -> List[K]:
         candiates = super()._get_relevant_entries_with_scores(

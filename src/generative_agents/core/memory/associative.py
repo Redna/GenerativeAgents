@@ -51,7 +51,7 @@ class AssociativeMemory:
 
     @property
     def latest_events_summary(self):
-        return [event.spo_summary for event in self.last_entries.queue]
+        return [event.spo_summary for event in self.last_entries.entries]
 
     def retrieve_relevant_entries(self, context: List[str], limit=50) -> List[PerceivedEvent]:
         memories = []

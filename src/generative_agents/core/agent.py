@@ -1,9 +1,11 @@
+from dataclasses import asdict
 import datetime
 from enum import Enum
 import math
 from operator import itemgetter
 import random
 from typing import Dict, List, Tuple
+from copy import deepcopy
 from generative_agents.communication.models import AgentDTO, MovementDTO
 from generative_agents.conversational.chain.action_event_triple import ActionEventTriple
 from generative_agents.conversational.chain.action_location_arena import ActionArenaLocations
@@ -13,11 +15,12 @@ from generative_agents.conversational.chain.action_pronunciatio import ActionPro
 from generative_agents.conversational.chain.first_daily_plan import FirstDailyPlan
 from generative_agents.conversational.chain.object_event import ObjectActionDescription
 from generative_agents.conversational.chain.task_decomposition import TaskDecomposition
+from generative_agents.conversational.chain.poignance import Poingnance
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
 from generative_agents.simulation.maze import Level, Maze, Tile
-from generative_agents.conversational.chain import (poignance_chain, wake_up_hour_chain,
+from generative_agents.conversational.chain import (wake_up_hour_chain,
                                                     daily_plan_and_status_chain,
                                                     decide_to_talk_chain,
                                                     decide_to_react_chain,
@@ -102,7 +105,7 @@ class Agent():
 
         return f"{self.name} is on the way to {event_description}"
 
-    async def update(self, time: SimulationTime, maze: Maze, agents: Dict[str, 'Agent']):
+    async def update(self, time: SimulationTime, maze: Maze, agents: Dict[str, 'Agent']) -> Tuple[Tile, str, str]:
         # random movement
         # if not self.scratch.planned_path:
         #    self.scratch.planned_path = self.__get_random_path(maze)
@@ -161,7 +164,7 @@ class Agent():
 
         # We do not perceive the same event twice (this can happen if an object_ is
         # extended across multiple tiles).
-        percept_events_set = set()
+        percept_events_dict = dict()
         # We will order our percept based on the distance, with the closest ones
         # getting priorities.
         percept_events_list = []
@@ -173,13 +176,13 @@ class Agent():
 
             # This calculates the distance between the persona's current tile,
             # and the target tile.
-            dist = math.dist([tile.x, tile.y], [self.tile.x, self.tile.y])
+            dist = math.dist([tile.x, tile.y], [self.scratch.tile.x, self.scratch.tile.y])
 
             # Add any relevant events to our temp set/list with the distant info.
-            for event in tile.events:
-                if event not in percept_events_set:
+            for event in tile.events.values():
+                if event.spo_summary not in percept_events_dict:
                     percept_events_list += [[dist, event]]
-                    percept_events_set.add(event)
+                    percept_events_dict[event.spo_summary] = event
 
         # We sort, and perceive only persona.scratch.att_bandwidth of the closest
         # events. If the bandwidth is larger, then it means the persona can perceive
@@ -197,7 +200,7 @@ class Agent():
         # "subject": "the Ville:Hobbs Cafe:cafe:kitchen sink", "predicate": "is", "object_": "idle", "description": "kitchen sink is idle"
 
         for perceived_event in perceived_events:
-            event = perceived_event.copy()
+            event = deepcopy(perceived_event)
 
             if not event.predicate:
                 # If the object_ is not present, then we default the event to "idle".
@@ -239,11 +242,11 @@ class Agent():
             event_poignancy = await self._rate_perception_poignancy(
                 EventType.EVENT, event.description)
             perceived_event = PerceivedEvent(
-                **event.dict(), event_type=EventType.EVENT, poignancy=event_poignancy)
+                **asdict(event), event_type=EventType.EVENT, poignancy=event_poignancy)
             # Finally, we add the current event to the agent's memory.
             final_events += [self.associative_memory.add(perceived_event)]
 
-            self.scratch.reflection_by_importance_trigger -= event_poignancy
+            self.scratch.reflection_trigger_max -= event_poignancy
 
         return final_events
 
@@ -253,9 +256,9 @@ class Agent():
         for event in perceived:
             retrieved[event.description] = dict()
             retrieved[event.description]["curr_event"] = [event]
-            retrieved[event.description]["events"] = await self._get_related_events(
+            retrieved[event.description]["events"] = self._get_related_events(
                 event, EventType.EVENT)
-            retrieved[event.description]["thoughts"] = await self._get_related_events(
+            retrieved[event.description]["thoughts"] = self._get_related_events(
                 event, EventType.THOUGHT)
 
         return retrieved
@@ -470,23 +473,24 @@ class Agent():
         # no <planned_path> left, but otherwise, we go to the next tile in the path.
         ret = self.scratch.tile
         if self.scratch.planned_path:
-            ret = self.scratch.planned_path[0]
+            self.scratch.planned_path[0]
             self.scratch.planned_path = self.scratch.planned_path[1:]
 
         description = f"{self.scratch.action.event.description}"
         description += f" @ {self.scratch.action.address}"
 
-        execution = ret, self.scratch.action.emoji, description
-        return execution
+        self.emoji = self.scratch.action.emoji
+        self.description = description
+        return ret
 
     async def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:
             return 0.1
 
-        score = await poignance_chain.arun(agent_name=self.name,
-                                           agent_description=self.description,
-                                           description=description,
-                                           event_type=event_type.value)
+        score = await Poingnance(agent_name=self.name,
+                                 agent_identity=self.scratch.identity,
+                                 description=description,
+                                 type_=event_type.value).run()
 
         # TODO properly check the output here
         return int(score) / 10
@@ -851,6 +855,7 @@ class Agent():
                                          ),
                              object_action=ObjectAction)
 
+        self.scratch.finished_action_queue.put(self.scratch.action)
         self.scratch.action = next_action
         self.scratch.chatting_with = chatting_with
         self.scratch.chat = chat
@@ -1355,11 +1360,11 @@ class Agent():
 
     def _get_related_to_text(self, text: str,  event_type: EventType = None):
         if event_type:
-            memories = database.get_by_type(self.name, text, event_type.value)
+            memories = database.get_by_type(self.name, text, event_type)
         else:
             memories = database.get(self.name, text)
 
-        return [PerceivedEvent.from_db_entry(memory.text, memory.metadata) for memory in memories]
+        return [PerceivedEvent.from_db_entry(memory) for memory in memories]
 
     def _get_related_events(self, event: PerceivedEvent, event_type: EventType = None):
         return self._get_related_to_text(event.description, event_type)

@@ -16,6 +16,7 @@ class Scratch():
     home: Tile
     innate_traits: List[str]
 
+    description: str = ""
     time: SimulationTime = None
     action: Action = None  
     learned_traits: List[str] = field(default_factory=list)
@@ -29,7 +30,7 @@ class Scratch():
     action_path_set = False
     lifestyle: str = "" # TODO generate lifestyle in reflect
 
-    action_queue: Queue = Queue()
+    finished_action_queue: Queue[Action] = Queue()
 
     daily_requirements: str = ""
     current_status: str = ""

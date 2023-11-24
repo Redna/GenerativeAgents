@@ -82,7 +82,32 @@ class Simulation():
             print(f"scheduling update for {name}")
             updates.append(agent.update(self.simulated_time, self.maze, self.agents))
 
-        await asyncio.gather(*updates)
+        updates = await asyncio.gather(*updates)
+
+        for agent, tile in zip(self.agents.values(), updates):
+            old_tile = agent.scratch.tile
+
+            while not agent.scratch.finished_action_queue.empty():
+                action = agent.scratch.finished_action_queue.get()
+                del old_tile.events[action.event.subject]
+
+            event = agent.scratch.action.event
+            tile.events[event.subject] = agent.scratch.action.event
+            
+            object_action = agent.scratch.action.object_action
+            if object_action and object_action.event:
+                object_event = object_action.event
+                self.maze.address_tiles[object_action.address][0].events[object_event.subject] = object_event
+
+            agent.scratch.tile = tile
+            
+            print(agent.name.center(80, "-"))
+            if old_tile != tile:
+                print(f"{agent.scratch.name} moved from {old_tile} to {tile}")
+            else:
+                print(f"{agent.scratch.name} is still at {tile}")
+            print(f"{agent.scratch.name} is {agent.emoji}")
+            print(f"{agent.scratch.name} is {agent.description}")
 
         self.round_updates.add(self.simulated_time, self.agents)
 

@@ -28,7 +28,7 @@ _outputs = {"first_daily_plan": PatternWithDefault(pattern=re.compile(r"(1\) wak
 
 _output_parser = FuzzyOutputParser(output_definitions=_outputs)
 
-first_daily_plan_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_length": 400,
+first_daily_plan_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 400,
                                                                    "do_sample": True,
                                                                    "top_p": 0.95,
                                                                    "top_k": 60,

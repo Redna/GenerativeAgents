@@ -251,7 +251,7 @@ class Maze:
                 game_object = game_object_blocks_dict[game_object_maze[i][j]] if game_object_maze[i][j] in game_object_blocks_dict else ""
                 spawning_location = spawning_location_blocks_dict[spawning_location_maze[i][j]] if spawning_location_maze[i][j] in spawning_location_blocks_dict else ""
                 collision = collision_maze[i][j] != "0"
-                row += [Tile(j, i, world_block, sector, arena, game_object, spawning_location, collision, set())]           
+                row += [Tile(j, i, world_block, sector, arena, game_object, spawning_location, collision, dict())]           
                 node = self.grid.node(j,i)
                 node.walkable = not collision
                 node.weight = 0 if collision else 1
