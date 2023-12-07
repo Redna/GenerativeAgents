@@ -64,12 +64,12 @@ def _get_last_conversation_id(agent_name: str, with_agent_name: str):
     return result[-1] if result else None
 
 def _set_active_conversation_id(agent_name: str, with_agent_name: str, conversation_id: str):
-    _connection.execute('INSERT OR REPLACE INTO conversation (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
+    _connection.execute('INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
                         (agent_name, with_agent_name, conversation_id))
     _connection.commit()
 
 def _set_last_conversation_id(agent_name: str, with_agent_name: str, conversation_id: str):
-    _connection.execute('INSERT OR REPLACE INTO conversation (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
+    _connection.execute('INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
                         (agent_name, with_agent_name, conversation_id))
     _connection.commit()
 
@@ -95,13 +95,13 @@ def add(agent_name: str, memory_entry: MemoryEntry) -> MemoryEntry:
 
     if memory_entry.memory_type == MemoryType.CHAT.value:
         _set_active_conversation_id(
-            agent_name, memory_entry.object, memory_entry.id)
+            agent_name, memory_entry.object_, memory_entry.id)
         
         if memory_entry.filling[-1] and memory_entry.filling[-1].end:
             _set_last_conversation_id(
-                agent_name, memory_entry.object, memory_entry.id)
+                agent_name, memory_entry.object_, memory_entry.id)
             _delete_active_conversation_id(
-                agent_name, memory_entry.object)
+                agent_name, memory_entry.object_)
 
     return memory_entry
 
@@ -150,8 +150,8 @@ def get_active_chat(agent_name, with_agent_name) -> Optional[MemoryEntry]:
     collection = _collections[agent_name]
 
     id = _get_active_conversation_id(agent_name, with_agent_name)
-
-    return collection.get_by_id(id)
+    record = collection.get_by_id(id)
+    return MemoryEntry(**record.payload) if record else None
 
 if __name__ == '__main__':
 

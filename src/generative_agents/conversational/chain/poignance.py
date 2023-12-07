@@ -1,3 +1,4 @@
+import re
 from pydantic import BaseModel
 from generative_agents import global_state
 from generative_agents.conversational.llm import llm
@@ -20,12 +21,12 @@ _prompt = PromptTemplate(input_variables=["agent_name",
                                           "type_"],
                          template=_template)
 
-poignance_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 2,
+poignance_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 3,
                                                                    "do_sample": True,
                                                                    "top_p": 0.95,
                                                                    "top_k": 60,
                                                                    "temperature": 0.1},
-                                                                   verbose=True)
+                                                                   verbose=global_state.verbose)
 
 
 class Poingnance(BaseModel):
@@ -41,8 +42,11 @@ class Poingnance(BaseModel):
                                                     agent_identity=self.agent_identity,
                                                     type_=self.type_,
                                                     description=self.description)
-        try:
-            return int(result[-2:])
-        except:
-            return 1
+        match = re.search(r"Rating:\s*(\d+)", result)
+
+        rating = 1
+        if match:
+            rating = int(match.group(1))
+
+        return rating
     

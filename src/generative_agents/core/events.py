@@ -3,6 +3,7 @@ import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Tuple
+from generative_agents import global_state
 
 from generative_agents.persistence.database import ConversationFilling, MemoryEntry
 from pydantic import BaseModel
@@ -23,6 +24,7 @@ class Event:
     predicate: str
     object_: str
     description: str
+    filling: List[ConversationFilling | str] = field(default_factory=list)
 
     @property
     def spo_summary(self):
@@ -34,10 +36,9 @@ class PerceivedEvent(Event):
     id: str = None
     event_type: EventType = EventType.EVENT
     poignancy: float = .5
-    created: datetime.datetime = datetime.datetime.now()
+    created: datetime.datetime = global_state.time.time
     expiration: datetime.datetime = None
-    last_accessed: datetime.datetime = datetime.datetime.now()
-    filling: List[ConversationFilling | str] = field(default_factory=list)
+    last_accessed: datetime.datetime = global_state.time.time
     keywords: List[str] = field(default_factory=list)
 
     @classmethod
@@ -89,7 +90,7 @@ class Action(BaseModel):
     @classmethod
     def idle(cls, address: str):
         return cls(address=address,
-                   start_time=datetime.datetime.now(),
+                   start_time=global_state.time.time,
                    duration=0,
                    emoji="⏳",
                    event=Event(depth=0, subject="", predicate="", object_="", description="idle"))

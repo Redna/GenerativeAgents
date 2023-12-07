@@ -1,3 +1,4 @@
+import random
 import re
 from pydantic import BaseModel
 from generative_agents import global_state
@@ -46,15 +47,30 @@ class ActionArenaLocations(BaseModel):
             "top_p": 0.95,
             "top_k": 60,
             "temperature": 0.4,
-            "cache_key": f"2action_arena_locations_{self.name}_{global_state.tick}"
-        }, verbose=True)
+        }, verbose=global_state.verbose)
 
-        completion = await _action_arena_locations_chain.arun(name=self.name,
-                                                              current_area=self.current_area,
-                                                              current_sector=self.current_sector,
-                                                              sector=self.sector,
-                                                              sector_arenas=self.sector_arenas,
-                                                              action_description=self.action_description)
+        possible_arenas = [arena.strip() for arena in self.sector_arenas.split(",") if arena.strip()]
+        possible_arenas.append(self.current_area)
 
-        pattern = rf'should go to the following area.*\[(.*?)\]'
-        return re.findall(pattern, completion)[-1]
+        for i in range(5):
+            _action_arena_locations_chain.llm_kwargs["cache_key"] = f"action_arena_locations_{self.name}_{global_state.tick}_{i}"
+            completion = await _action_arena_locations_chain.arun(name=self.name,
+                                                                current_area=self.current_area,
+                                                                current_sector=self.current_sector,
+                                                                sector=self.sector,
+                                                                sector_arenas=self.sector_arenas,
+                                                                action_description=self.action_description)
+
+            pattern = rf"should go to the following area.*\[([\w' ]+)\]"
+            
+            try: 
+                next_location = re.findall(pattern, completion)[-1]
+
+                if next_location in possible_arenas:
+                    return next_location
+            except:
+                pass
+        
+        arena = random.choice(possible_arenas)
+        print("Unable to identify next location. Selecting randomly: ", arena)
+        return arena

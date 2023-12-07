@@ -13,14 +13,19 @@ Variables:
 Based on the statements above, summarize !<INPUT 1>! and !<INPUT 2>!'s relationship. What do they feel or know about each other?
 """
 
+import re
+from pydantic import BaseModel
+from generative_agents import global_state
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
-_template = """
+_template = """<|system|>Based on the statements below, summarize {agent} and {agent_with}'s relationship.
+<|user|>
 [Statements]
 {statements}
 
-Based on the statements above, summarize {agent} and {agent_with}'s relationship. What do they feel or know about each other?
+What do they feel or know about each other?
+<|assistant|>
 """
 
 _prompt = PromptTemplate(input_variables=["statements",
@@ -28,4 +33,25 @@ _prompt = PromptTemplate(input_variables=["statements",
                                             "agent_with"],
                              template=_template)
 
-summarize_chat_relationship_chain = LLMChain(prompt=_prompt, llm=llm)
+class ChatRelationshipSummarization(BaseModel):
+    statements: str
+    agent: str
+    agent_with: str
+
+    async def run(self):
+        _summarize_chat_relationship_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
+            "max_new_tokens": 300,
+            "do_sample": True,
+            "top_p": 0.95,
+            "top_k": 30,
+            "temperature": 0.8,
+            "repetition_penalty": 1.01,
+            "cache_key": f"1sumarize_chat_relationship_{self.agent}_{self.agent_with}_{global_state.tick}"}, verbose=global_state.verbose)
+
+        completion = await _summarize_chat_relationship_chain.arun(statements=self.statements,
+                                                        agent=self.agent,
+                                                        agent_with=self.agent_with)
+        
+        pattern = rf"<|assistant|>\n?(.*)"
+        match = re.findall(pattern, completion)[-1]
+        return match

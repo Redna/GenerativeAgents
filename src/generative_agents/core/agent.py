@@ -12,22 +12,24 @@ from generative_agents.conversational.chain.action_location_arena import ActionA
 from generative_agents.conversational.chain.action_location_game_object import ActionLocationGameObject
 from generative_agents.conversational.chain.action_location_sector import ActionSectorLocations
 from generative_agents.conversational.chain.action_pronunciatio import ActionPronunciatio
+from generative_agents.conversational.chain.conversation import Conversation
+from generative_agents.conversational.chain.conversation_summary import ConversationSummary
+from generative_agents.conversational.chain.decide_to_react import DecideToReact
+from generative_agents.conversational.chain.decide_to_talk import DecideToTalk
 from generative_agents.conversational.chain.first_daily_plan import FirstDailyPlan
+from generative_agents.conversational.chain.focused_event_to_context import FocusedEventToContext
 from generative_agents.conversational.chain.object_event import ObjectActionDescription
+from generative_agents.conversational.chain.summarize_chat_relationship import ChatRelationshipSummarization
 from generative_agents.conversational.chain.task_decomposition import TaskDecomposition
 from generative_agents.conversational.chain.poignance import Poingnance
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
+from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Level, Maze, Tile
 from generative_agents.conversational.chain import (wake_up_hour_chain,
                                                     daily_plan_and_status_chain,
-                                                    decide_to_talk_chain,
-                                                    decide_to_react_chain,
                                                     new_decomposition_schedule_chain,
-                                                    summarize_chat_relationship_chain,
-                                                    conversation_chain,
-                                                    conversation_summary_chain,
                                                     reflection_points_chain,
                                                     evidence_and_insights_chain,
                                                     planning_on_conversation_chain,
@@ -45,21 +47,23 @@ class ReactionMode(Enum):
     DO_OTHER_THINGS = "do other things"
 
 
-class Agent():
-    def __init__(self, name: str, age:int, description: str, innate_traits: List[str], time: SimulationTime, location: str, emoji: str, activity: str, tile: Tile):
+class Agent:
+    def __init__(self, name: str, age: int, description: str, innate_traits: List[str], time: SimulationTime, location: str, emoji: str, activity: str, tile: Tile):
         initialize_agent(name)
         self.name = name
-        self.description = description
         self.location = location
         self.emoji = emoji
         self.activity = activity
         self.scratch = Scratch(name=name, tile=tile, home=tile,
                                innate_traits=innate_traits, age=age)
         self.spatial_memory = MemoryTree()
-        self.associative_memory = AssociativeMemory(self.name, self.scratch.retention)
+        self.associative_memory = AssociativeMemory(
+            self.name, self.scratch.retention)
         self.time = time
         self.scratch.tile = tile
-        
+        self.scratch.description = description
+
+        whisper(self.name, f"Initialized {self.name} at {self.scratch.tile}")
 
     def to_dto(self):
         return AgentDTO(
@@ -106,13 +110,6 @@ class Agent():
         return f"{self.name} is on the way to {event_description}"
 
     async def update(self, time: SimulationTime, maze: Maze, agents: Dict[str, 'Agent']) -> Tuple[Tile, str, str]:
-        # random movement
-        # if not self.scratch.planned_path:
-        #    self.scratch.planned_path = self.__get_random_path(maze)
-        #
-        # self.agent.tile = self.scratch.planned_path.pop(0)
-        # print("Moving to", self.tile)
-
         daytype: DayType = DayType.SAME_DAY
 
         if not self.scratch.time:
@@ -122,12 +119,18 @@ class Agent():
 
         self.scratch.time = time
 
+        whisper(self.name, "is updating")
         perceived = await self.perceive(maze)
+        whisper(self.name, f"perceived {len(perceived)} events")
         retrieved = await self.retrieve(perceived)
+        whisper(self.name, f"retrieved {len(retrieved)} events")
         plan = await self.plan(agents, daytype, retrieved)
+        whisper(self.name, f"planning to go to {plan}")
         await self.reflect()
-
-        return await self.execute(maze, agents, plan)
+        whisper(self.name, f"planning to go to {plan}")
+        execution = await self.execute(maze, agents, plan)
+        whisper(self.name, f"executing to {execution}")
+        return execution
 
     async def perceive(self, maze: Maze):
         """
@@ -176,13 +179,15 @@ class Agent():
 
             # This calculates the distance between the persona's current tile,
             # and the target tile.
-            dist = math.dist([tile.x, tile.y], [self.scratch.tile.x, self.scratch.tile.y])
+            dist = math.dist([tile.x, tile.y], [
+                             self.scratch.tile.x, self.scratch.tile.y])
 
             # Add any relevant events to our temp set/list with the distant info.
             for event in tile.events.values():
                 if event.spo_summary not in percept_events_dict:
                     percept_events_list += [[dist, event]]
                     percept_events_dict[event.spo_summary] = event
+                    whisper(self.name, f"nearby event {event.description}")
 
         # We sort, and perceive only persona.scratch.att_bandwidth of the closest
         # events. If the bandwidth is larger, then it means the persona can perceive
@@ -205,7 +210,8 @@ class Agent():
             if not event.predicate:
                 # If the object_ is not present, then we default the event to "idle".
                 event.predicate = "is"
-                event.object_ = "idle"
+
+            whisper(self.name, f"thinkin on event {event.description}")
 
             event.description = f"{event.subject.split(':')[-1]} is {event.description}"
 
@@ -217,8 +223,6 @@ class Agent():
 
             if event.spo_summary not in latest_events:
                 # We start by managing keywords.
-                if ":" in event.subject:
-                    event.subject = event.subject.split(":")[-1]
                 if ":" in event.object_:
                     event.object_ = event.object_.split(":")[-1]
 
@@ -232,21 +236,26 @@ class Agent():
             final_events = []
             if event.subject == self.name and event.predicate == "chat with":
                 active_event = self.scratch.action.event
-                poignancy = await self._rate_perception_poignancy(
-                    EventType.CHAT, active_event.description)
-                perceived_event = PerceivedEvent(
-                    **active_event.dict(), event_type=EventType.CHAT, poignancy=poignancy)
-                final_events += [self.associative_memory.add(perceived_event)]
+                
+                if type(active_event) != PerceivedEvent:
+                    poignancy = await self._rate_perception_poignancy(EventType.CHAT, active_event.description)
+                    active_event = PerceivedEvent(**asdict(active_event), event_type=EventType.CHAT, poignancy=poignancy)
+                    active_event = self.associative_memory.add(active_event)
+                
+                final_events += [active_event]
 
-            # We rate the poignancy of the event.
-            event_poignancy = await self._rate_perception_poignancy(
-                EventType.EVENT, event.description)
-            perceived_event = PerceivedEvent(
-                **asdict(event), event_type=EventType.EVENT, poignancy=event_poignancy)
-            # Finally, we add the current event to the agent's memory.
-            final_events += [self.associative_memory.add(perceived_event)]
+            if type(event) != PerceivedEvent:
+                    event_poignancy = await self._rate_perception_poignancy(
+                        EventType.EVENT, event.description)
 
-            self.scratch.reflection_trigger_max -= event_poignancy
+                    whisper(self.name, f"event poignancy is {event_poignancy}")
+                    poignancy = await self._rate_perception_poignancy(EventType.EVENT, event.description)
+                    event = PerceivedEvent(**asdict(event), event_type=EventType.EVENT, poignancy=poignancy)
+                    event = self.associative_memory.add(event)
+            
+            final_events += [event]
+
+            self.scratch.reflection_trigger_max -= event.poignancy * 10
 
         return final_events
 
@@ -255,20 +264,26 @@ class Agent():
 
         for event in perceived:
             retrieved[event.description] = dict()
-            retrieved[event.description]["curr_event"] = [event]
+            retrieved[event.description]["curr_event"] = event
             retrieved[event.description]["events"] = self._get_related_events(
                 event, EventType.EVENT)
             retrieved[event.description]["thoughts"] = self._get_related_events(
                 event, EventType.THOUGHT)
 
+            whisper(
+                self.name, f"{event.description} has {len(retrieved[event.description]['events'])} related events and {len(retrieved[event.description]['thoughts'])} related thoughts")
         return retrieved
 
     async def plan(self, agents: Dict[str, 'Agent'], daytype: DayType, retrieved: Dict[str, Dict[str, List[PerceivedEvent]]]):
         if daytype == DayType.NEW_DAY or daytype == DayType.FIRST_DAY:
+            whisper(self.name, f"planning first daily plan")
             await self._long_term_planning(daytype)
+        
 
         if self.scratch.is_action_finished():
             await self._determine_action()
+            whisper(
+                self.name, f"planning to {self.scratch.action.event.description}")
 
          # PART 3: If you perceived an event that needs to be responded to (saw
         # another persona), and retrieved relevant information.
@@ -282,7 +297,12 @@ class Agent():
 
         focused_event = False
         if retrieved.keys():
-            focused_event = await self._choose_retrieved(retrieved)
+            focused_event = self._choose_retrieved(retrieved)
+            if focused_event:
+                whisper(
+                    self.name, f"focusing on {focused_event['curr_event'].description}")
+            else:
+                whisper(self.name, f"not focusing on any persona event")
 
         # Step 2: Once we choose an event, we need to determine whether the
         #         persona will take any actions for the perceived event. There are
@@ -290,13 +310,22 @@ class Agent():
         #         a) "chat with {target_persona.name}"
         #         b) "react"
         #         c) False
+
+        if self.scratch.action.event.predicate == "chat with":
+            last_utterance = self.scratch.action.event.filling[-1]
+            if not last_utterance.end and last_utterance.name != self.name:
+                await self._chat_react(agent_with=agents[last_utterance.name])
+
         if focused_event:
+            focused_event = focused_event
             reaction_mode, payload = await self._should_react(focused_event, agents)
+            whisper(
+                self.name, f"reaction mode is {reaction_mode} with payload {payload}")
             if reaction_mode and reaction_mode != ReactionMode.DO_OTHER_THINGS:
                 # If we do want to chat, then we generate conversation
                 if reaction_mode == ReactionMode.CHAT:
                     await self._chat_react(agent_with=payload)
-                elif reaction_mode == ReactionMode.DO_OTHER_THINGS:
+                elif reaction_mode == ReactionMode.WAIT:
                     await self._wait_react(payload)
                 # elif reaction_mode == "do other things":
                 #   _chat_react(persona, focused_event, reaction_mode, personas)
@@ -309,6 +338,7 @@ class Agent():
             self.scratch.chatting_with = None
             self.scratch.chat = None
             self.scratch.chatting_end_time = None
+
         # We want to make sure that the persona does not keep conversing with each
         # other in an infinite loop. So, chatting_with_buffer maintains a form of
         # buffer that makes the persona wait from talking to the same target
@@ -323,6 +353,7 @@ class Agent():
     async def reflect(self):
         if self.scratch.should_reflect():
             await self._run_reflect()
+            whisper(self.name, f"reflected")
             self.scratch.reset_reflection_counter()
 
         last_conversation = self.associative_memory.last_conversation_with(
@@ -334,12 +365,15 @@ class Agent():
 
             planning_thought = self._generate_planning_thought_on_conversation(
                 last_conversation.filling)
+            whisper(self.name, f"planning thought is {planning_thought}")
             planning_thought = f"For {self.scratch.name}'s planning: {planning_thought}"
             await self._add_reflection_thought(planning_thought, evidence)
+            whisper(self.name, f"added reflection thought")
 
             memo_thought = await self._generate_memo_on_conversation(
                 last_conversation.filling)
             memo_thought = f"{self.name} {memo_thought}"
+            whisper(self.name, f"memo thought is {memo_thought}")
             await self._add_reflection_thought(memo_thought, evidence)
         pass
 
@@ -363,7 +397,7 @@ class Agent():
         OUTPUT: 
             execution
         """
-        if "<random>" in plan and self.scratch.planned_path == []:
+        if "<random>" in plan or self.scratch.planned_path == []:
             self.scratch.action_path_set = False
 
         # <action_path_set> is set to True if the path is set for the current action.
@@ -414,8 +448,13 @@ class Agent():
                 # string form. <maze.address_tiles> takes this and returns candidate
                 # coordinates.
                 if plan not in maze.address_tiles:
-                    # ERRORRRRRRR
-                    maze.address_tiles["Johnson Park:park:park garden"]
+                    fallback_plan = ":".join(plan.split(":")[0:-1])
+
+                    if fallback_plan not in maze.address_tiles:
+                        fallback_plan = random.choice(
+                            list(maze.address_tiles.keys()))
+
+                    target_tiles = maze.address_tiles[fallback_plan]
                 else:
                     target_tiles = maze.address_tiles[plan]
 
@@ -473,7 +512,7 @@ class Agent():
         # no <planned_path> left, but otherwise, we go to the next tile in the path.
         ret = self.scratch.tile
         if self.scratch.planned_path:
-            self.scratch.planned_path[0]
+            ret = self.scratch.planned_path[0]
             self.scratch.planned_path = self.scratch.planned_path[1:]
 
         description = f"{self.scratch.action.event.description}"
@@ -488,19 +527,19 @@ class Agent():
             return 0.1
 
         score = await Poingnance(agent_name=self.name,
-                                 agent_identity=self.scratch.identity,
+                                 agent_identity=await self.scratch.identity,
                                  description=description,
                                  type_=event_type.value).run()
 
         # TODO properly check the output here
         return int(score) / 10
 
-    def _add_reflection_thought(self, thought: str, evidence: List[str]):
+    async def _add_reflection_thought(self, thought: str, evidence: List[str]):
         created = self.scratch.time
         expiration = created + datetime.timedelta(days=30)
         s, p, o = ActionEventTriple(self.name, thought)
-        thought_poignancy = poignance_chain(
-            self.name, self.description, thought, EventType.THOUGHT.value)
+
+        thought_poignancy = await self._rate_perception_poignancy(EventType.THOUGHT, thought)
 
         perceived_event = PerceivedEvent(subject=s, predicate=p, object_=o, description=thought,
                                          event_type=EventType.THOUGHT, poignancy=thought_poignancy,
@@ -531,10 +570,13 @@ class Agent():
         """
         # Reflection requires certain focal points. Generate that first.
         focal_points = await self._generate_reflection_points(3)
+        whisper(self.name, f"generated {focal_points} focal points")
         # Retrieve the relevant Nodes object for each of the focal points.
         # <retrieved> has keys of focal points, and values of the associated Nodes.
         retrieved = await self.associative_memory.retrieve_relevant_entries(
             focal_points)
+
+        whisper(self.name, f"retrieved {len(retrieved)} relevant nodes")
 
         # For each of the focal points, generate thoughts and save it in the
         # agent's memory.
@@ -584,6 +626,9 @@ class Agent():
                     <Persona> instance as values. 
         """
         async def lets_talk(init_agent: Agent, target_agent: Agent, retrieved: Dict[str, List[PerceivedEvent]]):
+            if init_agent.name == target_agent.name:
+                return False
+
             if (not target_agent.scratch.action.address
                 or not target_agent.scratch.action.event
                 or not init_agent.scratch.action.address
@@ -607,7 +652,7 @@ class Agent():
                 if init_agent.scratch.chatting_with_buffer[target_agent.name] > 0:
                     return False
 
-            if self._generate_decide_to_talk(init_agent, target_agent, retrieved):
+            if await self._generate_decide_to_talk(target_agent, retrieved):
                 return True
 
             return False
@@ -615,44 +660,44 @@ class Agent():
         async def lets_react(init_agent: 'Agent', target_agent: 'Agent', retrieved):
             if (not target_agent.scratch.action.address
                 or not target_agent.scratch.action.event.description
-                or not init_agent.scratch.act_address
+                or not init_agent.scratch.action.address
                     or not init_agent.scratch.action.event.description):
-                return False
+                return ReactionMode.DO_OTHER_THINGS, ModuleNotFoundError
 
             if ("sleeping" in target_agent.scratch.action.event.description
                     or "sleeping" in init_agent.scratch.action.event.description):
-                return False
+                return ReactionMode.DO_OTHER_THINGS, None
 
             if init_agent.scratch.time.hour == 23:
-                return False
+                return ReactionMode.DO_OTHER_THINGS, None
 
             if "waiting" in target_agent.scratch.action.event.description:
-                return False
+                return ReactionMode.DO_OTHER_THINGS, None
 
             if not init_agent.scratch.planned_path:
-                return False
+                return ReactionMode.DO_OTHER_THINGS, None
 
-            if init_agent.scratch.action.address != target_agent.scratch.action.address:
-                return False
+            if (init_agent.scratch.action.address.split(":")[:-1] != target_agent.scratch.action.address.split(":")[:-1] or
+                    init_agent.scratch.tile.l2_distance(target_agent.scratch.tile) >= 4):
+                return ReactionMode.DO_OTHER_THINGS, None
 
-            react_mode = await self._generate_decide_to_react(init_agent,
-                                                              target_agent, retrieved)
+            react_mode = await self._generate_decide_to_react(target_agent, retrieved)
 
-            if react_mode == "1":
+            if react_mode == 1:
                 wait_until = ((target_agent.scratch.action.start_time
                                + datetime.timedelta(minutes=target_agent.scratch.action.duration - 1))
                               .strftime("%B %d, %Y, %H:%M:%S"))
                 return ReactionMode.WAIT, wait_until
-            elif react_mode == "2":
-                return False
+            elif react_mode == 2:
+                return ReactionMode.DO_OTHER_THINGS, None
             else:
-                return False  # "keep"
+                return ReactionMode.DO_OTHER_THINGS, None
 
         # If the persona is chatting right now, default to no reaction
         if self.scratch.chatting_with:
-            return False
+            return ReactionMode.DO_OTHER_THINGS, None
         if "<waiting>" in self.scratch.action.address:
-            return False
+            return ReactionMode.WAIT, None
 
         # Recall that retrieved takes the following form:
         # dictionary {["curr_event"] = <ConceptNode>,
@@ -677,37 +722,68 @@ class Agent():
         conversation = self.associative_memory.active_conversation_with(
             agent_with.name)
 
-        conversation.filling += [(self.name, utterance, end)]
-        conversation_summary = await self._generate_conversation_summary(
-            conversation)
+        action = self._create_react_action(inserted_action=f"{self.name} initiated a conversation with {agent_with.name}. And said {utterance}",
+                                                     inserted_action_duration=10,
+                                                     action_address=f"<persona> {agent_with.name}",
+                                                     action_event=(
+                                                         self.name, "chat with", agent_with.name),
+                                                     chatting_with=agent_with.name,
+                                                     chat=utterance,
+                                                     chatting_with_buffer={
+                                                         agent_with.name: 800},
+                                                     chatting_end_time=None,
+                                                     action_pronunciatio="💬",
+                                                     action_start_time=agent_with.scratch.time.time)
 
-        action_start_time = agent_with.scratch.action.start_time
-        current_time = agent_with.scratch.time
+        agent_with._create_react_action(inserted_action=f"{self.name} initiated a conversation with {agent_with.name}. And said {utterance}",
+                                        inserted_action_duration=10,
+                                        action_address=f"<persona> {self.name}",
+                                        action_event=(
+                                            agent_with.name, "chat with", self.name),
+                                        chatting_with=agent_with.name,
+                                        chat="-",
+                                        chatting_with_buffer={
+                                            agent_with.name: 800},
+                                        chatting_end_time=None,
+                                        action_pronunciatio="💬",
+                                        action_start_time=agent_with.scratch.time.time)
 
-        action_pronunciatio = "💬"
-        action_address = f"<persona> {agent_with.name}"
-        action_event = (self.name, "chat with", agent_with.name)
-        chatting_with = agent_with.name
-        chatting_with_buffer = {}
-        chatting_with_buffer[agent_with.name] = 800
+        if not conversation:
+            conversation = action.event
+        else: 
+            self.scratch.action.start_time = conversation.created
+            agent_with.scratch.action.start_time = conversation.created
+        
+        conversation.filling += [ConversationFilling(name=self.name, utterance=utterance, end=end)]
+        conversation.description = await self._generate_conversation_summary(conversation)
+        
+        self.scratch.action.event.filling = conversation.filling
+        self.scratch.action.event.description = conversation.description
+        agent_with.scratch.action.event.description = conversation.description
+        agent_with.scratch.action.event.filling = conversation.filling
 
-        duration_minutes = current_time.minute - action_start_time.minute
 
-        if self.scratch.chatting_with:
-            self.scratch.action.event.filling.append(
-                (self.name, utterance, end))
+        if end:
+            duration_minutes = (self.scratch.action.start_time - self.scratch.time.time).total_seconds() / 60
+            await self._update_schedule(conversation.description, duration_minutes)
+            self.scratch.chatting_with = None
+            self.scratch.chat = None
+            self.scratch.chatting_end_time = self.scratch.time
 
-            if end:
-                self.scratch.action.duration = duration_minutes
-                await self._update_schedule(conversation_summary, duration_minutes)
-                self.scratch.chatting_with = None
-                self.scratch.chat = None
-                self.scratch.chatting_end_time = current_time
-        else:
-            await self._create_react_action(conversation_summary, None, action_address, action_event, chatting_with,
-                                            conversation, chatting_with_buffer, None, action_pronunciatio, action_start_time)
+        # TODO Refactor this
 
-        await self.associative_memory.add(self.scratch.action.event)
+        event_poignancy = await self._rate_perception_poignancy(
+                EventType.CHAT, self.scratch.action.event.description)
+        
+        agent_with_event_poignancy = await agent_with._rate_perception_poignancy(
+                EventType.CHAT, agent_with.scratch.action.event.description)
+        
+        self.scratch.action.event = PerceivedEvent(**asdict(self.scratch.action.event), event_type=EventType.CHAT, poignancy=event_poignancy)
+        agent_with.scratch.action.event = PerceivedEvent(**asdict(agent_with.scratch.action.event), event_type=EventType.CHAT, poignancy=agent_with_event_poignancy)
+
+        self.associative_memory.add(self.scratch.action.event)
+        agent_with.associative_memory.add(agent_with.scratch.action.event)
+            
         # TODO might be that we need to add send this to the other agent
 
     async def _generate_conversation(self, agent_with: 'Agent'):
@@ -721,15 +797,19 @@ class Agent():
         active_conversation = self.associative_memory.active_conversation_with(
             agent_with.name)
 
+        active_conversation_string = ""
         if active_conversation:
             active_conversation_string = "\n".join(
-                [f"{name}: {utterance}" for name, utterance in active_conversation.filling])
+                [f"{filling.name}: {filling.utterance}" for filling in active_conversation.filling])
             focal_points += [active_conversation_string]
+        else:
+            active_conversation = ""
 
         retrieved += self.associative_memory.retrieve_relevant_entries(
             focal_points, 15)
         location = f"{self.scratch.tile.arena} in {self.scratch.tile.sector}"
-        memory = "\n".join([event.description for event in retrieved])
+        description = list(set([event.description for event in retrieved]))
+        memory = "\n".join(description)
 
         last_conversation = self.associative_memory.last_conversation_with(
             agent_with.name)
@@ -739,31 +819,31 @@ class Agent():
         if last_conversation and (previous_chat := int((self.scratch.time.time - last_conversation.created).total_seconds()/60)) > 480:
             past_context = f"{str(previous_chat)} minutes ago, {self.name} and {agent_with.name} were already {last_conversation.description}. This context takes place after that conversation."
 
-        utterance, end = await conversation_chain.arun(agent=self.name,
-                                                       identity=self.scratch.identity,
-                                                       agent_with=agent_with.name,
-                                                       agent_with_action=agent_with.scratch.action.event.description,
-                                                       agent_last_action=self.scratch.action.event.description,
-                                                       location=location,
-                                                       conversation=active_conversation,
-                                                       memory=memory,
-                                                       past_context=past_context)
+        utterance, end = await Conversation(identity=await self.scratch.identity,
+                                            agent=self.name,
+                                            agent_with=agent_with.name,
+                                            agent_with_action=agent_with.scratch.action.event.description,
+                                            agent_action=self.scratch.action.event.description,
+                                            location=location,
+                                            conversation=active_conversation_string,
+                                            memory=memory,
+                                            past_context=past_context).run()
+
         return utterance, end
 
-    async def _generate_conversation_summary(self, conversation: PerceivedEvent):
+    async def _generate_conversation_summary(self, conversation: Event):
         conversation_history = "\n".join(
-            [f"{name}: {utterance}" for name, utterance in conversation.filling])
-        return await conversation_summary_chain.arun(conversation_history)
+            [f"{filling.name}: {filling.utterance}" for filling in conversation.filling])
+        return await ConversationSummary(agent=self.name, conversation=conversation_history).run()
 
     async def _generate_summarize_agent_relationship(self, agent_with: 'Agent', retrieved: List[PerceivedEvent]):
         """
         We generate the relationship between the two agents. 
         """
         statements = "\n".join([event.description for event in retrieved])
-
-        relationship = await summarize_chat_relationship_chain.arun(agent=self.name,
-                                                                    agent_with=agent_with.name,
-                                                                    statements=statements)
+        relationship = await ChatRelationshipSummarization(agent=self.name,
+                                                           agent_with=agent_with.name,
+                                                           statements=statements).run()
         return relationship
 
     async def _wait_react(self, wait_time):
@@ -785,10 +865,9 @@ class Agent():
         action_pronunciatio = "⌛"
 
         await self._update_schedule(inserted_action, inserted_action_duration)
-
-        await self._create_react_action(inserted_action, inserted_action_duration,
-                                        action_address, action_event, chatting_with, chat, chatting_with_buffer, chatting_end_time,
-                                        action_pronunciatio)
+        self._create_react_action(inserted_action, inserted_action_duration,
+                                  action_address, action_event, chatting_with, chat, chatting_with_buffer, chatting_end_time,
+                                  action_pronunciatio)
 
     async def _update_schedule(self, inserted_action, inserted_action_duration):
 
@@ -834,26 +913,16 @@ class Agent():
                              action_address, action_event, chatting_with, chat, chatting_with_buffer,
                              chatting_end_time, action_pronunciatio, action_start_time=None):
 
-        action_object_description = None
-        action_object_pronunciatio = None
-        action_object_event = (None, None, None)
-
-        ObjectAction(address=action_address,
-                     emoji=action_pronunciatio,
-                     event=Event(subject=action_object_event[0],
-                                 predicate=action_object_event[1],
-                                 object_=action_object_event[2],
-                                 description=action_object_description))
+        event = Event(depth=0,
+                      subject=self.name,
+                      predicate=action_event[1],
+                      object_=action_event[2],
+                      description=inserted_action)
         next_action = Action(address=action_address,
                              start_time=action_start_time,
                              duration=inserted_action_duration,
-                             emoji=action_object_pronunciatio,
-                             event=Event(subject=self.name,
-                                         predicate=action_event[1],
-                                         object_=action_event[2],
-                                         description=inserted_action
-                                         ),
-                             object_action=ObjectAction)
+                             emoji=action_pronunciatio,
+                             event=event)
 
         self.scratch.finished_action_queue.put(self.scratch.action)
         self.scratch.action = next_action
@@ -861,6 +930,8 @@ class Agent():
         self.scratch.chat = chat
         self.scratch.chatting_with_buffer = chatting_with_buffer
         self.scratch.chatting_end_time = chatting_end_time
+
+        return next_action
 
     async def _generate_new_decomposition_schedule(self, inserted_action, inserted_action_duration, start_hour, end_hour):
         today_min_pass = (int(self.scratch.time.hour) * 60 +
@@ -948,7 +1019,12 @@ class Agent():
         return context
 
     async def _generate_decide_to_talk(self, target_agent: 'Agent', retrieved: Dict[str, List[PerceivedEvent]]):
-        context = self.focused_event_to_context(retrieved)
+        context = await FocusedEventToContext(identity=await self.scratch.identity,
+                                              agent=self.name,
+                                              event_description=retrieved["curr_event"].description,
+                                              events=", ".join(
+                                                  [event.description for event in retrieved["events"]]),
+                                              thoughts=", ".join([thought.description for thought in retrieved["thoughts"]])).run()
 
         last_conversation = self.associative_memory.last_conversation_with(
             target_agent.name)
@@ -958,28 +1034,26 @@ class Agent():
         else:
             last_chat_summary = "never chatted before."
 
-        # TODO parse this output to yes/no
-        return await decide_to_talk_chain.arun(context=context,
-                                               init_agent=self.name,
-                                               agent_with=target_agent.name,
-                                               current_time=self.scratch.time.as_string(),
-                                               last_chat_summary=last_chat_summary,
-                                               init_agent_observation=self.observation,
-                                               agent_with_observation=target_agent.observation)
+        return await DecideToTalk(context=context,
+                                  current_time=self.scratch.time.as_string(),
+                                  init_agent=self.name,
+                                  init_agent_observation=self.scratch.action.event.description,
+                                  agent_with=target_agent.name,
+                                  agent_with_observation=retrieved["curr_event"].description,
+                                  last_chat_summary=last_chat_summary).run()
 
     async def _generate_decide_to_react(self, target_agent: 'Agent', retrieved: Dict[str, List[PerceivedEvent]]):
         context = self._focused_event_to_context(retrieved)
-        current_time = self.scratch.time.strftime("%B %d, %Y, %H:%M:%S %p")
+        current_time = self.scratch.time.as_string()
 
-        # TODO parse this output to yes/no
-        return await decide_to_react_chain.arun(context=context,
-                                                current_time=current_time,
-                                                agent=self.name,
-                                                agent_with=target_agent.name,
-                                                agent_with_action=target_agent.scratch.action.event.description,
-                                                agent_observation=self.observation,
-                                                agent_with_observation=target_agent.observation,
-                                                initial_action_description=self.scratch.action.event.description)
+        return await DecideToReact(context=context,
+                                   current_time=current_time,
+                                   agent=self.name,
+                                   agent_with=target_agent.name,
+                                   agent_with_action=target_agent.scratch.action.event.description,
+                                   agent_observation=self.observation,
+                                   agent_with_observation=target_agent.observation,
+                                   initial_action_description=self.scratch.action.event.description).run()
 
     def _choose_retrieved(self, retrieved: Dict[str, Dict[str, List[PerceivedEvent]]]):
         """
@@ -998,6 +1072,9 @@ class Agent():
         no_self_event_retrieved = {description: context for description, context in retrieved.items(
         ) if context["curr_event"].subject != self.name}
 
+        fallback_event_retrieved = {
+            description: context for description, context in retrieved.items()}
+
         persona_context = [context for _, context in no_self_event_retrieved.items(
         ) if ":" not in context["curr_event"].subject]
         if persona_context:
@@ -1008,7 +1085,10 @@ class Agent():
         if non_idle_context:
             return random.choice(non_idle_context)
 
-        return None
+        fallback_context = [context for _,
+                            context in fallback_event_retrieved.items()]
+
+        return None  # random.choice(fallback_context)
 
     async def _determine_action(self):
 
@@ -1059,8 +1139,10 @@ class Agent():
                 action_description, action_duration = self.scratch.daily_schedule[next_hour_index]
                 if action_duration >= 60:
                     if needs_decomposition(action_description, action_duration):
+                        # current_index:next_hour_index
+                        decomposition = await self._decompose_action(next_hour_index, action_description, action_duration)
                         self.scratch.daily_schedule[next_hour_index:next_hour_index+1] = (
-                            await self._decompose_action(next_hour_index, action_description, action_duration))
+                            decomposition)
 
         # * End of Decompose *
 
@@ -1077,23 +1159,58 @@ class Agent():
 
         action_description, action_duration = self.scratch.daily_schedule[current_index]
 
-        action_sector = await self._generate_next_action_sector(action_description)
-        action_arena = await self._generate_next_action_arena(
-            action_description, action_sector)
-        action_game_object = await self._generate_next_action_game_object(
-            action_description, action_arena)
-        # new_address = action_game_object
+        action_game_object = None
+        for _ in range(5):
+            try:
+                whisper(
+                    self.name, f"determined next action: {action_description}")
+                action_sector = await self._generate_next_action_sector(action_description)
+                whisper(self.name, f"determined next sector: {action_sector}")
+                action_arena = await self._generate_next_action_arena(
+                    action_description, action_sector)
+                whisper(self.name, f"determined next arena: {action_arena}")
+                action_game_object = await self._generate_next_action_game_object(
+                    action_description, action_arena)
+                whisper(
+                    self.name, f"determined next game object: {action_game_object}")
+                break
+            except Exception as e:
+                print(f"Unable to generate next action: {e}")
+
+        if not action_game_object:
+            print("Unable to generate next action, using current action")
+            action_sector = self.scratch.tile.sector
+            action_arena = self.scratch.tile.arena
+            action_game_object = self.scratch.tile.game_object
 
         action_pronouncio = await self._generate_action_pronunciatio(
             action_description)
+        whisper(self.name, f"determined next pronouncio: {action_pronouncio}")
+
         action_event = await self._generate_action_event_triple(action_description)
+        whisper(self.name, f"determined next event triple: {action_event}")
 
         action_object_desctiption = await self._generate_action_object_description(
             action_game_object, action_description)
+        whisper(
+            self.name, f"determined next object description: {action_object_desctiption}")
+
         action_object_pronunciatio = await self._generate_action_pronunciatio(
             action_object_desctiption)
+        whisper(
+            self.name, f"determined next object pronouncio: {action_object_pronunciatio}")
         subject, predicate, object_ = await self._generate_action_object_event_triple(
             action_game_object, action_object_desctiption)
+        whisper(
+            self.name, f"determined next object event triple: {subject}, {predicate}, {object_}")
+
+        minutes_from_now = self.time.time.hour * 60 + self.time.time.minute
+
+        planned_end = 0
+        for _, duration in self.scratch.daily_schedule[:current_index+1]:
+            planned_end += int(duration)
+
+        minutes_left = planned_end - minutes_from_now
 
         object_action = ObjectAction(address=action_game_object,
                                      emoji=action_object_pronunciatio,
@@ -1105,7 +1222,7 @@ class Agent():
 
         next_action = Action(address=action_game_object,
                              start_time=self.scratch.time.time,
-                             duration=action_duration,
+                             duration=minutes_left,
                              emoji=action_pronouncio,
                              event=Event(subject=self.name,
                                          predicate=action_event[1],
@@ -1119,16 +1236,16 @@ class Agent():
 
     async def _generate_action_object_event_triple(self, action_game_object, action_object_description):
         object_name = action_game_object.split(":")[-1]
-        
-        action_object_event_triple = await ActionEventTriple(name=object_name, address=object_name, action_description=action_object_description).run()
 
-        return action_object_event_triple
+        _, predicate, object = await ActionEventTriple(name=object_name, address=object_name, action_description=action_object_description).run()
+
+        return (action_game_object, predicate, object)
 
     async def _generate_action_object_description(self, action_game_object, action_description):
-        
+
         object_name = action_game_object.split(":")[-1]
 
-        action_object_description = await ObjectActionDescription(name=self.name, 
+        action_object_description = await ObjectActionDescription(name=self.name,
                                                                   object_name=object_name,
                                                                   action_description=action_description).run()
         return action_object_description
@@ -1146,21 +1263,17 @@ class Agent():
     async def _generate_next_action_game_object(self, action_description, action_arena):
         available_objects = self.spatial_memory.get_str_accessible_arena_game_objects(
             action_arena)
-        
+
         if not available_objects:
             current_arena = self.scratch.tile.get_path(Level.ARENA)
-            available_objects = self.spatial_memory.get_str_accessible_arena_game_objects(current_arena)
+            available_objects = self.spatial_memory.get_str_accessible_arena_game_objects(
+                current_arena)
 
-        game_object = "-------"
         retry = 0
-        while game_object not in available_objects:
-            game_object = await ActionLocationGameObject(action_description=action_description, 
+        game_object = await ActionLocationGameObject(action_description=action_description,
                                                      available_objects=available_objects,
                                                      retry=str(retry)).run()
-            retry += 1
-            if retry > 5:
-                game_object = random.choice(available_objects)
-        
+
         return f"{action_arena}:{game_object}"
 
     async def _generate_next_action_arena(self, action_description, action_sector):
@@ -1170,12 +1283,14 @@ class Agent():
         sector = action_sector.split(":")[-1]
 
         arena = await ActionArenaLocations(name=name,
-                                            current_area=current_area,
-                                            current_sector=current_sector,
-                                            sector=sector,
-                                            sector_arenas=self.spatial_memory.get_str_accessible_sector_arenas(action_sector),
-                                            available_sectors_nearby=self.spatial_memory.get_str_accessible_sectors(list(self.spatial_memory.tree.keys())[-1]),
-                                            action_description=action_description).run()
+                                           current_area=current_area,
+                                           current_sector=current_sector,
+                                           sector=sector,
+                                           sector_arenas=self.spatial_memory.get_str_accessible_sector_arenas(
+                                               action_sector),
+                                           available_sectors_nearby=self.spatial_memory.get_str_accessible_sectors(
+                                               list(self.spatial_memory.tree.keys())[-1]),
+                                           action_description=action_description).run()
 
         return f"{action_sector}:{arena}"
 
@@ -1191,12 +1306,12 @@ class Agent():
             self.scratch.tile.get_path(Level.WORLD))
 
         next_sector = await ActionSectorLocations(agent_name=name,
-                                                    agent_home=home,
-                                                    agent_home_arenas=home_arenas,
-                                                    agent_current_sector=current_sector,
-                                                    agent_current_sector_arenas=current_sector_arenas,
-                                                    available_sectors_nearby=nearby_sectors,
-                                                    curr_action_description=action_description).run()
+                                                  agent_home=home,
+                                                  agent_home_arenas=home_arenas,
+                                                  agent_current_sector=current_sector,
+                                                  agent_current_sector_arenas=current_sector_arenas,
+                                                  available_sectors_nearby=nearby_sectors,
+                                                  curr_action_description=action_description).run()
 
         return f"{self.scratch.tile.world}:{next_sector}"
 
@@ -1263,13 +1378,13 @@ class Agent():
                     + datetime.timedelta(minutes=end_min)).strftime("%H:%M:%S")
 
         return await TaskDecomposition(name=self.name,
-                                        identity=self.scratch.identity,
-                                        today=self.scratch.time.today,
-                                        task_context=task_context,
-                                        task_description=action_description,
-                                        task_duration=str(action_duration),
-                                        task_start_time=start_time,
-                                        task_end_time=end_time).run()
+                                       identity=await self.scratch.identity,
+                                       today=self.scratch.time.today,
+                                       task_context=task_context,
+                                       task_description=action_description,
+                                       task_duration=str(action_duration),
+                                       task_start_time=start_time,
+                                       task_end_time=end_time).run()
 
     async def _long_term_planning(self, daytype: DayType):
         """
@@ -1284,9 +1399,10 @@ class Agent():
         # We start by creating the wake up hour for the persona.
         result = await wake_up_hour_chain.arun(agent_name=self.name,
                                                agent_lifestyle=self.scratch.lifestyle,
-                                               agent_identity=self.scratch.identity)
-
+                                               agent_identity=await self.scratch.identity)
         wake_up_hour = result["wake_up_hour"]
+
+        whisper(self.name, f"wake up hour is at {wake_up_hour}")
 
         # When it is a new day, we start by creating the daily_req of the persona.
         # Note that the daily_req is a list of strings that describe the persona's
@@ -1297,13 +1413,18 @@ class Agent():
             # daily requirement, or if we are on a new day, we want to create a new
             # set of daily requirements.
             self.scratch.daily_requirements = await FirstDailyPlan(agent_name=self.name,
-                                                                    agent_identity=self.scratch.identity,
-                                                                    agent_lifestyle=self.scratch.lifestyle,
-                                                                    current_day=self.scratch.time.today,
-                                                                    wake_up_hour=wake_up_hour).run()
+                                                                   agent_identity=await self.scratch.identity,
+                                                                   agent_lifestyle=self.scratch.lifestyle,
+                                                                   current_day=self.scratch.time.today,
+                                                                   wake_up_hour=wake_up_hour).run()
+            whisper(
+                self.name, f"first daily plan is {self.scratch.daily_requirements}")
         elif daytype == DayType.NEW_DAY:
             # TODO parse daily_plan to a list
             daily_plan, current_status = self._generate_daily_plan_and_current_status()
+
+            whisper(self.name, f"new daily plan is {daily_plan}")
+            whisper(self.name, f"new current status is {current_status}")
 
             self.scratch.daily_requirements = daily_plan
             self.scratch.current_status = current_status
@@ -1312,7 +1433,7 @@ class Agent():
         # which is a list of todo items with a time duration (in minutes) that
         # add up to 24 hours.
 
-        self.scratch.daily_schedule = await HourlyBreakdown(identity=self.scratch.identity,
+        self.scratch.daily_schedule = await HourlyBreakdown(identity=await self.scratch.identity,
                                                             wake_up_hour=wake_up_hour,
                                                             current_hour=self.scratch.time.hour,
                                                             name=self.name,
@@ -1324,6 +1445,8 @@ class Agent():
 
         daily_plan = " ,".join(self.scratch.daily_requirements)
         description = f"This is {self.name}'s plan for {self.scratch.time.today}: {daily_plan}."
+
+        whisper(self.name, f"new daily plan is {description}")
 
         perceived_plan = PerceivedEvent(event_type=EventType.PLAN,
                                         poignancy=0.5,

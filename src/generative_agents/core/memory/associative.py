@@ -63,10 +63,13 @@ class AssociativeMemory:
         return [PerceivedEvent.from_db_entry(memory) for memory in memories]
     
     def last_conversation_with(self, agent_name: str) -> PerceivedEvent:
-        return database.get_last_chat(self.agent_name, agent_name)
+        last_chat = database.get_last_chat(self.agent_name, agent_name)
+        return PerceivedEvent.from_db_entry(last_chat) if last_chat else None
 
     def active_conversation_with(self, agent_name: str) -> PerceivedEvent:
-        return database.get_active_chat(self.agent_name, agent_name)
+        active_chat = database.get_active_chat(self.agent_name, agent_name)
+        return PerceivedEvent.from_db_entry(active_chat) if active_chat else None
     
     def get_most_recent_memories(self, most_recent=0):
-        return self.last_entries.get(most_recent=most_recent)
+        memories = self.last_entries.get(most_recent=most_recent)
+        return [PerceivedEvent.from_db_entry(memory) for memory in memories]

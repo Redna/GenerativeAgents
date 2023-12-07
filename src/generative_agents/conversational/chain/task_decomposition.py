@@ -1,3 +1,4 @@
+import asyncio
 import re
 from pydantic import BaseModel
 from generative_agents import global_state
@@ -62,18 +63,50 @@ class TaskDecomposition(BaseModel):
             "do_sample": True,
             "top_p": 0.95,
             "top_k": 60,
-            "temperature": 0.4,
-            "cache_key": f"2task_decomposition_{self.name}_{global_state.tick}"}, verbose=True)
+            "temperature": 0.1}, verbose=global_state.verbose)
+        
+        schedules = []
+        tasks = []
+        for i in range(3):
+            _task_decomposition_chain.llm_kwargs["cache_key"] = f"6task_decomposition_{self.name}_{global_state.tick}_{i}"
+            tasks += [_task_decomposition_chain.arun(name=self.name,
+                                                        identity=self.identity,
+                                                        today=self.today,
+                                                        task_context=self.task_context,
+                                                        task_description=self.task_description,
+                                                        task_start_time=self.task_start_time,
+                                                        task_end_time=self.task_end_time,
+                                                        task_duration=self.task_duration)]
+        
+        completions = await asyncio.gather(*tasks)
+        for completion in completions:
+            pattern = rf"\d+\) {self.name} is (.*) \(duration in minutes: (\d+).*"
+            schedule = [(task, int(duration)) for task, duration in re.findall(pattern, completion)]
 
-        completion = await _task_decomposition_chain.arun(name=self.name,
-                                                          identity=self.identity,
-                                                          today=self.today,
-                                                          task_context=self.task_context,
-                                                          task_description=self.task_description,
-                                                          task_start_time=self.task_start_time,
-                                                          task_end_time=self.task_end_time,
-                                                          task_duration=self.task_duration)
+            if len(schedule) >= 3 and sum([duration for _, duration in schedule]) == int(self.task_duration):
+                return schedule
+            else: 
+                print("llm has problem with math. Trying again.")
+                schedules.append(schedule)
+                
+        
+        new_schedule = []
+        total_duration = 0
+        
+        for candidate in schedules:
+            if len(candidate) >= 3 and len(candidate) <= 6:
+                schedule = candidate
+                break
+        
+        for task, duration in schedule:
+            total_duration += duration
+            if total_duration <= int(self.task_duration):
+                new_schedule.append((task, duration))
+            else:
+                new_schedule.append((task, int(self.task_duration) - (total_duration - duration)))
+                break
+        
+        if total_duration < int(self.task_duration):
+            new_schedule.append(("breathing", int(self.task_duration) - total_duration))
 
-        pattern = rf"\d+\) {self.name} is (.*) \(duration in minutes: (\d+).*"
-
-        return [(task, int(duration)) for task, duration in re.findall(pattern, completion)]
+        return new_schedule

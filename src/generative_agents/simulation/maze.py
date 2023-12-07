@@ -51,8 +51,8 @@ class Tile:
             address += f":{self.arena}"
         if self.game_object:
             address += f":{self.game_object}"
-        if self.spawning_location:
-            address = f'<spawn_loc>{self.spawning_location}'
+        #if self.spawning_location:
+        #    address = f'<spawn_loc>{self.spawning_location}'
 
         return address
     
@@ -90,6 +90,9 @@ class Tile:
     
     def is_walkable(self):
         return not self.collision
+    
+    def l2_distance(self, other: 'Tile') -> float:
+        return ((self.x - other.x)**2 + (self.y - other.y)**2)**0.5
 
     def __str__(self):
         return f"Tile(world={self.world}, sector={self.sector}, arena={self.arena}, game_object={self.game_object}, spawning_location={self.spawning_location}, collision={self.collision}, events={self.events})"
@@ -268,11 +271,9 @@ class Maze:
         #   == {(29, 14), (31, 11), (30, 14), (32, 11), ...}, 
         
         self.address_tiles = dict()
-        for i in range(self.maze_height):
-            for j in range(self.maze_width): 
-                
-                tile = self.tiles[i][j]
 
+        for row in self.tiles:
+            for tile in row:
                 if tile.collision:
                     continue
 

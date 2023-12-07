@@ -1,5 +1,6 @@
 
 from datetime import datetime
+import hashlib
 
 from pathlib import Path
 
@@ -13,3 +14,7 @@ def get_time_string(dt: datetime) -> str:
 
 def get_project_root() -> Path:
     return Path(__file__).parent.parent.parent
+
+def hash_string(s: str) -> int:
+    """ Returns a hash of the string. """
+    return hashlib.sha1(s.encode()).hexdigest()

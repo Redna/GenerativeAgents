@@ -1,12 +1,14 @@
 
 from dataclasses import dataclass, field
 import datetime
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 from queue import Queue
+from generative_agents.conversational.chain.identity import Identity
 
 from generative_agents.simulation.time import SimulationTime
 from generative_agents.core.events import Action
 from generative_agents.simulation.maze import Tile
+from generative_agents.utils import hash_string
 
 @dataclass
 class Scratch():
@@ -44,6 +46,8 @@ class Scratch():
     # e.g., ["Dolores Murphy"] = self.vision_r
     chatting_with_buffer = dict()
 
+    _identity: Tuple[str, str] = ("", "")
+
     def should_reflect(self):
         if (self.reflection_trigger_counter <= 0): 
             return True 
@@ -74,10 +78,10 @@ class Scratch():
             if start.second != 0: 
                 start = start.replace(second=0)
                 start = (start + datetime.timedelta(minutes=1))
-        end_time = (start + datetime.timedelta(minutes=self.action.duration))
+            end_time = (start + datetime.timedelta(minutes=self.action.duration))
 
-        if end_time.strftime("%H:%M:%S") == self.time.time.strftime("%H:%M:%S"): 
-            return True
+        if end_time and self.time.time.strftime("%H:%M:%S") >= end_time.strftime("%H:%M:%S"): 
+              return True
         return False
 
     def get_daily_schedule_index(self, advance=0):
@@ -133,10 +137,11 @@ class Scratch():
                 return path
 
     @property
-    def identity(self):
+    async def identity(self):
         commonset = ""
         commonset += f"Name: {self.name}\n"
         commonset += f"Age: {self.age}\n"
+        commonset += f"{self.description}"
         commonset += f"Innate traits: {self.innate_traits}\n"
         commonset += f"Learned traits: {self.learned_traits}\n"
         if self.action:
@@ -144,4 +149,14 @@ class Scratch():
         commonset += f"Lifestyle: {self.lifestyle}\n"
         commonset += f"Daily plan requirement: {self.daily_requirements}\n"
         commonset += f"Current Date: {self.time.today}\n"
-        return commonset
+
+        new_hash = hash_string(commonset)
+
+        key, cached_identity = self._identity
+
+        if key != new_hash:
+            cached_identity = await Identity(agent=self.name,identity=commonset).run()
+            self.description = cached_identity
+            self._identity = (new_hash, cached_identity)
+
+        return cached_identity

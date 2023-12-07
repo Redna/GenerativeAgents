@@ -9,11 +9,12 @@ from langchain.prompts import PromptTemplate
 
 from generative_agents.conversational.output_parser.fuzzy_parser import FuzzyOutputParser, PatternWithDefault
 
-_template = """
+_template = """<|system|>In this village everything is in walking distance and there are no cars, trains, buses or other public transportations.
+<|user|>
 {agent_identity}
 
 In general, {agent_lifestyle}
-Today is {current_day}. Here is {agent_name}'s plan today in broad-strokes (with the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm): 1) wake up and complete the morning routine at {wake_up_hour}, 2)"""
+Today is {current_day}. Here is {agent_name}'s plan today in broad-strokes (you MUST include the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm):<|assistant|> 1) wake up and complete the morning routine at {wake_up_hour}, 2)"""
 
 _prompt = PromptTemplate(input_variables=["agent_name",
                                           "agent_identity",
@@ -31,9 +32,9 @@ _output_parser = FuzzyOutputParser(output_definitions=_outputs)
 first_daily_plan_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 400,
                                                                    "do_sample": True,
                                                                    "top_p": 0.95,
-                                                                   "top_k": 60,
+                                                                   "top_k": 50,
                                                                    "temperature": 0.4}
-                                                                   , output_parser=_output_parser, verbose=True)
+                                                                   , output_parser=_output_parser, verbose=global_state.verbose)
 
 
 class FirstDailyPlan(BaseModel):
@@ -44,7 +45,7 @@ class FirstDailyPlan(BaseModel):
     wake_up_hour: str
 
     async def run(self):
-        first_daily_plan_chain.llm_kwargs["cache_key"] = f"first_daily_plan_{self.agent_name}_{global_state.tick}"
+        first_daily_plan_chain.llm_kwargs["cache_key"] = f"3first_daily_plan_{self.agent_name}_{global_state.tick}"
         result = await first_daily_plan_chain.arun(agent_name=self.agent_name,
                                                     agent_identity=self.agent_identity,
                                                     agent_lifestyle=self.agent_lifestyle,

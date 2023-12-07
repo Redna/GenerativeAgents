@@ -30,7 +30,7 @@ class ObjectActionDescription(BaseModel):
             "do_sample": True,
             "top_p": 0.95,
             "top_k": 10,
-            "temperature": 0.1}, verbose=True)
+            "temperature": 0.1}, verbose=global_state.verbose)
 
         completion = await _object_event_chain.arun(name=self.name, object_name=self.object_name, action_description=self.action_description)
 

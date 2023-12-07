@@ -88,13 +88,13 @@ class TransformersBatchInference(LLM):
         except requests.exceptions.RequestException as e:  # This is the correct syntax
             raise ValueError(f"Error raised by inference endpoint: {e}")
        
-        generated_text = response.json()
-        if "error" in generated_text:
+        payload = response.json()
+        if "error" in payload:
             raise ValueError(
-                f"Error raised by inference API: {generated_text['error']}"
+                f"Error raised by inference API: {payload['error']}"
             )
         
-        text = generated_text[0]["generated_text"]
+        text = payload["generated_text"][0]["generated_text"]
         if stop is not None:
             # This is a bit hacky, but I can't figure out a better way to enforce
             # stop tokens when making calls to huggingface_hub.

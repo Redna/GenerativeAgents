@@ -21,7 +21,7 @@ _outputs = {"wake_up_hour": PatternWithDefault(pattern=re.compile(r"(\d{1,2}:\d{
 
 _output_parser = FuzzyOutputParser(output_definitions=_outputs)
 
-wake_up_hour_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_length": 30,
+wake_up_hour_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 5,
                                                                    "do_sample": True,
                                                                    "top_p": 0.95,
                                                                    "top_k": 60,

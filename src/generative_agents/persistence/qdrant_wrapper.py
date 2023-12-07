@@ -9,6 +9,8 @@ from qdrant_client import QdrantClient, models
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
 
+from generative_agents import global_state
+
 
 _model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
@@ -19,8 +21,8 @@ class BaseSchema(BaseModel):
 
 
 class TimeAndImportanceBaseSchema(BaseSchema):
-    created_at: datetime = datetime.now()
-    last_accessed_at: datetime = datetime.now()
+    created_at: datetime = global_state.time.time
+    last_accessed_at: datetime = global_state.time.time
     expiration_date: Optional[datetime] = None
     importance: float = 0.5
 
@@ -52,12 +54,19 @@ class QdrantCollection:
                 self.collection_name, field_name="created", field_schema="integer")
 
     def _get_relevant_entries_with_scores(self, query, filter=None, limit=5) -> List[Tuple[T, float]]:
+        
+        if type(query) == list:
+            query = ", ".join(query)
+
         query_vector = _model.encode(query)
-        points = self.client.search(collection_name=self.collection_name,
+        try:
+            points = self.client.search(collection_name=self.collection_name,
                                     query_filter=filter,
                                     limit=limit,
                                     query_vector=query_vector, 
                                     with_vectors=True)
+        except Exception as e:
+            raise Exception(f"Error raised by Qdrant: {e}")              
 
         result = []
         for point in points:
@@ -124,7 +133,7 @@ class TimeAndImportanceWrapper(QdrantCollection):
         self.collection = super().__init__(client, collection_name, data_schema, decay_rate=decay_rate)
 
     def add(self, entries: List[K], new_vectors=True) -> List[K]:
-        current_time = datetime.now()
+        current_time = global_state.time.time
 
         for entry in entries:
             entry.last_accessed_at = current_time
@@ -134,7 +143,7 @@ class TimeAndImportanceWrapper(QdrantCollection):
     def get_relevant_entries(self, query, filter=None, limit=5) -> List[K]:
         candiates = super()._get_relevant_entries_with_scores(
             query, filter, self.rerank_limit)
-        current_time = datetime.now()
+        current_time = global_state.time.time
 
         combined_scores = [(entry, self._get_combined_score(
             entry, score, current_time)) for entry, score in candiates]

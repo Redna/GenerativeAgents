@@ -25,7 +25,7 @@ class ActionPronunciatio(BaseModel):
             "top_p": 0.95,
             "top_k": 10,
             "temperature": 0.4,
-            "cache_key": f"3action_pronunciatio_{self.action_description}_{global_state.tick}"}, verbose=True)
+            "cache_key": f"3action_pronunciatio_{self.action_description}_{global_state.tick}"}, verbose=global_state.verbose)
 
         completion = await _action_pronunciatio_chain.arun(action_description=self.action_description)
 
