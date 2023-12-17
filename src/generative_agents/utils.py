@@ -18,3 +18,6 @@ def get_project_root() -> Path:
 def hash_string(s: str) -> int:
     """ Returns a hash of the string. """
     return hashlib.sha1(s.encode()).hexdigest()
+
+def hour_string_to_time(hour: str):
+    return datetime.strptime(hour, "%H")

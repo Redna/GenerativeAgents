@@ -1,14 +1,12 @@
+import math
+import random
 import re
 from pydantic import BaseModel
 from generative_agents import global_state
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
-_template = """
-Convert an action description to an emoji (important: use two or less emojis).
 
-Action description: {action_description}
-Emoji:"""
 
 
 class ActionPronunciatio(BaseModel):
@@ -16,6 +14,9 @@ class ActionPronunciatio(BaseModel):
 
     async def run(self):
 
+        _template = """
+"Provide one or two emoji that best represents the following statement or emotion: {action_description}
+Emoji:"""
         _prompt = PromptTemplate(input_variables=["action_description"],
                                  template=_template)
 
@@ -25,7 +26,8 @@ class ActionPronunciatio(BaseModel):
             "top_p": 0.95,
             "top_k": 10,
             "temperature": 0.4,
-            "cache_key": f"3action_pronunciatio_{self.action_description}_{global_state.tick}"}, verbose=global_state.verbose)
+            #"cache_key": f"3action_pronunciatio_{self.action_description}_{global_state.tick}"
+            }, verbose=global_state.verbose)
 
         completion = await _action_pronunciatio_chain.arun(action_description=self.action_description)
 

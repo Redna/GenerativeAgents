@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from pydantic import BaseModel
 from generative_agents import global_state
@@ -6,34 +7,50 @@ from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
 # TODO rewrite few shot prompt to match the new identity set
-_template = """
-Describe subtasks in 5 min increments.
----
-Name: Kelly Bronson
-Age: 35
-Backstory: Kelly always wanted to be a teacher, and now she teaches kindergarten. During the week, she dedicates herself to her students, but on the weekends, she likes to try out new restaurants and hang out with friends. She is very warm and friendly, and loves caring for others.
-Personality: sweet, gentle, meticulous
-Location: Kelly is in an older condo that has the following areas: [kitchen, bedroom, dining, porch, office, bathroom, living room, hallway].
-Currently: Kelly is a teacher during the school year. She teaches at the school but works on lesson plans at home. She is currently living alone in a single bedroom condo.
-Daily plan requirement: Kelly is planning to teach during the morning and work from home in the afternoon.s
+_template = """<|system|>You follow the tasks given by the user as close as possible. You will only generate 1 JSON object as mentioned below.
+You will act as the agent {name}.
+<|user|>
 
-Today is Saturday May 10. From 08:00am ~09:00am, Kelly is planning on having breakfast, from 09:00am ~ 12:00pm, Kelly is planning on working on the next day's kindergarten lesson plan, and from 12:00 ~ 13pm, Kelly is planning on taking a break. 
-In minimum 5 minutes increments, list the subtasks Kelly does when Kelly is working on the next day's kindergarten lesson plan from 09:00am ~ 12:00pm (total duration in minutes: 180):
-1) Kelly is reviewing the kindergarten curriculum standards. (duration in minutes: 15, minutes left: 165)
-2) Kelly is brainstorming ideas for the lesson. (duration in minutes: 30, minutes left: 135)
-3) Kelly is creating the lesson plan. (duration in minutes: 30, minutes left: 105)
-4) Kelly is creating materials for the lesson. (duration in minutes: 30, minutes left: 75)
-5) Kelly is taking a break. (duration in minutes: 15, minutes left: 60)
-6) Kelly is reviewing the lesson plan. (duration in minutes: 30, minutes left: 30)
-7) Kelly is making final changes to the lesson plan. (duration in minutes: 15, minutes left: 15)
-8) Kelly is printing the lesson plan. (duration in minutes: 10, minutes left: 5)
-9) Kelly is putting the lesson plan in her bag. (duration in minutes: 5, minutes left: 0)
----
+Output format: Output a valid json of the following format:
+```
+{{
+    "total_duration": "<total duration in minutes>",
+    "subtasks": [
+        {{ 
+            "duration": "<duration in minutes>",
+            "remaining_minutes": "<remaining minutes after completing this subtask>",
+            "activity": "<activity in one brief sentence>"
+        }},
+        {{ 
+            "duration": "<duration in minutes>",
+            "remaining_minutes": "<remaining minutes after completing this subtask>",
+            "activity": "<activity in one brief sentence>"
+        }},
+        ...,
+        {{  
+            "duration": "<duration in minutes>",
+            "remaining_minutes": "<remaining minutes after completing this subtask>",
+            "activity": "<activity in one brief sentence>"
+        }}
+    ]
+}}
+```
+
 {identity}
 
 Today is {today}. {task_context}
-In minimum 5 minutes increments, list the subtasks {name} does when {name} is {task_description} from {task_start_time} ~ {task_end_time} (total duration in minutes: {task_duration}):
-1) {name} is"""
+
+Task: Break down the task in subtasks 5 minute increments. At the end no time should be left.
+
+In minimum 5 minutes increments, what are the subtasks that {name} does when {name} is "{task_description}" from {task_start_time} ~ {task_end_time}? (total duration in minutes: {task_duration}):
+<|assistant|>```
+{{
+    "total_duration": "{task_duration}",
+    "subtasks": [
+        {{ 
+            "duration": "5",
+            "remaining_minutes": "55",
+            "activity": \""""
 
 
 class TaskDecomposition(BaseModel):
@@ -68,7 +85,7 @@ class TaskDecomposition(BaseModel):
         schedules = []
         tasks = []
         for i in range(3):
-            _task_decomposition_chain.llm_kwargs["cache_key"] = f"6task_decomposition_{self.name}_{global_state.tick}_{i}"
+            _task_decomposition_chain.llm_kwargs["cache_key"] = f"8task_decomposition_{self.name}_{global_state.tick}_{i}"
             tasks += [_task_decomposition_chain.arun(name=self.name,
                                                         identity=self.identity,
                                                         today=self.today,
@@ -80,33 +97,20 @@ class TaskDecomposition(BaseModel):
         
         completions = await asyncio.gather(*tasks)
         for completion in completions:
-            pattern = rf"\d+\) {self.name} is (.*) \(duration in minutes: (\d+).*"
-            schedule = [(task, int(duration)) for task, duration in re.findall(pattern, completion)]
 
-            if len(schedule) >= 3 and sum([duration for _, duration in schedule]) == int(self.task_duration):
-                return schedule
-            else: 
-                print("llm has problem with math. Trying again.")
-                schedules.append(schedule)
+            pattern = r'<\|assistant\|\>\n*```\n*(\{.*?\})\n```'
+            match = re.search(pattern, completion, re.DOTALL)
+            if match:
+                try:
+                    json_object = json.loads(match.group(1))
+                    subtasks = json_object["subtasks"]
+                    
+                    if subtasks[-1]["remaining_minutes"] != "0":
+                        subtasks[-1]["duration"] = subtasks[-2]["remaining_minutes"]
+                    
+                    return [(task["activity"], int(task["duration"])) for task in subtasks]
+                except:
+                    pass
                 
-        
-        new_schedule = []
-        total_duration = 0
-        
-        for candidate in schedules:
-            if len(candidate) >= 3 and len(candidate) <= 6:
-                schedule = candidate
-                break
-        
-        for task, duration in schedule:
-            total_duration += duration
-            if total_duration <= int(self.task_duration):
-                new_schedule.append((task, duration))
-            else:
-                new_schedule.append((task, int(self.task_duration) - (total_duration - duration)))
-                break
-        
-        if total_duration < int(self.task_duration):
-            new_schedule.append(("breathing", int(self.task_duration) - total_duration))
-
-        return new_schedule
+        print("Unable to decompose task.")
+        return [("thinking about life", t) for t in range(0, int(self.task_duration), 5)]

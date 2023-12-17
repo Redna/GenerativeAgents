@@ -56,7 +56,7 @@ class Simulation():
         
         self.agents["John Lin"] = Agent(name="John Lin",
                                           time=global_state.time,
-                                          description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although the family is currently enjoying a vacation, a well-deserved break from their daily routines, John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews.",
+                                          description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews.",
                                           innate_traits=["Easy going", "Competitive", "Confident"],
                                           age=25,
                                           location="the Ville:Lin family's house:Mei and John Lin's bedroom",

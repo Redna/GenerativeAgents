@@ -66,13 +66,13 @@ class DecideToTalk(BaseModel):
     async def run(self):
 
         _decide_to_talk_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 400,
+            "max_new_tokens": 350,
             "do_sample": True,
             "top_p": 0.95,
             "top_k": 30,
             "temperature": 0.8,
             "repetition_penalty": 1.01,
-            "cache_key": f"7decide_to_talk{self.init_agent}_{self.agent_with}_{global_state.tick}"}, verbose=global_state.verbose)
+            "cache_key": f"decide_to_talk{self.init_agent}_{self.agent_with}_{global_state.tick}"}, verbose=global_state.verbose)
 
         tasks = []
         for i in range(3):
@@ -91,7 +91,9 @@ class DecideToTalk(BaseModel):
             match = re.search(pattern, completion, re.DOTALL)
             if match:
                 try:
-                    json_object = json.loads(match.group(1))
+                    # remove comments if there are any
+                    string = re.sub(r'#.*', '', match.group(1))
+                    json_object = json.loads(string)
                     return "yes" in json_object["Answer"].lower()
                 except:
                     pass

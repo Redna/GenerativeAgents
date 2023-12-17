@@ -1,3 +1,4 @@
+import json
 import random
 import re
 from pydantic import BaseModel
@@ -7,39 +8,30 @@ from langchain import LLMChain, PromptTemplate
 
 
 ## fewshot
+_template = """<|system|>You follow the tasks given by the user as close as possible. You will only generate 1 JSON object as mentioned below.
+You will act as the agent {agent_name}.
 
-_template = """
-Choose an appropriate area from the area options for a task at hand.
+<|user|>
+Choose an appropriate area from the area options for a task at hand. Stay in the current area if the activity can be done there. Only go out if the activity needs to take place in another place.
+Also if an activity is not in the options, try to identify the closest area that can be used for the activity.
 
-Sam Kim lives in [Sam Kim's house] that has Sam Kim's room, bathroom, kitchen.
-Sam Kim is currently in [Sam Kim's house] that has Sam Kim's room, bathroom, kitchen. 
-Area options: [Sam Kim's house, The Rose and Crown Pub, Hobbs Cafe, Oak Hill College, Johnson Park, Harvey Oak Supply Store, The Willows Market and Pharmacy].
-* Stay in the current area if the activity can be done there. Only go out if the activity needs to take place in another place.
-* Must be one of the |Area options], verbatim.
-For taking a walk, Sam Kim should go to the following area: [Johnson Park]
----
-Jane Anderson lives in [Oak Hill College Student Dormatory] that has Jane Anderson's room.
-Jane Anderson is currently in [Oak Hill College] that has a classroom, library
-Area options: [Oak Hill College Student Dormatory, The Rose and Crown Pub, Hobbs Cafe, Oak Hill College, Johnson Park, Harvey Oak Supply Store, The Willows Market and Pharmacy]. 
-* Stay in the current area if the activity can be done there. Only go out if the activity needs to take place in another place.
-* Must be one of the |Area options], verbatim.
-For eating dinner, Jane Anderson should go to the following area: [Hobbs Cafe]
---- 
+Output format: Output a valid json of the following format:
+```
+{{
+    "reasoning": "<reasoning for yes or no and the next area selection in one brief sentence>"
+    "activity in current area": "<yes or no>",
+    "area": "<next area MUST be one of the List enclosed by [] >"
+}}
+```
+
 {agent_name} lives in [{agent_home}] that has {agent_home_arenas}.
 {agent_name} is currently in [{agent_current_sector}] that has {agent_current_sector_arenas}.
 Area options: [{available_sectors_nearby}].
-* Stay in the current area if the activity can be done there. Only go out if the activity needs to take place in another place.
-* Must be one of the [Area options], verbatim.
-For {curr_action_description}, {agent_name} should go to the following area: ["""
 
-
-_fallback_template = """
-{agent_name} is currently in [{agent_current_sector}] that has {agent_current_sector_arenas}.
-
-{agent_name} is planning the following activity: {curr_action_description}
-
-Answer with YES if the activity can be done in the current area. Otherwise, answer with NO.
-Answer:"""
+For {curr_action_description}, where should {agent_name} go? And can {agent_name} do the activity in the current area?
+<|assistant|>
+{{
+    "reasoning": \""""
 
 class ActionSectorLocations(BaseModel):
     agent_name: str
@@ -61,7 +53,7 @@ class ActionSectorLocations(BaseModel):
                                  template=_template)
         
         _action_sector_locations_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 15,
+            "max_new_tokens": 200,
             "do_sample": True,
             "top_p": 0.95,
             "top_k": 60,
@@ -72,7 +64,7 @@ class ActionSectorLocations(BaseModel):
         possible_sectors.append(self.agent_home)
 
         for i in range(5):
-            _action_sector_locations_chain.llm_kwargs["cache_key"] = f"action_sector_locations_{self.agent_name}_{global_state.tick}_{i}"
+            _action_sector_locations_chain.llm_kwargs["cache_key"] = f"6action_sector_locations_{self.agent_name}_{global_state.tick}_{i}"
             completion = await _action_sector_locations_chain.arun(agent_name=self.agent_name,
                                                                 agent_home=self.agent_home,
                                                                 agent_home_arenas=self.agent_home_arenas,
@@ -81,56 +73,28 @@ class ActionSectorLocations(BaseModel):
                                                                 available_sectors_nearby=self.available_sectors_nearby,
                                                                 curr_action_description=self.curr_action_description)
             
-            pattern = rf"{self.agent_name} should go to the following area: \[(.*)\]"
-            try:
-                sector = re.findall(pattern, completion)[-1]
-            except:
-                continue
-            
-            if sector in possible_sectors:
-                return sector
-            
-            if sector in self.agent_home_arenas:
-                return self.agent_home
-            
-            if sector in self.agent_current_sector_arenas:
-                return self.agent_current_sector
+            pattern = r'<\|assistant\|\>\n*(\{.*?\})'
+            match = re.search(pattern, completion, re.DOTALL)
+            if match:
+                try:
+                    json_object = json.loads(match.group(1))
+                    
+                    sector = json_object["area"]
+                    if sector in possible_sectors:
+                        return sector
+                    
+                    if sector in self.agent_home_arenas:
+                        return self.agent_home
 
-
-        _fallback_prompt = PromptTemplate(input_variables=["agent_name",
-                                    "agent_current_sector",
-                                    "agent_current_sector_arenas",
-                                    "curr_action_description"],
-                    template=_fallback_template)
+                    if sector in self.agent_current_sector_arenas:
+                        return self.agent_current_sector
+                except:
+                    pass
+        in_current_area = json_object["activity in current area"]
+        if in_current_area == "yes":
+            sector = self.agent_current_sector
+        else:
+            sector = random.choice(possible_sectors)
         
-        _fallback_chain = LLMChain(prompt=_fallback_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 3,
-            "do_sample": True,
-            "top_p": 0.95,
-            "top_k": 60,
-            "temperature": 0.1}, verbose=global_state.verbose)
-
-        available_sectors_nearby = [sector.strip() for sector in self.available_sectors_nearby.split(",") if sector.strip()]
-        
-        for i in range(5):
-            _action_sector_locations_chain.llm_kwargs["cache_key"] = f"action_sector_locations_fallback_{self.agent_name}_{global_state.tick}_{i}"
-            completion = await _fallback_chain.arun(agent_name=self.agent_name,
-                                                    agent_current_sector=self.agent_current_sector,
-                                                    agent_current_sector_arenas=self.agent_current_sector_arenas,
-                                                    curr_action_description=self.curr_action_description)
-            
-            pattern = rf"Answer: \[(.*)\]"
-            try:
-                answer = re.findall(pattern, completion)[-1]
-                if "yes" in answer.lower():
-                    print(f"Activity can be done in the current area: {self.agent_current_sector}")
-                    return self.agent_current_sector
-                if "no" in answer.lower():
-                    print("fallback: Activity cannot be done in the current area. Selecting randomly.")
-                    return random.choice(available_sectors_nearby)
-            except:
-                continue
-
-        sector = random.choice(possible_sectors)
-        print(f"Unable to identify next location. Selecting randomly: {sector}")
+        print(f"Unable to identify next location. Can be done in Sector: {in_current_area}. Selecting randomly: {sector}")
         return sector

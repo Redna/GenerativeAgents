@@ -8,16 +8,15 @@ from langchain import LLMChain, PromptTemplate
 
 
 _template = """<|system|>You follow the tasks given by the user as close as possible. You will only generate 1 JSON object as mentioned below.
-<|user|>
-Context for the task:
+You will act as the agent {agent}.
 
-PART 1.
+Your identity is: 
 {identity}
 
+<|user|>
 Here is the memory that is in {agent}'s head:
 {memory}
 
-PART 2.
 Past Context:
 {past_context}
 
@@ -31,13 +30,14 @@ Current Context:
 {conversation}
 
 ---
-Task: Given the above, what should {agent} say to {agent_with} next in the conversation? And did it end the conversation?
-
 Output format: Output a valid json of the following format:
 {{
     "{agent}": "<{agent}'s utterance>",
+    "Reason if the conversation ended": "<reasoning for the conversation ending>",
     "Did the conversation end with {agent}'s utterance?": "<json Boolean>"
 }}
+
+Task: Given the above, what does {agent} say to {agent_with} next in the conversation? And did it end the conversation?
 <|assistant|>
 {{
     "{agent}": """
@@ -78,7 +78,7 @@ class Conversation(BaseModel):
         utterance_key = self.agent
 
         for i in range(5):   
-            _conversation_chain.llm_kwargs["cache_key"] = f"conversation_chain_{self.agent}_{self.agent_with}_{global_state.tick}_{i}"
+            _conversation_chain.llm_kwargs["cache_key"] = f"1conversation_chain_{self.agent}_{self.agent_with}_{global_state.tick}_{i}"
 
             completion = await _conversation_chain.arun(identity=self.identity,
                                                         memory=self.memory,

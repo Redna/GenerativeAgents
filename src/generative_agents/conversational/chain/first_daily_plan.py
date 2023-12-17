@@ -1,3 +1,4 @@
+import json
 import re
 from typing import List
 
@@ -9,12 +10,49 @@ from langchain.prompts import PromptTemplate
 
 from generative_agents.conversational.output_parser.fuzzy_parser import FuzzyOutputParser, PatternWithDefault
 
-_template = """<|system|>In this village everything is in walking distance and there are no cars, trains, buses or other public transportations.
-<|user|>
+_template = """<|system|>You follow the tasks given by the user as close as possible. You will only generate 1 valid JSON object as mentioned below.
+You will act as the agent {agent_name}.
+
+Your identity is: 
 {agent_identity}
 
+Note: In this villiage neither cars, nor bikes exist. The only way to get around is by walking.
+<|user|>
+Output format: Output a valid json of the following format:
+```
+{{
+    "my plan for today": [
+        {{
+            "time": "<time>",
+            "activity": "<activity>"
+        }},
+        {{
+            "time": "<time>",
+            "activity": "<activity>"
+        }},
+        {{
+            "time": "<time>",
+            "activity": "<activity>"
+        }}
+    ]
+}}
+```
+---
 In general, {agent_lifestyle}
-Today is {current_day}. Here is {agent_name}'s plan today in broad-strokes (you MUST include the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm):<|assistant|> 1) wake up and complete the morning routine at {wake_up_hour}, 2)"""
+
+Today is {current_day}. 
+Task: Create a valid JSON object of {agent_name}'s plan for today in broad-strokes:
+
+<|assistant|>
+```
+{{
+    "my plan for today": [
+        {{
+            "time": "{wake_up_hour}",
+            "activity": "wake up and complete the morning routine"
+        }},
+        {{
+            "time": \""""
 
 _prompt = PromptTemplate(input_variables=["agent_name",
                                           "agent_identity",
@@ -23,18 +61,11 @@ _prompt = PromptTemplate(input_variables=["agent_name",
                                           "wake_up_hour"],
                             template=_template)
 
-_outputs = {"first_daily_plan": PatternWithDefault(pattern=re.compile(r"(1\) wake up and complete.*)", re.IGNORECASE + re.MULTILINE), 
-                                              parsing_function=lambda x: x,
-                                              default="1) wake up and complete the morning routine at 6:00 AM 2) go to bed at 10:00 PM")}
-
-_output_parser = FuzzyOutputParser(output_definitions=_outputs)
-
-first_daily_plan_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 400,
+_first_daily_plan_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 400,
                                                                    "do_sample": True,
                                                                    "top_p": 0.95,
                                                                    "top_k": 50,
-                                                                   "temperature": 0.4}
-                                                                   , output_parser=_output_parser, verbose=global_state.verbose)
+                                                                   "temperature": 0.4}, verbose=global_state.verbose)
 
 
 class FirstDailyPlan(BaseModel):
@@ -45,16 +76,24 @@ class FirstDailyPlan(BaseModel):
     wake_up_hour: str
 
     async def run(self):
-        first_daily_plan_chain.llm_kwargs["cache_key"] = f"3first_daily_plan_{self.agent_name}_{global_state.tick}"
-        result = await first_daily_plan_chain.arun(agent_name=self.agent_name,
-                                                    agent_identity=self.agent_identity,
-                                                    agent_lifestyle=self.agent_lifestyle,
-                                                    current_day=self.current_day,
-                                                    wake_up_hour=self.wake_up_hour)
+        for i in range(5):   
+            _first_daily_plan_chain.llm_kwargs["cache_key"] = f"5first_daily_plan_{self.agent_name}_{global_state.tick}_{i}"
+
+            completion = await _first_daily_plan_chain.arun(agent_name=self.agent_name,
+                                            agent_identity=self.agent_identity,
+                                            agent_lifestyle=self.agent_lifestyle,
+                                            current_day=self.current_day,
+                                            wake_up_hour=self.wake_up_hour)
+
+            pattern = r'<\|assistant\|\>\n*```\n*(\{.*?\})\n```'
+            match = re.search(pattern, completion, re.DOTALL)
+            if match:
+                try:
+                    json_object = json.loads(match.group(1))
+                    return json_object["my plan for today"]
+                except:
+                    pass
         
-        return self._parse_to_list(result["first_daily_plan"])
-    
-    def _parse_to_list(self, daily_plan: str) -> List[str]:
-        pattern = r'\d+\)\s*(.*?)(?=,\s*\d+|\.$)'
-        return re.findall(pattern, daily_plan)
+        print("Unable to generate the next utterance")
+        return "I don't know what to say", True
         

@@ -22,13 +22,13 @@ from generative_agents.conversational.chain.object_event import ObjectActionDesc
 from generative_agents.conversational.chain.summarize_chat_relationship import ChatRelationshipSummarization
 from generative_agents.conversational.chain.task_decomposition import TaskDecomposition
 from generative_agents.conversational.chain.poignance import Poingnance
+from generative_agents.conversational.chain.wake_up_hour import WakeUpHour
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
 from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Level, Maze, Tile
-from generative_agents.conversational.chain import (wake_up_hour_chain,
-                                                    daily_plan_and_status_chain,
+from generative_agents.conversational.chain import (daily_plan_and_status_chain,
                                                     new_decomposition_schedule_chain,
                                                     reflection_points_chain,
                                                     evidence_and_insights_chain,
@@ -39,6 +39,7 @@ from generative_agents.persistence import database
 from generative_agents.persistence.database import ConversationFilling, initialize_agent
 from generative_agents.simulation.time import SimulationTime, DayType
 from generative_agents.core.events import Action, Event, ObjectAction, EventType, PerceivedEvent
+from generative_agents.utils import get_time_string, hour_string_to_time
 
 
 class ReactionMode(Enum):
@@ -92,12 +93,10 @@ class Agent:
 
     @property
     def observation(self):
-        event_description = self.scratch.action.event.description
-
-        if not event_description:
+        if not self.scratch.action:
             return f"{self.name} is idle"
-
         else:
+            event_description = self.scratch.action.event.description
             if "(" in event_description:
                 event_description = event_description.split("(")[-1][:-1]
 
@@ -764,7 +763,7 @@ class Agent:
 
 
         if end:
-            duration_minutes = (self.scratch.action.start_time - self.scratch.time.time).total_seconds() / 60
+            duration_minutes = round((self.scratch.time.time - self.scratch.action.start_time).total_seconds())
             await self._update_schedule(conversation.description, duration_minutes)
             self.scratch.chatting_with = None
             self.scratch.chat = None
@@ -852,8 +851,8 @@ class Agent:
 
         inserted_action = f'waiting to start {event_short_description}'
         end_time = datetime.strptime(wait_time, "%B %d, %Y, %H:%M:%S")
-        inserted_action_duration = (end_time.minute + end_time.hour * 60) - (
-            self.scratch.time.time.minute + self.scratch.time.time.hour * 60) + 1
+        inserted_action_duration = round((end_time.minute + end_time.hour * 60) - (
+            self.scratch.time.time.minute + self.scratch.time.time.hour * 60) + 1)
 
         action_address = f"<waiting> {self.scratch.tile.x} {self.scratch.tile.y}"
         action_event = (self.name, "waiting to start", event_short_description)
@@ -872,7 +871,7 @@ class Agent:
     async def _update_schedule(self, inserted_action, inserted_action_duration):
 
         min_sum = 0
-        for i in range(self.scratch.daily_schedule_hourly_organzied):
+        for i in range(self.scratch.get_daily_schedule_index()):
             min_sum += self.scratch.daily_schedule_hourly_organzied[i][1]
         start_hour = int(min_sum/60)
 
@@ -934,75 +933,59 @@ class Agent:
         return next_action
 
     async def _generate_new_decomposition_schedule(self, inserted_action, inserted_action_duration, start_hour, end_hour):
-        today_min_pass = (int(self.scratch.time.hour) * 60 +
-                          int(self.scratch.time.minute) + 1)
+        today_min_pass = int(self.scratch.time.time.hour) * 60 + int(self.scratch.time.time.minute) + 1
 
         main_action_duration = []
         truncated_action_duration = []
         duration_sum = 0
-        count = 0
-        truncated_fin = False
 
         for action, duration in self.scratch.daily_schedule:
-            if duration_sum >= start_hour * 60 and duration_sum < end_hour * 60:
-                main_action_duration += [[action, duration]]
-            if duration_sum <= today_min_pass:
-                truncated_action_duration += [[action, duration]]
-            elif duration_sum > today_min_pass and not truncated_fin:
-                # We need to insert that last act, duration list like this one:
-                # e.g., ['wakes up and completes her morning routine (wakes up...)', 2]
-                truncated_action_duration += [
-                    [self.scratch.daily_schedule[count][0], duration_sum - today_min_pass]]
-                # DEC 7 DEBUG;.. is the +1 the right thing to do???
-                truncated_action_duration[-1][-1] -= (
-                    duration_sum - today_min_pass)
-                truncated_fin = True
-            duration_sum += duration
-            count += 1
+            if start_hour * 60 <= duration_sum < end_hour * 60:
+                main_action_duration.append([action, duration])
 
-        truncated_action_duration[-1][0] = f'{truncated_action_duration[-1][0].split("(")[0].strip()} (on the way to {truncated_action_duration[-1][0].split("(")[-1][:-1]})"'
+            if duration_sum <= today_min_pass:
+                truncated_action_duration.append([action, duration])
+            elif not truncated_action_duration or duration_sum - today_min_pass != truncated_action_duration[-1][-1]:
+                truncated_action_duration.append([action, duration_sum - today_min_pass])
+
+            duration_sum += duration
+
+        if truncated_action_duration:
+            action, _ = truncated_action_duration[-1]
+            action_prefix, action_suffix = action.split("(")
+            truncated_action_duration[-1][0] = f'{action_prefix.strip()} (on the way to {action_suffix[:-1]})"'
 
         if "(" in truncated_action_duration[-1][0]:
-            inserted_action = truncated_action_duration[-1][0].split(
-                "(")[0].strip() + " (" + inserted_action + ")"
+            inserted_action = truncated_action_duration[-1][0].split("(")[0].strip() + " (" + inserted_action + ")"
 
-        # TODO inserted_act_dur+1 below is an important decision but I'm not sure
-        # if I understand the full extent of its implications. Might want to
-        # revisit.
-        truncated_action_duration += [[inserted_action,
-                                       inserted_action_duration]]
-        start_time_hour = (datetime.datetime(2022, 10, 31, 0, 0)
-                           + datetime.timedelta(hours=start_hour))
+        truncated_action_duration.append([inserted_action, inserted_action_duration])
 
-        start_hour_str = start_hour.strftime("%H:%M %p")
-        end_hour_str = end_hour.strftime("%H:%M %p")
+        start_time_hour = datetime.datetime(2022, 10, 31, 0, 0) + datetime.timedelta(hours=start_hour)
+        start_hour = hour_string_to_time(str(start_hour))
+        end_hour = hour_string_to_time(str(end_hour))
 
-        original_plan = ""
-        for_time = start_hour
+        original_plan = self._generate_plan(main_action_duration, start_hour)
+        new_plan_init = self._generate_plan(truncated_action_duration, start_time_hour)
 
-        for action, duration in main_action_duration:
-            original_plan += f'{for_time.strftime("%H:%M")} ~ {(for_time + datetime.timedelta(minutes=int(duration))).strftime("%H:%M")} -- {action}"\n"'
-            for_time += datetime.timedelta(minutes=int(duration))
-
-        new_plan_init = ""
-        for_time = start_time_hour
-
-        for count, (action, duration) in enumerate(truncated_action_duration):
-            new_plan_init += f'{for_time.strftime("%H:%M")} ~ {(for_time + datetime.timedelta(minutes=int(duration))).strftime("%H:%M")} -- {action}"\n"'
-            if count < len(truncated_action_duration) - 1:
-                for_time += datetime.timedelta(minutes=int(duration))
-
-        new_plan_init += (for_time + datetime.timedelta(minutes=int(
-            truncated_action_duration[-1][1]))).strftime("%H:%M") + " ~"
+        new_plan_init += (start_time_hour + datetime.timedelta(minutes=int(truncated_action_duration[-1][1]))).strftime("%H:%M") + " ~"
 
         return await new_decomposition_schedule_chain.arun(agent=self.name,
-                                                           start_hour=start_hour_str,
-                                                           end_hour=end_hour_str,
+                                                           start_hour=get_time_string(start_hour),
+                                                           end_hour=get_time_string(end_hour),
                                                            schedule=original_plan,
                                                            new_event=inserted_action,
                                                            new_event_duration=inserted_action_duration,
                                                            new_schedule_init=new_plan_init)
 
+    def _generate_plan(self, action_duration, start_time):
+        plan = ""
+        for_time = start_time
+
+        for action, duration in action_duration:
+            plan += f'{for_time.strftime("%H:%M")} ~ {(for_time + datetime.timedelta(minutes=int(duration))).strftime("%H:%M")} -- {action}"\n"'
+            for_time += datetime.timedelta(minutes=int(duration))
+
+        return plan
     @staticmethod
     def _focused_event_to_context(retrieved: Dict[str, List[PerceivedEvent]]):
         context = ""
@@ -1190,7 +1173,7 @@ class Agent:
         action_event = await self._generate_action_event_triple(action_description)
         whisper(self.name, f"determined next event triple: {action_event}")
 
-        action_object_desctiption = await self._generate_action_object_description(
+        action_object_desctiption, tripplet = await self._generate_action_object_description(
             action_game_object, action_description)
         whisper(
             self.name, f"determined next object description: {action_object_desctiption}")
@@ -1199,8 +1182,7 @@ class Agent:
             action_object_desctiption)
         whisper(
             self.name, f"determined next object pronouncio: {action_object_pronunciatio}")
-        subject, predicate, object_ = await self._generate_action_object_event_triple(
-            action_game_object, action_object_desctiption)
+        subject, predicate, object_ = tripplet
         whisper(
             self.name, f"determined next object event triple: {subject}, {predicate}, {object_}")
 
@@ -1397,10 +1379,9 @@ class Agent:
                     create the personas' long term planning on the new day. 
         """
         # We start by creating the wake up hour for the persona.
-        result = await wake_up_hour_chain.arun(agent_name=self.name,
-                                               agent_lifestyle=self.scratch.lifestyle,
-                                               agent_identity=await self.scratch.identity)
-        wake_up_hour = result["wake_up_hour"]
+        wake_up_hour = await WakeUpHour(agent_name=self.name,
+                                        agent_lifestyle=self.scratch.lifestyle,
+                                        agent_identity=await self.scratch.identity).run()
 
         whisper(self.name, f"wake up hour is at {wake_up_hour}")
 
@@ -1435,16 +1416,12 @@ class Agent:
 
         self.scratch.daily_schedule = await HourlyBreakdown(identity=await self.scratch.identity,
                                                             wake_up_hour=wake_up_hour,
-                                                            current_hour=self.scratch.time.hour,
                                                             name=self.name,
-                                                            today=self.scratch.time.today,
-                                                            hourly_organized_activities=self.scratch.daily_requirements,
-                                                            actual_activities=self.scratch.hourly_activity_history,
-                                                            current_status=self.scratch.current_status).run()
-        self.scratch.daily_schedule_hourly_organzied = self.scratch.daily_schedule
-
-        daily_plan = " ,".join(self.scratch.daily_requirements)
+                                                            hourly_organized_activities=self.scratch.daily_requirements).run()
+        
+        daily_plan = ",".join([entry['activity'] for entry in self.scratch.daily_schedule])
         description = f"This is {self.name}'s plan for {self.scratch.time.today}: {daily_plan}."
+        self.scratch.daily_schedule_hourly_organzied = self.scratch.daily_schedule = [(entry['activity'], 60) for entry in self.scratch.daily_schedule]
 
         whisper(self.name, f"new daily plan is {description}")
 
