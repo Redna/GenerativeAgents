@@ -22,8 +22,8 @@ class Scratch():
     time: SimulationTime = None
     action: Action = None  
     learned_traits: List[str] = field(default_factory=list)
-    vision_radius: int = 8
-    attention_bandwith: int = 3
+    vision_radius: int = 6
+    attention_bandwith: int = 4
     retention: int = 5
     reflection_trigger_counter: int = 255
     reflection_trigger_max: int = 255
@@ -108,15 +108,18 @@ class Scratch():
         today_min_elapsed += advance
 
         x = 0
-            
-        for _, duration in self.daily_schedule_hourly_organzied: 
-            x += duration
+        try:
+            for _, duration in self.daily_schedule_hourly_organzied: 
+                x += duration
+        except:
+            print("ERROR")
+
 
         # We then calculate the current index based on that. 
         curr_index = 0
         elapsed = 0
         
-        for _, duration in self.daily_schedule: 
+        for _, duration in self.daily_schedule_hourly_organzied: 
             elapsed += duration
             if elapsed > today_min_elapsed: 
                 return curr_index

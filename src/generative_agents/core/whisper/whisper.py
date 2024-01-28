@@ -12,6 +12,5 @@ min_level = 0
 def whisper(agent: str, content: str, level: int = 0):
     if emitter:
         asyncio.get_running_loop().create_task(emitter(Thought(agent, content, level)))
-    else:
-        if level >= min_level:
-            print(f"{global_state.time.as_string():<15} - {global_state.tick:<6}  {agent:<14}: {content}")
+
+    print(f"{global_state.time.as_string():<15} - {global_state.tick:<6}  {agent:<14}: {content}")

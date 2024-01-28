@@ -3,6 +3,7 @@ import json
 import re
 from pydantic import BaseModel
 from generative_agents import global_state
+from generative_agents.conversational.chain.json_expert import JsonExpert
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
@@ -40,7 +41,7 @@ Output format: Output a valid json of the following format:
 
 Today is {today}. {task_context}
 
-Task: Break down the task in subtasks 5 minute increments. At the end no time should be left.
+Task: Break down the task in subtasks 5 minute increments. At the end no time should be left. Include a hint on main task in all subtasks.
 
 In minimum 5 minutes increments, what are the subtasks that {name} does when {name} is "{task_description}" from {task_start_time} ~ {task_end_time}? (total duration in minutes: {task_duration}):
 <|assistant|>```
@@ -76,41 +77,42 @@ class TaskDecomposition(BaseModel):
                                  template=_template)
 
         _task_decomposition_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 550,
+            "max_new_tokens": 700,
             "do_sample": True,
             "top_p": 0.95,
-            "top_k": 60,
-            "temperature": 0.1}, verbose=global_state.verbose)
+            "top_k": 40,
+            "temperature": 0.3}, verbose=global_state.verbose)
         
-        schedules = []
-        tasks = []
-        for i in range(3):
-            _task_decomposition_chain.llm_kwargs["cache_key"] = f"8task_decomposition_{self.name}_{global_state.tick}_{i}"
-            tasks += [_task_decomposition_chain.arun(name=self.name,
-                                                        identity=self.identity,
-                                                        today=self.today,
-                                                        task_context=self.task_context,
-                                                        task_description=self.task_description,
-                                                        task_start_time=self.task_start_time,
-                                                        task_end_time=self.task_end_time,
-                                                        task_duration=self.task_duration)]
+        i = 0
+        while True:
+            _task_decomposition_chain.llm_kwargs["cache_key"] = f"task_decomposition_{self.name}_{global_state.tick}_{i}"
+            completion = await _task_decomposition_chain.arun(name=self.name,
+                                                                identity=self.identity,
+                                                                today=self.today,
+                                                                task_context=self.task_context,
+                                                                task_description=self.task_description,
+                                                                task_start_time=self.task_start_time,
+                                                                task_end_time=self.task_end_time,
+                                                                task_duration=self.task_duration)
         
-        completions = await asyncio.gather(*tasks)
-        for completion in completions:
-
             pattern = r'<\|assistant\|\>\n*```\n*(\{.*?\})\n```'
             match = re.search(pattern, completion, re.DOTALL)
             if match:
                 try:
                     json_object = json.loads(match.group(1))
-                    subtasks = json_object["subtasks"]
-                    
-                    if subtasks[-1]["remaining_minutes"] != "0":
-                        subtasks[-1]["duration"] = subtasks[-2]["remaining_minutes"]
-                    
-                    return [(task["activity"], int(task["duration"])) for task in subtasks]
-                except:
-                    pass
+                except Exception as error:
+                    try:
+                        json_object = await JsonExpert(wrong_json=match.group(1),
+                                                    error_message=str(error)).run()
+                    except Exception as e:
+                        pass
+
+                subtasks = json_object["subtasks"]
                 
-        print("Unable to decompose task.")
-        return [("thinking about life", t) for t in range(0, int(self.task_duration), 5)]
+                if subtasks[-1]["remaining_minutes"] != "0":
+                    subtasks[-1]["duration"] = subtasks[-2]["remaining_minutes"]
+                
+                return [(task["activity"], int(task["duration"])) for task in subtasks]
+            
+            i += 1
+            print(f"Retry {i}, task decomposition failed")

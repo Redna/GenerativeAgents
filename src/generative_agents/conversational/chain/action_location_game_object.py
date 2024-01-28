@@ -18,14 +18,6 @@ Current activity: cooking
 Objects available: [stove, sink, fridge, counter]
 From the objects available above, pick ONE most relevant object: stove
 ---
-Current activity: watch TV
-Objects available: [couch, TV, remote, coffee table]
-From the objects available above, pick ONE most relevant object: TV
----
-Current activity: study
-Objects available: [desk, computer, chair, bookshelf]
-From the objects available above, pick ONE most relevant object: desk
----
 Current activity: talk on the phone
 Objects available: [phone, charger, bed, nightstand]
 From the objects available above, pick ONE most relevant object: phone
@@ -67,7 +59,7 @@ class ActionLocationGameObject(BaseModel):
         if object_ in possible_objects:
           return object_
       
-      object_ = random.choice(possible_objects)
+      object_ = possible_objects[-1] # random.choice(possible_objects)
       print(f"Unable to identify next object. Selecting randomly: {object_}")
       return object_
 

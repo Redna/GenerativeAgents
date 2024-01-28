@@ -70,7 +70,9 @@ class ActionEventTriple(BaseModel):
                     json_object = json.loads(match.group(1))
 
                     subject = json_object["subject"] if not self.address else self.address
-                    return (subject, json_object["predicate"], json_object["object"])
+                    
+                    object_ = json_object["object"] if type(json_object["object"]) == str else json_object["object"][0]
+                    return (subject, json_object["predicate"], object_)
                 except:
                     pass 
         

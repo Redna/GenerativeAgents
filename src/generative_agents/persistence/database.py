@@ -1,3 +1,4 @@
+from abc import ABC
 from enum import Enum
 from time import sleep
 from typing import Dict, List, Optional, Tuple
@@ -37,6 +38,8 @@ class MemoryEntry(TimeAndImportanceBaseSchema):
     poignancy: float = .5
     keywords: List[str] = []
     filling: List[str | ConversationFilling] = []
+
+    hash_key: str = None
 
 
 def initialize_database(recreate: bool = False):
@@ -113,6 +116,23 @@ def get(agent_name: str, context: str, limit=50) -> MemoryEntry:
     result_set = _collections[agent_name].get_relevant_entries(context, limit=limit)
     return result_set
 
+def get_by_hash(agent_name: str, hash_key:str):
+    if not agent_name in _collections:
+        raise Exception(f"Agent {agent_name} does not exist")
+
+    collection = _collections[agent_name]
+
+    filter = models.Filter(
+        must=[
+            models.FieldCondition(
+                key="hash_key",
+                match=models.MatchText(text=hash_key),
+            )
+        ]
+    )
+
+    result_set = collection.get_relevant_entries(query="", filter=filter)
+    return result_set
 
 def get_by_type(agent_name: str, context: str, memory_type: MemoryType):
     if not agent_name in _collections:
@@ -131,7 +151,6 @@ def get_by_type(agent_name: str, context: str, memory_type: MemoryType):
 
     result_set = collection.get_relevant_entries(context, filter=filter)
     return result_set
-
 
 def get_last_chat(agent_name, with_agent_name) -> Optional[MemoryEntry]:
     if not agent_name in _collections:

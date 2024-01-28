@@ -5,6 +5,7 @@ from generative_agents import global_state
 from generative_agents.communication import api
 from generative_agents.communication.models import AgentDTO, RoundUpdateDTO
 from generative_agents.core.agent import Agent
+from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.persistence.database import initialize_database
 from generative_agents.simulation.maze import Maze
 from generative_agents.simulation.time import SimulationTime
@@ -42,6 +43,7 @@ class Simulation():
     def __init__(self, round_updates: RoundUpdateSnapshots):
         self.maze = Maze()
         self.agents: List[Agent] = dict()
+        self.__vision_start_tile = self.maze.get_random_tile()
         initialize_database(True)
 
         self.agents["Giorgio Rossi"] = Agent(name="Giorgio Rossi",
@@ -52,21 +54,31 @@ class Simulation():
                                           location="the Ville:Giorgio Rossi's apartment:bathroom:shower",
                                           emoji="🤖",
                                           activity="idle",
-                                          tile=self.maze.address_tiles["the Ville:Giorgio Rossi's apartment:bathroom:shower"][0])
+                                          tile=self.maze.address_tiles["the Ville:Giorgio Rossi's apartment:main room:bed"][0],
+                                          tree=self.initialize_visible_memory_tree())
         
         self.agents["John Lin"] = Agent(name="John Lin",
                                           time=global_state.time,
                                           description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews.",
                                           innate_traits=["Easy going", "Competitive", "Confident"],
                                           age=25,
-                                          location="the Ville:Lin family's house:Mei and John Lin's bedroom",
+                                          location="the Ville:Lin family's house:Mei and John Lin's bedroom:bed",
                                           emoji="🤖",
                                           activity="idle",
-                                          tile=self.maze.address_tiles["the Ville:Giorgio Rossi's apartment:bathroom:toilet"][0])
+                                          tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0],
+                                          tree=self.initialize_visible_memory_tree())
                                           #tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0])
         
         
         self.round_updates = round_updates
+
+    def initialize_visible_memory_tree(self):
+
+        tree = MemoryTree()
+        for tile in self.maze.get_nearby_tiles(self.__vision_start_tile, 1000):
+            tree.add(tile)
+        return tree
+
 
     def spawn_agent(self, data: AgentDTO):
         print(

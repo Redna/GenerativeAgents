@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from queue import LifoQueue
 from typing import Dict, List
 
@@ -6,11 +7,12 @@ from pydantic import BaseModel
 from generative_agents.persistence import database
 from generative_agents.core.events import PerceivedEvent
 
-class LastEntryStore(BaseModel):
+@dataclass
+class LastEntryStore:
 
     max_size: int
-    entries: List[PerceivedEvent] = []
-    entry_hashmap: Dict[str, int] = {}
+    entries: List[PerceivedEvent] = field(default_factory=list)
+    entry_hashmap: Dict[str, int] = field(default_factory=dict)
 
     def put(self, event: PerceivedEvent):
         if len(self.entries) == self.max_size:
@@ -45,9 +47,16 @@ class AssociativeMemory:
         self.last_entries = LastEntryStore(max_size=retention)
 
     def add(self, event: PerceivedEvent) -> PerceivedEvent:
-        database.add(self.agent_name, event.to_db_entry())
-        self.last_entries.put(event)
-        return event
+        db_event = database.get_by_hash(self.agent_name, event.hash_key)
+
+        if not db_event:
+            memory_entry = database.add(self.agent_name, event.to_db_entry())
+            db_event = PerceivedEvent.from_db_entry(memory_entry)
+        else:
+            db_event = PerceivedEvent.from_db_entry(db_event[-1])
+
+        self.last_entries.put(db_event)
+        return db_event
 
     @property
     def latest_events_summary(self):

@@ -8,7 +8,7 @@ from generative_agents.conversational.llm import llm
 from generative_agents.conversational.output_parser.fuzzy_parser import FuzzyOutputParser, PatternWithDefault
 
 _template = """<|system|>You follow the tasks given by the user as close as possible. You will only generate 1 JSON object as mentioned below.
-You will act as the agent {agent_name}.
+You will act as {agent_name}.
 
 Your identity is: 
 {agent_identity}
@@ -16,12 +16,12 @@ Your identity is:
 Output format: Output a valid json of the following format:
 ```
 {{
-    "wake up hour": "<time (e.g. 6:30 AM)>"
+    "wake up hour": "<time in 12-hour clock format>"
 }}
 ```
 --- 
 {agent_lifestyle}
-When does {agent_name}'s wake up today?:
+When does {agent_name} wake up today?:
 <|assistant|>
 ```
 {{
@@ -57,7 +57,9 @@ class WakeUpHour(BaseModel):
             if match:
                 try:
                     json_object = json.loads(match.group(1))
-                    return json_object["wake up hour"]
+                    wake_up_hour = json_object["wake up hour"].strip()
+                    wake_up_hour = wake_up_hour if "am" in wake_up_hour.lower() or "pm" in wake_up_hour.lower() else wake_up_hour + " AM"
+                    return wake_up_hour
                 except:
                     pass
         

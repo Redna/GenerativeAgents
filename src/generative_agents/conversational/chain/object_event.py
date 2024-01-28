@@ -34,6 +34,7 @@ Let's think step by step. What is {object_name}'s state when {name} is using it 
 class ObjectActionDescription(BaseModel):
     name: str
     object_name: str
+    object_address: str
     action_description: str
 
     async def run(self):
@@ -60,9 +61,9 @@ class ObjectActionDescription(BaseModel):
             if match:
                 try:
                     json_object = json.loads(match.group(1))
-                    return f"{self.object_name} is {json_object['new object state']}""", (self.object_name, "is", json_object['new object state'])
+                    return f"{self.object_name} is {json_object['new object state']}""", (self.object_address, "is", json_object['new object state'])
                 except:
                     pass 
         
         print("Unable to generate action event triple.")
-        return f"{self.object_name} is idle""", (self.object_name, "is", "idle")
+        return f"{self.object_name} is idle""", (self.object_address, "is", "idle")

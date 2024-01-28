@@ -1,4 +1,5 @@
 
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 import uuid
 from pydantic import BaseModel, Field
@@ -81,19 +82,6 @@ class QdrantCollection:
     def get_relevant_entries(self, query, filter=None, limit=5) -> List[T]:
         result = self._get_relevant_entries_with_scores(query, filter, limit)
         result = [entry for entry, _ in result]
-        return self.add(result, new_vectors=False)
-
-    def get(self, filter=None, limit=5) -> List[T]:
-        points = self.client.scroll(collection_name=self.collection_name,
-                                    scroll_filter=filter,
-                                    limit=limit)
-
-        result = []
-        for point in points[0] if points else []:
-            _id = point.id
-            payload = point.payload
-            result.append(self.data_schema(id=_id, **payload))
-
         return self.add(result, new_vectors=False)
 
     def get_by_id(self, id: str) -> Optional[T]:

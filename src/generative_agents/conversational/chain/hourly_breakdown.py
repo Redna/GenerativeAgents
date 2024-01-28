@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 from pydantic import BaseModel
 from generative_agents import global_state
+from generative_agents.conversational.chain.json_expert import JsonExpert
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
@@ -63,11 +64,13 @@ class HourlyBreakdown(BaseModel):
         _hourly_breakdown_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
                                                 "max_new_tokens":650,
                                                 "do_sample": True,
-                                                "top_p": 0.98,
+                                                "top_p": 0.96,
                                                 "top_k": 20,
-                                                "temperature": 0.4}
+                                                "temperature": 0.4,
+                                                "repetition_penalty": 1.03}
                                                 , verbose=global_state.verbose)
-        for i in range(10):   
+        i = 0
+        while True:   
             _hourly_breakdown_chain.llm_kwargs["cache_key"] = f"7hourly_schedule_{self.name}_{global_state.tick}_{i}"
 
             completion = await _hourly_breakdown_chain.arun(schedule_format=hourly_schedule_format_template, 
@@ -76,20 +79,29 @@ class HourlyBreakdown(BaseModel):
                                                         daily_plan=self._build_daily_plan(), 
                                                         prior_schedule=self._build_hourly_schedule_opening())
 
-            pattern = r'<\|assistant\|\>\n*```\n*(\{.*?\})\n```'
+            if completion.strip().endswith("}"):
+                completion += "\n```"
+            pattern = r'<\|assistant\|\>\n*```\n*(\{.*?\})\n?```'
             match = re.search(pattern, completion, re.DOTALL)
+                
             if match:
                 try:
                     json_object = json.loads(match.group(1))
-                    schedule = json_object[f"{self.name}'s schedule"]
+                except Exception as error:
+                    try:
+                        json_object = await JsonExpert(wrong_json=match.group(1),
+                                                       error_message=str(error)).run()
+                    except:
+                        continue
 
+                try:  
+                    schedule = json_object[f"{self.name}'s schedule"]
                     return self._fix_schedule(schedule)
                 except:
                     pass
-        
-        #TODO: add a fallback
-        print("Unable to generate the daily schedule")
-        return "I don't know what to say", True
+            
+            i += 1
+            print(f"Retry {i}: Failed to generate hourly schedule for {self.name}. Trying again...")      
     
     def _build_daily_plan(self) -> str: 
         statements = [f"{i}) {hourly_organized_activity['activity']} at {hourly_organized_activity['time']})" for i, hourly_organized_activity in enumerate(self.hourly_organized_activities)]
@@ -123,6 +135,9 @@ class HourlyBreakdown(BaseModel):
 
         for schedule_entry in schedule:
             i = len(full_schedule)
+            if i >= len(hours):
+                break
+
             current_hour = hours[i]
 
             if schedule_entry["time"] == current_hour:

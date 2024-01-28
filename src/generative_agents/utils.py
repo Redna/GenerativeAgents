@@ -20,4 +20,4 @@ def hash_string(s: str) -> int:
     return hashlib.sha1(s.encode()).hexdigest()
 
 def hour_string_to_time(hour: str):
-    return datetime.strptime(hour, "%H")
+    return datetime.strptime(str(hour), "%H")

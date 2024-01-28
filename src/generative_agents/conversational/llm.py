@@ -18,6 +18,7 @@ from langchain.llms.base import LLM
 from langchain.llms.utils import enforce_stop_tokens
 from langchain.pydantic_v1 import Extra, root_validator
 from langchain.utils import get_from_dict_or_env
+from langchain_openai import ChatOpenAI
 
 VALID_TASKS = ("text2text-generation", "text-generation", "summarization")
 
@@ -102,10 +103,11 @@ class TransformersBatchInference(LLM):
         return text
 
 
-
-
 llm = TransformersBatchInference(endpoint_url="http://localhost:30091/v1/generation")
 
+llm = ChatOpenAI(openai_api_key="na", openai_api_base="http://localhost:8080/v1")
+
 if __name__ == "__main__":
-    gen = llm("Tell me a joke.")
+    gen = llm.invoke("Tell me a joke.")
+    print(gen)
     pass

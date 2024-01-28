@@ -3,6 +3,7 @@ import re
 from typing import Optional
 from pydantic import BaseModel
 from generative_agents import global_state
+from generative_agents.conversational.chain.json_expert import JsonExpert
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
@@ -57,8 +58,9 @@ _conversation_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
                                                 "max_new_tokens": 150, 
                                                 "do_sample": True,
                                                 "num_beams": 1,
-                                                "temperature": 0.9,
-                                                "top_k": 10},
+                                                "temperature": 0.6,
+                                                "top_p": 0.9,
+                                                "top_k": 50},
                                                 verbose=global_state.verbose)
 
 class Conversation(BaseModel):
@@ -78,7 +80,7 @@ class Conversation(BaseModel):
         utterance_key = self.agent
 
         for i in range(5):   
-            _conversation_chain.llm_kwargs["cache_key"] = f"1conversation_chain_{self.agent}_{self.agent_with}_{global_state.tick}_{i}"
+            _conversation_chain.llm_kwargs["cache_key"] = f"2conversation_chain_{self.agent}_{self.agent_with}_{global_state.tick}_{i}"
 
             completion = await _conversation_chain.arun(identity=self.identity,
                                                         memory=self.memory,
@@ -95,6 +97,14 @@ class Conversation(BaseModel):
             if match:
                 try:
                     json_object = json.loads(match.group(1))
+                except Exception as error:
+                    try:
+                        json_object = await JsonExpert(wrong_json=match.group(1),
+                                                    error_message=str(error)).run()
+                    except:
+                        continue
+
+                try: 
                     return json_object[utterance_key], json_object[conversation_end_key]
                 except:
                     pass

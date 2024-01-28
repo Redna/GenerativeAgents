@@ -1,26 +1,29 @@
+from dataclasses import dataclass, field
 from typing import Dict, List, Set
 from pydantic import BaseModel
 
-from generative_agents.simulation.maze import Tile
+from generative_agents.simulation.maze import Maze, Tile
 
-class ArenaMemory(BaseModel):
-    game_objects: Set[str] = set()
+@dataclass
+class ArenaMemory:
+    game_objects: Dict[str, Tile] = field(default_factory=dict)
 
     def add(self, tile: Tile):
         if not tile.game_object:
             return
 
-        self.game_objects.add(tile.game_object)
+        self.game_objects[tile.game_object] = tile
     
     def __getitem__(self, key):
-        return self.game_objects.get(key)
+        return self.game_objects[key]
 
     def __getattr__(self, name):
         return getattr(self.game_objects, name)
 
 
-class SectorMemory(BaseModel):
-    arenas: Dict[str, List[ArenaMemory]] = {}
+@dataclass
+class SectorMemory:
+    arenas: Dict[str, List[ArenaMemory]] = field(default_factory=dict)
 
     def add(self, tile: Tile):
         if not tile.arena:
@@ -40,8 +43,9 @@ class SectorMemory(BaseModel):
     def __getattr__(self, name):
         return getattr(self.arenas, name)
 
-class WorldMemory(BaseModel):
-    sectors: Dict[str, List[SectorMemory]] = {}
+@dataclass
+class WorldMemory:
+    sectors: Dict[str, List[SectorMemory]] = field(default_factory=dict)
 
     def add(self, tile: Tile):
         if not tile.sector:
@@ -61,9 +65,10 @@ class WorldMemory(BaseModel):
     def __getattr__(self, name):
         return getattr(self.sectors, name)
 
-class MemoryTree(BaseModel):
-    tree: Dict[str, List[WorldMemory]] = {}
-
+@dataclass
+class MemoryTree:
+    tree: Dict[str, List[WorldMemory]] = field(default_factory=dict)
+                    
     def add(self, tile: Tile):
         if not tile.world:
             return
@@ -141,7 +146,7 @@ class MemoryTree(BaseModel):
             return ""
 
         try:
-            x = ", ".join(list(self.tree[curr_world][curr_sector][curr_arena].game_objects))
+            x = ", ".join(list(self.tree[curr_world][curr_sector][curr_arena].game_objects.keys()))
         except:
             return None
         return x

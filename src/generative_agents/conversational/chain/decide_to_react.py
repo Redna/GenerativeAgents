@@ -6,13 +6,13 @@ from generative_agents import global_state
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 
-_template = """<|system|>You follow the tasks given by the user as close as possible. You will only generate exactly 1 JSON object as mentioned below.
+_template = """<|system|>You follow the tasks given by the user as close as possible. You will only generate exactly 1 valid JSON object as mentioned below.
 <|user|>
 
 Output format: Output a valid json of the following format:
 {{
     "Reasoning": "[reasoning for choosing one option]",
-    "Answer": "[fill in]" # Option 1 or Option 2
+    "Answer": "[fill in <Option 1> or <Option 2>]"
 }}
 ---
 
@@ -62,7 +62,7 @@ class DecideToReact(BaseModel):
 
         tasks = []
         for i in range(3):
-            _decide_to_react_chain.llm_kwargs["cache_key"] = f"2decide_to_react_{self.agent}_{self.agent_with}_{global_state.tick}_{i}"
+            _decide_to_react_chain.llm_kwargs["cache_key"] = f"3decide_to_react_{self.agent}_{self.agent_with}_{global_state.tick}_{i}"
             tasks += [_decide_to_react_chain.arun(context=self.context,
                                                       current_time=self.current_time,
                                                       agent=self.agent,

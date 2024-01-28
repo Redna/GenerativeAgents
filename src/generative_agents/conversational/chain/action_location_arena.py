@@ -71,6 +71,6 @@ class ActionArenaLocations(BaseModel):
             except:
                 pass
         
-        arena = random.choice(possible_arenas)
+        arena = possible_arenas[-1]# random.choice(possible_arenas)
         print("Unable to identify next location. Selecting randomly: ", arena)
         return arena

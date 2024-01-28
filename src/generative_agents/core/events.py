@@ -7,6 +7,9 @@ from generative_agents import global_state
 
 from generative_agents.persistence.database import ConversationFilling, MemoryEntry
 from pydantic import BaseModel
+from generative_agents.simulation.maze import Tile
+
+from generative_agents.utils import hash_string
 
 
 class EventType(Enum):
@@ -25,6 +28,13 @@ class Event:
     object_: str
     description: str
     filling: List[ConversationFilling | str] = field(default_factory=list)
+    hash_key: str = None
+    tile: Tile = None
+
+    def __post_init__(self):
+        if not self.hash_key:
+            tile_hash = "" if not self.tile else hash(self.tile)
+            self.hash_key = hash_string(f"{self.filling} {self.description} {self.spo_summary} {tile_hash}")
 
     @property
     def spo_summary(self):
@@ -55,7 +65,8 @@ class PerceivedEvent(Event):
                    expiration=entry.expiration_date,
                    last_accessed=entry.last_accessed_at,
                    filling=entry.filling,
-                   keywords=entry.keywords)
+                   keywords=entry.keywords,
+                   hash_key = entry.hash_key)
 
     def to_db_entry(self):
         return MemoryEntry(
@@ -70,16 +81,19 @@ class PerceivedEvent(Event):
                            object_=self.object_,
                            poignancy=self.poignancy,
                            keywords=self.keywords,
-                           filling=self.filling)
+                           filling=self.filling,
+                           hash_key=self.hash_key)
 
 
-class ObjectAction(BaseModel):
+@dataclass
+class ObjectAction:
     address: str
     emoji: str
     event: Event
 
 
-class Action(BaseModel):
+@dataclass
+class Action:
     address: str
     start_time: datetime.datetime
     duration: int

@@ -294,11 +294,27 @@ class Maze:
         path = self.find_path(f, t)
         print(self.grid)
 
-    def get_random_tile(self, tile) -> Tile:
+    def filter_address_tiles(self, fuzzy_address: str) -> List[Tile]:
+        """
+        Given a fuzzy address, we return a list of tiles that match the address.
+        ARGS:
+            fuzzy_address: a string representing a fuzzy address
+        RETURNS:
+            a list of tiles that match the fuzzy address
+        """
+        return {address: tiles for address, tiles in self.address_tiles.items() if fuzzy_address in address}
+
+    def get_random_tile(self, tile=None) -> Tile:
         """
         returns a random tile from the maze and make sure it is not the same as the tile given
         """
         tiles = self.address_tiles[list(self.address_tiles)[random.randint(0, len(self.address_tiles) - 1)]]
+
+        if tile:
+            while True:
+                random_tile = tiles[random.randint(0, len(tiles) - 1)]
+                if random_tile != tile:
+                    return random_tile
         return tiles[random.randint(0, len(tiles) - 1)]
     
     def find_path(self, start: Tile, end: Tile) -> List[Tile]:

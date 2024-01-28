@@ -11,7 +11,7 @@ Conversation:
 {conversation}
 
 Summarize the conversation above in one sentence:
-<|assistant|>This is a conversation about"""
+<|assistant|>"""
 
 _prompt = PromptTemplate(template=_template,
                          input_variables=["conversation"])
@@ -34,7 +34,7 @@ class ConversationSummary(BaseModel):
             try:
                 _conversation_summary_chain.llm_kwargs["cache_key"] = f"conversation_summary_{self.agent}_{global_state.tick}_{i}"
                 completion = await _conversation_summary_chain.arun(conversation=self.conversation)
-                pattern = r"<|assistant|>(.*)"
+                pattern = r"<|assistant|>\n*(.*)"
                 summary = re.findall(pattern, completion)[-1]
                 return summary
             except:
