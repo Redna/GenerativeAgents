@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from transformers import LlamaForCausalLM, LlamaTokenizer, pipeline
@@ -103,11 +104,33 @@ class TransformersBatchInference(LLM):
         return text
 
 
-llm = TransformersBatchInference(endpoint_url="http://localhost:30091/v1/generation")
+#llm = TransformersBatchInference(endpoint_url="http://localhost:30091/v1/generation")
 
-llm = ChatOpenAI(openai_api_key="na", openai_api_base="http://localhost:8080/v1")
+llm = ChatOpenAI(openai_api_key="na", openai_api_base="http://localhost:8080/v1/")
+
+
+async def __run():
+    tasks = [llm.ainvoke("Tell me a joke."), llm.ainvoke("Tell me a good joke."), llm.ainvoke("Tell me a bad joke.")]
+    return await asyncio.gather(*tasks)
+
+async def __run_chain():
+
+    _template = """<|system|> You write a concise description about {agent}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...)."""
+    _prompt = PromptTemplate(input_variables=["agent", "identity"],
+                            template=_template)
+    
+    _identity_chain = LLMChain(prompt=_prompt, llm=llm,
+    verbose=True)
+
+    x= await _identity_chain.arun(agent="agent", identity="identity")
+    print(x)
+
+
+async def __runall():
+    r = await __run()
+    print(r)
+    await __run_chain()
 
 if __name__ == "__main__":
-    gen = llm.invoke("Tell me a joke.")
-    print(gen)
+    asyncio.run(__runall())
     pass

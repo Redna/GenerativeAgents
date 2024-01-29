@@ -22,12 +22,9 @@ _prompt = PromptTemplate(input_variables=["wrong_json", "error_message"],
                                template=json_template)
 
 _json_expert_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-                                                "max_new_tokens": 600, 
-                                                "do_sample": True,
-                                                "num_beams": 1,
+                                                "max_tokens": 600, 
                                                 "temperature": 0.6,
-                                                "top_p": 0.9,
-                                                "top_k": 50},
+                                                "top_p": 0.9},
                                                 verbose=global_state.verbose)
 
 class JsonExpert(BaseModel):
@@ -36,7 +33,7 @@ class JsonExpert(BaseModel):
 
     async def run(self):  
         for i in range(5):   
-            _json_expert_chain.llm_kwargs["cache_key"] = f"4json_expert_{self.wrong_json}{global_state.tick}_{i}"
+
 
             completion = await _json_expert_chain.arun(wrong_json=self.wrong_json,
                                                        error_message=self.error_message)

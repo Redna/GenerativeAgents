@@ -62,16 +62,15 @@ class HourlyBreakdown(BaseModel):
         _prompt = PromptTemplate(input_variables=["schedule_format", "identity", "name", "daily_plan", "prior_schedule"],
                                 template=_template)
         _hourly_breakdown_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-                                                "max_new_tokens":650,
-                                                "do_sample": True,
+                                                "max_tokens":650,
+
                                                 "top_p": 0.96,
-                                                "top_k": 20,
                                                 "temperature": 0.4,
                                                 "repetition_penalty": 1.03}
                                                 , verbose=global_state.verbose)
         i = 0
         while True:   
-            _hourly_breakdown_chain.llm_kwargs["cache_key"] = f"7hourly_schedule_{self.name}_{global_state.tick}_{i}"
+
 
             completion = await _hourly_breakdown_chain.arun(schedule_format=hourly_schedule_format_template, 
                                                         identity=self.identity, 

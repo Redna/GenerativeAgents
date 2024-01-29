@@ -32,10 +32,9 @@ _prompt = PromptTemplate(input_variables=["agent_name",
                                           "agent_identity"],
                          template=_template)
 
-_wake_up_hour_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 15,
-                                                                   "do_sample": True,
+_wake_up_hour_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_tokens": 15,
+
                                                                    "top_p": 0.95,
-                                                                   "top_k": 60,
                                                                    "temperature": 0.4})
 
 
@@ -46,7 +45,7 @@ class WakeUpHour(BaseModel):
 
     async def run(self):
         for i in range(5):   
-            _wake_up_hour_chain.llm_kwargs["cache_key"] = f"1wake_up_hour_{self.agent_name}_{global_state.tick}_{i}"
+
 
             completion = await _wake_up_hour_chain.arun(agent_name=self.agent_name,
                                             agent_identity=self.agent_identity,

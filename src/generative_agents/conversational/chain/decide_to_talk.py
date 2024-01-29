@@ -66,13 +66,13 @@ class DecideToTalk(BaseModel):
     async def run(self):
 
         _decide_to_talk_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 350,
-            "do_sample": True,
+            "max_tokens": 350,
+
             "top_p": 0.95,
-            "top_k": 30,
             "temperature": 0.8,
-            "repetition_penalty": 1.01,
-            "cache_key": f"decide_to_talk{self.init_agent}_{self.agent_with}_{global_state.tick}"}, verbose=global_state.verbose)
+            "repetition_penalty": 1.01,}
+            , verbose=global_state.verbose)
+
 
         tasks = []
         for i in range(3):

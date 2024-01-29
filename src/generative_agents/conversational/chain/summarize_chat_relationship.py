@@ -40,13 +40,12 @@ class ChatRelationshipSummarization(BaseModel):
 
     async def run(self):
         _summarize_chat_relationship_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 300,
-            "do_sample": True,
+            "max_tokens": 300,
+
             "top_p": 0.95,
-            "top_k": 30,
-            "temperature": 0.8,
-            "repetition_penalty": 1.01,
-            "cache_key": f"1sumarize_chat_relationship_{self.agent}_{self.agent_with}_{global_state.tick}"}, verbose=global_state.verbose)
+            "temperature": 0.8},
+            verbose=global_state.verbose)
+
 
         completion = await _summarize_chat_relationship_chain.arun(statements=self.statements,
                                                         agent=self.agent,

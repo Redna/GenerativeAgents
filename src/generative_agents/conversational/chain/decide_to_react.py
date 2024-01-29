@@ -40,10 +40,9 @@ _prompt = PromptTemplate(input_variables=["context",
                          template=_template)
 
 _decide_to_react_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-        "max_new_tokens": 400,
-        "do_sample": True,
+        "max_tokens": 400,
+
         "top_p": 0.95,
-        "top_k": 30,
         "temperature": 0.8,
         "repetition_penalty": 1.01}, verbose=global_state.verbose)
 
@@ -62,7 +61,7 @@ class DecideToReact(BaseModel):
 
         tasks = []
         for i in range(3):
-            _decide_to_react_chain.llm_kwargs["cache_key"] = f"3decide_to_react_{self.agent}_{self.agent_with}_{global_state.tick}_{i}"
+
             tasks += [_decide_to_react_chain.arun(context=self.context,
                                                       current_time=self.current_time,
                                                       agent=self.agent,

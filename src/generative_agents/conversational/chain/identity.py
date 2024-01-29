@@ -3,34 +3,32 @@ from pydantic import BaseModel
 from generative_agents import global_state
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
+from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
 
-_template = """<|system|> You write a concise description about {agent}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...). 
-Do not make up any details.
-<|user|>
+system = "Your task is write a concise description about {agent}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...)."
+user = """
 Context:
 {identity}
 
 Who is {agent}?
-<|assistant|>"""
+"""
 
-
-_prompt = PromptTemplate(input_variables=["agent", "identity"],
-                            template=_template)
+chat_template = ChatPromptTemplate(
+    messages=[
+        SystemMessagePromptTemplate.from_template(system),
+        HumanMessagePromptTemplate.from_template(user)])
 
 class Identity(BaseModel):
     agent: str
     identity: str
 
     async def run(self):
-        _identity_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 300,
-            "do_sample": True,
-            "top_p": 0.93,
-            "top_k": 40,
-            "temperature": 0.4,
-            "cache_key": f"6identity_{self.agent}_{global_state.tick}"}, verbose=global_state.verbose)
+        _identity_chain = LLMChain(prompt=chat_template, llm=llm, verbose=global_state.verbose)
 
-        completion = await _identity_chain.arun(agent=self.agent, identity=self.identity)
+        completion = await _identity_chain.ainvoke(input={"agent":self.agent, "identity":self.identity})
+        return completion["text"]
 
-        pattern = r"<|assistant|>[\n ]{0,3}(.*)"
-        return re.findall(pattern, completion)[-1]
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(Identity(agent="agent", identity="identity").run())

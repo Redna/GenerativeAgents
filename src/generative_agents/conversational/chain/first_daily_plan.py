@@ -61,10 +61,9 @@ _prompt = PromptTemplate(input_variables=["agent_name",
                                           "wake_up_hour"],
                             template=_template)
 
-_first_daily_plan_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 400,
-                                                                   "do_sample": True,
+_first_daily_plan_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_tokens": 400,
+
                                                                    "top_p": 0.95,
-                                                                   "top_k": 50,
                                                                    "temperature": 0.4}, verbose=global_state.verbose)
 
 
@@ -77,7 +76,7 @@ class FirstDailyPlan(BaseModel):
 
     async def run(self):
         for i in range(5):   
-            _first_daily_plan_chain.llm_kwargs["cache_key"] = f"5first_daily_plan_{self.agent_name}_{global_state.tick}_{i}"
+
 
             completion = await _first_daily_plan_chain.arun(agent_name=self.agent_name,
                                             agent_identity=self.agent_identity,

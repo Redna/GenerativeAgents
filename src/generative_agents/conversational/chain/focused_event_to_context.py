@@ -32,12 +32,12 @@ class FocusedEventToContext(BaseModel):
     async def run(self):
 
         _focused_event_to_context = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 200,
-            "do_sample": True,
+            "max_tokens": 200,
+
             "top_p": 0.92,
-            "top_k": 50,
-            "temperature": 0.8,
-            "cache_key": f"2focused_event_to_context_{self.agent}_{global_state.tick}"}, verbose=global_state.verbose)
+            "temperature": 0.8 },
+            verbose=global_state.verbose)
+
 
         completion = await _focused_event_to_context.arun(identity=self.identity,
                                                           agent=self.agent,

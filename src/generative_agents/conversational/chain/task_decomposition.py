@@ -77,15 +77,14 @@ class TaskDecomposition(BaseModel):
                                  template=_template)
 
         _task_decomposition_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-            "max_new_tokens": 700,
-            "do_sample": True,
+            "max_tokens": 700,
+
             "top_p": 0.95,
-            "top_k": 40,
             "temperature": 0.3}, verbose=global_state.verbose)
         
         i = 0
         while True:
-            _task_decomposition_chain.llm_kwargs["cache_key"] = f"task_decomposition_{self.name}_{global_state.tick}_{i}"
+
             completion = await _task_decomposition_chain.arun(name=self.name,
                                                                 identity=self.identity,
                                                                 today=self.today,

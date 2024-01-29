@@ -46,12 +46,11 @@ class ObjectActionDescription(BaseModel):
 
         for i in range(5):
             _action_object_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-                                                              "max_new_tokens":50,
-                                                              "do_sample": True,
+                                                              "max_tokens":50,
+
                                                               "top_p": 0.95,
-                                                              "top_k": 10,
-                                                              "temperature": 0.4,
-                                                              "cache_key": f"_3action_object_chain_{self.name}_{self.object_name}_{self.action_description}_{i}_{global_state.tick}"},
+                                                              "temperature": 0.4},
+
                                                               verbose=global_state.verbose)
 
             completion = await _action_object_chain.arun(name=self.name, object_name=self.object_name, action_description=self.action_description)

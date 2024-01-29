@@ -78,10 +78,9 @@ Task: {agent} unexpectedly ended up with "{new_event}" for "{new_event_duration}
                                         template=_template)
                 
         _new_decomposition_schedule = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={
-                                                        "max_new_tokens":650,
-                                                        "do_sample": True,
+                                                        "max_tokens":650,
+
                                                         "top_p": 0.94,
-                                                        "top_k": 40,
                                                         "temperature": 0.6}
                                                         , verbose=global_state.verbose)
                 
@@ -106,7 +105,7 @@ Task: {agent} unexpectedly ended up with "{new_event}" for "{new_event_duration}
 
         i = 0
         while True:   
-            _new_decomposition_schedule.llm_kwargs["cache_key"] = f"16new_decomp_schedule_{self.agent}_{global_state.tick}_{i}"
+
 
             completion = await _new_decomposition_schedule.arun(agent=self.agent,
                                                         start_hour=start_hour_str,

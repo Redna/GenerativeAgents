@@ -21,10 +21,9 @@ _prompt = PromptTemplate(input_variables=["agent_name",
                                           "type_"],
                          template=_template)
 
-poignance_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_new_tokens": 3,
-                                                                   "do_sample": True,
+poignance_chain = LLMChain(prompt=_prompt, llm=llm, llm_kwargs={"max_tokens": 3,
+
                                                                    "top_p": 0.95,
-                                                                   "top_k": 60,
                                                                    "temperature": 0.1},
                                                                    verbose=global_state.verbose)
 
@@ -36,7 +35,7 @@ class Poingnance(BaseModel):
     description: str
 
     async def run(self):
-        poignance_chain.llm_kwargs["cache_key"] = f"2_poignance_{self.agent_name}_{self.description}_{global_state.tick}"
+
 
         result = await poignance_chain.arun(agent_name=self.agent_name,
                                                     agent_identity=self.agent_identity,
