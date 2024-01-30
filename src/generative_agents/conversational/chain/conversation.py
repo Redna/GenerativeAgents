@@ -36,7 +36,7 @@ John Doe is initiating a conversation with Giorgio Rossato.
 John Doe and Giorgio Rossato are chatting. Here is their conversation so far:
 
 
-Given the context above, what does John Doe say to Giorgio Rossato next in the conversation? And did it end the conversation?"""
+Given the context above, what does John Doe say to Giorgio Rossato next in the conversation? And did the conversation end?"""
 
 ai_shot_1 = """{{
     "utterance": "Hey Giorgio, long time no see! How have you been since last week at the café? I'm here buying supplies for Hobbs Cafe today.",
@@ -89,9 +89,7 @@ class Conversation(BaseModel):
     conversation: str
 
     async def run(self):  
-
         for i in range(5):   
-
             completion = await _conversation_chain.ainvoke(input={"identity": self.identity,
                                                                 "memory": self.memory,
                                                                 "past_context": self.past_context,

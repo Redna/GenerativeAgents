@@ -8,12 +8,12 @@ from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient, models
 
 from datetime import datetime
-from sentence_transformers import SentenceTransformer
 
 from generative_agents import global_state
+from langchain_openai.embeddings import OpenAIEmbeddings
 
-
-_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+DIMENSION = 4096
+embedder = OpenAIEmbeddings(openai_api_base="http://localhost:8080", deployment="model", api_key="na")
 
 class BaseSchema(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -45,7 +45,7 @@ class QdrantCollection:
         self.decay_rate = decay_rate
 
         if collection_name not in self.client.get_collections():
-            vectors_config = models.VectorParams(size=_model.get_sentence_embedding_dimension(),
+            vectors_config = models.VectorParams(size=DIMENSION,
                                                  distance=models.Distance.COSINE)
             self.client.create_collection(
                 collection_name, vectors_config=vectors_config)
@@ -59,7 +59,7 @@ class QdrantCollection:
         if type(query) == list:
             query = ", ".join(query)
 
-        query_vector = _model.encode(query)
+        query_vector = embedder.embed_query(query)
         try:
             points = self.client.search(collection_name=self.collection_name,
                                     query_filter=filter,
@@ -98,7 +98,7 @@ class QdrantCollection:
         payloads = [entry.model_dump(exclude=["id"]) for entry in entries]
 
         if new_vectors or not all([entry.vector for entry in entries]):
-            vectors = _model.encode([entry.content for entry in entries])
+            vectors = embedder.embed_query([entry.content for entry in entries])
         else:
             vectors = [entry.vector for entry in entries]
 
