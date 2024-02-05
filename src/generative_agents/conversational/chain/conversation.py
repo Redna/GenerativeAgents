@@ -63,20 +63,6 @@ Current Context:
 
 Given the context above, what does {agent} say to {agent_with} next in the conversation? And did it end the conversation?"""
 
-
-chat_template = ChatPromptTemplate(messages=[
-        SystemMessagePromptTemplate.from_template(system),
-        HumanMessagePromptTemplate.from_template(user_shot_1),
-        AIMessagePromptTemplate.from_template(ai_shot_1),
-        HumanMessagePromptTemplate.from_template(user)])
-
-
-_conversation_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
-                                                "max_tokens": 200,
-                                                "temperature": 0.6,
-                                                "top_p": 0.9},
-                                                verbose=True)
-
 class Conversation(BaseModel):
     identity: str
     memory: str
@@ -89,6 +75,18 @@ class Conversation(BaseModel):
     conversation: str
 
     async def run(self):  
+        chat_template = ChatPromptTemplate(messages=[
+        SystemMessagePromptTemplate.from_template(system),
+        HumanMessagePromptTemplate.from_template(user_shot_1),
+        AIMessagePromptTemplate.from_template(ai_shot_1),
+        HumanMessagePromptTemplate.from_template(user)])
+
+
+        _conversation_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
+                                                        "max_tokens": 200,
+                                                        "temperature": 0.6,
+                                                        "top_p": 0.9},
+                                                        verbose=True)
         for i in range(5):   
             completion = await _conversation_chain.ainvoke(input={"identity": self.identity,
                                                                 "memory": self.memory,

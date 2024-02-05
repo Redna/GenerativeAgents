@@ -10,10 +10,12 @@ from qdrant_client import QdrantClient, models
 from datetime import datetime
 
 from generative_agents import global_state
-from langchain_openai.embeddings import OpenAIEmbeddings
+from sentence_transformers import SentenceTransformer
 
-DIMENSION = 4096
-embedder = OpenAIEmbeddings(openai_api_base="http://localhost:8080", deployment="model", api_key="na")
+
+_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+
+DIMENSION = 768
 
 class BaseSchema(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -59,7 +61,7 @@ class QdrantCollection:
         if type(query) == list:
             query = ", ".join(query)
 
-        query_vector = embedder.embed_query(query)
+        query_vector = _model.encode(query)
         try:
             points = self.client.search(collection_name=self.collection_name,
                                     query_filter=filter,
@@ -98,7 +100,7 @@ class QdrantCollection:
         payloads = [entry.model_dump(exclude=["id"]) for entry in entries]
 
         if new_vectors or not all([entry.vector for entry in entries]):
-            vectors = embedder.embed_query([entry.content for entry in entries])
+            vectors = _model.encode([entry.content for entry in entries])
         else:
             vectors = [entry.vector for entry in entries]
 

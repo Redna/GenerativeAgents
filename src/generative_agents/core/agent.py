@@ -17,26 +17,26 @@ from generative_agents.conversational.chain.action_location_sector import Action
 from generative_agents.conversational.chain.action_pronunciatio import ActionPronunciatio
 from generative_agents.conversational.chain.conversation import Conversation
 from generative_agents.conversational.chain.conversation_summary import ConversationSummary
+from generative_agents.conversational.chain.daily_plan import DailyPlanAndStatus
 from generative_agents.conversational.chain.decide_to_react import DecideToReact
 from generative_agents.conversational.chain.decide_to_talk import DecideToTalk
+from generative_agents.conversational.chain.evidence_and_insights import EvidenceAndInsightsChain
 from generative_agents.conversational.chain.first_daily_plan import FirstDailyPlan
 from generative_agents.conversational.chain.focused_event_to_context import FocusedEventToContext
+from generative_agents.conversational.chain.memo_on_conversation import MemoOnConversation
 from generative_agents.conversational.chain.new_decomposition_schedule import NewDecompositionSchedule
 from generative_agents.conversational.chain.object_event import ObjectActionDescription
+from generative_agents.conversational.chain.planning_on_conversation import PlanningOnConversation
+from generative_agents.conversational.chain.reflection_points import ReflectionPoints
 from generative_agents.conversational.chain.summarize_chat_relationship import ChatRelationshipSummarization
 from generative_agents.conversational.chain.task_decomposition import TaskDecomposition
-from generative_agents.conversational.chain.poignance import Poingnance
+from generative_agents.conversational.chain.poignance import Poignance
 from generative_agents.conversational.chain.wake_up_hour import WakeUpHour
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
 from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Level, Maze, Tile
-from generative_agents.conversational.chain import (daily_plan_and_status_chain,
-                                                    reflection_points_chain,
-                                                    evidence_and_insights_chain,
-                                                    planning_on_conversation_chain,
-                                                    memo_on_conversation_chain)
 from generative_agents.conversational.chain.hourly_breakdown import HourlyBreakdown
 from generative_agents.persistence import database
 from generative_agents.persistence.database import ConversationFilling, initialize_agent
@@ -528,7 +528,7 @@ class Agent:
         if "idle" in description:
             return 0.1
 
-        score = await Poingnance(agent_name=self.name,
+        score = await Poignance(agent_name=self.name,
                                  agent_identity=await self.scratch.identity,
                                  description=description,
                                  type_=event_type.value).run()
@@ -553,12 +553,11 @@ class Agent:
         return "\n".join([f"{i.name}: {i.utterance}" for i in utterances])
 
     async def _generate_memo_on_conversation(self, utterances: List[ConversationFilling]):
-        return await memo_on_conversation_chain.arun(conversation=self.__utterances_to_conversation(utterances),
-                                                     agent=self.name)
+        return await MemoOnConversation(conversation=self.__utterances_to_conversation(utterances), agent=self.name).run()
 
     async def _generate_planning_thought_on_conversation(self, utterances: List[ConversationFilling]):
-        return await planning_on_conversation_chain.arun(conversation=self.__utterances_to_conversation(utterances),
-                                                         agent=self.name)
+        return await PlanningOnConversation(conversation=self.__utterances_to_conversation(utterances),
+                                                         agent=self.name).run()
 
     async def _run_reflect(self):
         """
@@ -603,13 +602,11 @@ class Agent:
         statements = '\n'.join(
             [f'{str(count)}. {node.embedding_key}' for count, node in enumerate(memories, 1)])
 
-        return await evidence_and_insights_chain.arun(statements=statements,
-                                                      num_insights=num_insights)
+        return await EvidenceAndInsightsChain(statements=statements, number_of_insights=num_insights).run()
 
     async def _generate_reflection_points(self, num_points: int):
         memories = self.associative_memory.get_most_recent_memories(num_points)
-        return await reflection_points_chain.arun(memories=memories,
-                                                  count=num_points)
+        return await ReflectionPoints(memories=memories, count=num_points).run()
 
     async def _should_react(self, focused_event: Dict[str, List[PerceivedEvent]], agents: Dict[str, 'Agent']):
         """
@@ -1395,13 +1392,13 @@ class Agent:
             statements += f"{retrieved_event.created.strftime('%A %B %d -- %H:%M %p')}: {retrieved_event.description}\n"
         # "name", "today", "yesterday", "statements", "today", "current_activity"
 
-        daily_plan_and_status = await daily_plan_and_status_chain.arun(agent_name=self.name,
+        daily_plan, status = await DailyPlanAndStatus(agent_name=self.name,
                                                                        today=self.scratch.time.today,
                                                                        yesterday=self.scratch.time.yesterday,
                                                                        statements=self.scratch.associative_memory.latest_events_summary,
-                                                                       current_activity=self.scratch.current_activity)
+                                                                       current_activity=self.scratch.current_activity).run()
 
-        return daily_plan_and_status["daily_plan"], daily_plan_and_status["currently"]
+        return daily_plan, status
 
     def _get_related_to_text(self, text: str,  event_type: EventType = None):
         if event_type:

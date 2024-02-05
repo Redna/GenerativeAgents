@@ -36,12 +36,6 @@ agent_shot_1 = """{{
     "answer": "yes"
 }}"""
 
-chat_template = ChatPromptTemplate(messages=[
-        SystemMessagePromptTemplate.from_template(system),
-        HumanMessagePromptTemplate.from_template(user_shot_1),
-        AIMessagePromptTemplate.from_template(agent_shot_1),
-        HumanMessagePromptTemplate.from_template(user)],
-)
 
 class DecideToTalk(BaseModel):
     context: str
@@ -54,22 +48,27 @@ class DecideToTalk(BaseModel):
 
     async def run(self):
 
+        chat_template = ChatPromptTemplate(messages=[
+            SystemMessagePromptTemplate.from_template(system),
+            HumanMessagePromptTemplate.from_template(user_shot_1),
+            AIMessagePromptTemplate.from_template(agent_shot_1),
+            HumanMessagePromptTemplate.from_template(user)],
+        )
+
         _decide_to_talk_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
             "max_tokens": 350,
             "top_p": 0.95,
-            "temperature": 0.8,}
-            , verbose=True)
-
+            "temperature": 0.8, }, verbose=True)
 
         tasks = []
         for i in range(3):
             completion = await _decide_to_talk_chain.ainvoke(input={"context": self.context,
-                                                            "current_time": self.current_time,
-                                                            "init_agent": self.init_agent,
-                                                            "agent_with": self.agent_with,
-                                                            "last_chat_summary": self.last_chat_summary,
-                                                            "init_agent_observation": self.init_agent_observation,
-                                                            "agent_with_observation": self.agent_with_observation})
+                                                                    "current_time": self.current_time,
+                                                                    "init_agent": self.init_agent,
+                                                                    "agent_with": self.agent_with,
+                                                                    "last_chat_summary": self.last_chat_summary,
+                                                                    "init_agent_observation": self.init_agent_observation,
+                                                                    "agent_with_observation": self.agent_with_observation})
 
             pattern = r'\{.*?\}'
             match = re.search(pattern, completion["text"], re.DOTALL)
@@ -79,7 +78,7 @@ class DecideToTalk(BaseModel):
                     return "yes" in json_object["answer"].lower()
                 except:
                     pass
-                
+
         print("Unable to decide to talk.")
         return False
 
@@ -87,12 +86,12 @@ class DecideToTalk(BaseModel):
 async def __tests():
     t = [
         DecideToTalk(context="You are in the Pharmacy. Buying some medicines. You see your friend, Jaiden Suave, in the same aisle as you.",
-                    current_time="7:00 PM",
-                    init_agent="Kaitlyn Smith",
-                    agent_with="Jaiden Suave",
-                    last_chat_summary="last chattet at 03:00pm about the good cafe at Hobbs Cafe.",
-                    init_agent_observation="looking for some painkillers.",
-                    agent_with_observation="buying pavements for her son").run(),
+                     current_time="7:00 PM",
+                     init_agent="Kaitlyn Smith",
+                     agent_with="Jaiden Suave",
+                     last_chat_summary="last chattet at 03:00pm about the good cafe at Hobbs Cafe.",
+                     init_agent_observation="looking for some painkillers.",
+                     agent_with_observation="buying pavements for her son").run(),
         DecideToTalk(
             context="You are in the supermarket. Buying some groceries. You see your friend, John, in the same aisle as you.",
             current_time="5:00 PM",

@@ -31,19 +31,18 @@ user = """Conversation:
 
 What is the summary of the conversation above?"""
 
-chat_template = ChatPromptTemplate(
-    messages=[
-        SystemMessagePromptTemplate.from_template(system),
-        HumanMessagePromptTemplate.from_template(user_shot_1),
-        AIMessagePromptTemplate.from_template(ai_shot_1),
-        HumanMessagePromptTemplate.from_template(user)])
 
 class ConversationSummary(BaseModel):
     conversation: str
 
-    #TODO implement retryable decorator
+    # TODO implement retryable decorator
     async def run(self):
-
+        chat_template = ChatPromptTemplate(
+            messages=[
+                SystemMessagePromptTemplate.from_template(system),
+                HumanMessagePromptTemplate.from_template(user_shot_1),
+                AIMessagePromptTemplate.from_template(ai_shot_1),
+                HumanMessagePromptTemplate.from_template(user)])
         _conversation_summary_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
             "max_tokens": 100,
             "top_p": 0.95,
@@ -59,14 +58,15 @@ class ConversationSummary(BaseModel):
 
         return "This is a conversation"
 
+
 async def __tests():
     t = [ConversationSummary(conversation="Rudolf: Hello, how are you?\nJoanne: I am fine, thank you.").run(),
          ConversationSummary(conversation="""Joe Walther: Hello, did you hear about Jim's party?
 Frodo Reimsi: No, tell me more. You mean Jimmy Fraser?
 Joe Walther: Jim Knofi. He is giving a dinner party.
 Frodo Reimsi: I did not know that.""").run()
-    ]
-    
+         ]
+
     return await asyncio.gather(*t)
 
 if __name__ == "__main__":

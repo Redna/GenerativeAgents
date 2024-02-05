@@ -4,7 +4,7 @@ from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 
-llm = ChatOpenAI(openai_api_key="na", openai_api_base="http://localhost:8080/v1/")
+llm = ChatOpenAI(openai_api_key="na", openai_api_base="http://localhost:9000/v1/")
 
 
 async def __run():

@@ -47,14 +47,6 @@ The following areas are nearby: [{available_sectors_nearby}].
 
 Task: For "{curr_action_description}", where should {agent_name} go? And can {agent_name} do the activity in the current area?"""
 
-chat_template = ChatPromptTemplate(messages=[
-        SystemMessagePromptTemplate.from_template(system),
-        HumanMessagePromptTemplate.from_template(user_shot_1),
-        AIMessagePromptTemplate.from_template(ai_shot_1),
-        HumanMessagePromptTemplate.from_template(user_shot_2),
-        AIMessagePromptTemplate.from_template(ai_shot_2),
-        HumanMessagePromptTemplate.from_template(user)])
-
 
 class ActionSectorLocations(BaseModel):
     agent_name: str
@@ -66,32 +58,41 @@ class ActionSectorLocations(BaseModel):
     curr_action_description: str
 
     async def run(self):
+        chat_template = ChatPromptTemplate(messages=[
+            SystemMessagePromptTemplate.from_template(system),
+            HumanMessagePromptTemplate.from_template(user_shot_1),
+            AIMessagePromptTemplate.from_template(ai_shot_1),
+            HumanMessagePromptTemplate.from_template(user_shot_2),
+            AIMessagePromptTemplate.from_template(ai_shot_2),
+            HumanMessagePromptTemplate.from_template(user)])
+
         _action_sector_locations_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
             "max_tokens": 200,
             "top_p": 0.90,
             "temperature": 0.7}, verbose=global_state.verbose)
 
-        possible_sectors = [sector.strip() for sector in self.available_sectors_nearby.split(",") if sector.strip()]
+        possible_sectors = [sector.strip(
+        ) for sector in self.available_sectors_nearby.split(",") if sector.strip()]
         possible_sectors.append(self.agent_current_sector)
         possible_sectors.append(self.agent_home)
 
         for i in range(5):
 
             completion = await _action_sector_locations_chain.ainvoke(input={"agent_name": self.agent_name,
-                                                            "agent_home": self.agent_home,
-                                                            "agent_home_arenas": self.agent_home_arenas,
-                                                            "agent_current_sector": self.agent_current_sector,
-                                                            "agent_current_sector_arenas": self.agent_current_sector_arenas,
-                                                            "available_sectors_nearby": self.available_sectors_nearby,
-                                                            "curr_action_description": self.curr_action_description})
-            
+                                                                             "agent_home": self.agent_home,
+                                                                             "agent_home_arenas": self.agent_home_arenas,
+                                                                             "agent_current_sector": self.agent_current_sector,
+                                                                             "agent_current_sector_arenas": self.agent_current_sector_arenas,
+                                                                             "available_sectors_nearby": self.available_sectors_nearby,
+                                                                             "curr_action_description": self.curr_action_description})
+
             try:
                 json_object = json.loads(completion["text"])
-                
+
                 sector = json_object["area"]
                 if sector in possible_sectors:
                     return sector
-                
+
                 if sector in self.agent_home_arenas:
                     return self.agent_home
 
@@ -100,22 +101,24 @@ class ActionSectorLocations(BaseModel):
             except:
                 pass
         in_current_area = json_object["activity in current area"]
-        
+
         if in_current_area == "yes":
             sector = self.agent_current_sector
         else:
             sector = "<random>"
-        
-        print(f"Unable to identify next location. Can be done in Sector: {in_current_area}. Selecting randomly: {sector}")
+
+        print(
+            f"Unable to identify next location. Can be done in Sector: {in_current_area}. Selecting randomly: {sector}")
         return sector
+
 
 async def __tests():
     global_state.verbose = True
     t = [ActionSectorLocations(agent_name="Jimmy Foe", agent_home="Jimmy Foe's apartment", agent_home_arenas="living room, bathroom", agent_current_sector="Hobbs Cafe", agent_current_sector_arenas="cafe, restroom", available_sectors_nearby="Supermarket, Library, Lyn's family room", curr_action_description="drinking a cafe").run(),
-         ActionSectorLocations(agent_name="John Doe", agent_home="John Doe's apartment", agent_home_arenas="bedroom, kitchen, living room, bathroom", agent_current_sector="Jimmies Pharmacy", agent_current_sector_arenas="counter", available_sectors_nearby="Supermarket, Library, Lyn's family room", curr_action_description="Visiting John Lyn").run(),
+         ActionSectorLocations(agent_name="John Doe", agent_home="John Doe's apartment", agent_home_arenas="bedroom, kitchen, living room, bathroom", agent_current_sector="Jimmies Pharmacy",
+                               agent_current_sector_arenas="counter", available_sectors_nearby="Supermarket, Library, Lyn's family room", curr_action_description="Visiting John Lyn").run(),
          ActionSectorLocations(agent_name="John Doe", agent_home="John Doe's apartment", agent_home_arenas="bedroom, kitchen, living room, bathroom", agent_current_sector="John Doe's apartment", agent_current_sector_arenas="bedroom, kitchen, living room, bathroom", available_sectors_nearby="Supermarket, Library, Lyn's family room", curr_action_description="Buying a can of beans").run(),]
-    
-    
+
     return await asyncio.gather(*t)
 
 if __name__ == "__main__":

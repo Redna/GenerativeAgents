@@ -26,16 +26,6 @@ Let's think step by step. Of the following three options, what should {agent} do
 - Option 2: Continue on to {initial_action_description} now"""
 
 
-chat_template = ChatPromptTemplate(messages=[
-    SystemMessagePromptTemplate.from_template(system),
-    HumanMessagePromptTemplate.from_template(user)])
-
-_decide_to_react_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
-    "max_tokens": 400,
-    "top_p": 0.90,
-    "temperature": 0.8}, verbose=True)
-
-
 class DecideToReact(BaseModel):
     context: str
     current_time: str
@@ -48,7 +38,14 @@ class DecideToReact(BaseModel):
 
     async def run(self):
         tasks = []
+        chat_template = ChatPromptTemplate(messages=[
+            SystemMessagePromptTemplate.from_template(system),
+            HumanMessagePromptTemplate.from_template(user)])
         for i in range(3):
+            _decide_to_react_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
+                "max_tokens": 400,
+                "top_p": 0.90,
+                "temperature": 0.8}, verbose=True)
             completion = await _decide_to_react_chain.ainvoke(input={"context": self.context,
                                                                      "current_time": self.current_time,
                                                                      "agent": self.agent,

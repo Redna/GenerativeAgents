@@ -3,7 +3,7 @@ import re
 from pydantic import BaseModel
 from generative_agents import global_state
 from generative_agents.conversational.llm import llm
-from langchain import LLMChain, PromptTemplate
+from langchain.chains import LLMChain
 from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, AIMessagePromptTemplate, ChatPromptTemplate
 
 system = """You follow the tasks given by the user as close as possible. You will only generate 1 JSON object as mentioned below.
@@ -35,43 +35,47 @@ ai_shot_2 = """{{
 user_shot_3 = """Task: Given a sentence, identify the subject, predicate, and object from the sentence.
 Sentence: {name} is {action_description}"""
 
-chat_template = ChatPromptTemplate(messages=[
-        SystemMessagePromptTemplate.from_template(system),
-        HumanMessagePromptTemplate.from_template(user_shot_1),
-        AIMessagePromptTemplate.from_template(ai_shot_1),
-        HumanMessagePromptTemplate.from_template(user_shot_2),
-        AIMessagePromptTemplate.from_template(ai_shot_2),
-        HumanMessagePromptTemplate.from_template(user_shot_3)])
 
 class ActionEventTriple(BaseModel):
     name: str
     address: str = None
     action_description: str
 
-    async def run(self): 
+    async def run(self):
+        chat_template = ChatPromptTemplate(messages=[
+            SystemMessagePromptTemplate.from_template(system),
+            HumanMessagePromptTemplate.from_template(user_shot_1),
+            AIMessagePromptTemplate.from_template(ai_shot_1),
+            HumanMessagePromptTemplate.from_template(user_shot_2),
+            AIMessagePromptTemplate.from_template(ai_shot_2),
+            HumanMessagePromptTemplate.from_template(user_shot_3)])
+
         for i in range(5):
             _action_event_triple_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
-                                                              "max_tokens": 45,
-                                                              "top_p": 0.95,
-                                                              "temperature": 0.4},
-                                                              verbose=global_state.verbose)
+                "max_tokens": 45,
+                "top_p": 0.95,
+                "temperature": 0.4},
+                verbose=global_state.verbose)
 
             completion = await _action_event_triple_chain.ainvoke(input={"name": self.name, "action_description": self.action_description})
-            
+
             try:
                 json_object = json.loads(completion["text"])
 
                 subject = json_object["subject"] if not self.address else self.address
-                
-                object_ = json_object["object"] if type(json_object["object"]) == str else json_object["object"][0]
+
+                object_ = json_object["object"] if type(
+                    json_object["object"]) == str else json_object["object"][0]
                 return (subject, json_object["predicate"], object_)
             except:
-                pass 
-        
+                pass
+
         print("Unable to generate action event triple.")
         return self.address or self.name, self.action_description, "idle"
 
+
 if __name__ == "__main__":
     import asyncio
-    t = asyncio.run(ActionEventTriple(name="John Doe", action_description="John Doe is taking a warm shower").run())
+    t = asyncio.run(ActionEventTriple(
+        name="John Doe", action_description="John Doe is taking a warm shower").run())
     print(t)

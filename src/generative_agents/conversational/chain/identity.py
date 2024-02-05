@@ -13,16 +13,15 @@ Context:
 Who is {agent}?
 """
 
-chat_template = ChatPromptTemplate(
-    messages=[
-        SystemMessagePromptTemplate.from_template(system),
-        HumanMessagePromptTemplate.from_template(user)])
-
 class Identity(BaseModel):
     agent: str
     identity: str
 
     async def run(self):
+        chat_template = ChatPromptTemplate(
+            messages=[
+                SystemMessagePromptTemplate.from_template(system),
+                HumanMessagePromptTemplate.from_template(user)])
         _identity_chain = LLMChain(prompt=chat_template, llm=llm, verbose=global_state.verbose)
 
         completion = await _identity_chain.ainvoke(input={"agent":self.agent, "identity":self.identity})

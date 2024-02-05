@@ -26,36 +26,38 @@ ai_shot_2 = """{{
 
 user = """Task: Provide one or two emoji that best represents the following statement or emotion: {action_description}"""
 
-chat_template = ChatPromptTemplate(messages=[
-        SystemMessagePromptTemplate.from_template(system),
-        HumanMessagePromptTemplate.from_template(user_shot_1),
-        AIMessagePromptTemplate.from_template(ai_shot_1),
-        HumanMessagePromptTemplate.from_template(user_shot_2),
-        AIMessagePromptTemplate.from_template(ai_shot_2),
-        HumanMessagePromptTemplate.from_template(user)])
 
 class ActionPronunciatio(BaseModel):
     action_description: str
 
     async def run(self):
-    
-        for i in range(5):   
+
+        chat_template = ChatPromptTemplate(messages=[
+            SystemMessagePromptTemplate.from_template(system),
+            HumanMessagePromptTemplate.from_template(user_shot_1),
+            AIMessagePromptTemplate.from_template(ai_shot_1),
+            HumanMessagePromptTemplate.from_template(user_shot_2),
+            AIMessagePromptTemplate.from_template(ai_shot_2),
+            HumanMessagePromptTemplate.from_template(user)])
+
+        for i in range(5):
             _action_pronunciatio_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
-            "max_tokens": 50,
-            "top_p": 0.90,
-            "temperature": 0.4,
+                "max_tokens": 50,
+                "top_p": 0.90,
+                "temperature": 0.4,
             }, verbose=global_state.verbose)
 
             completion = await _action_pronunciatio_chain.ainvoke(input={"action_description": self.action_description})
-            
+
             try:
                 json_object = json.loads(completion["text"])
                 return json_object["emoji"]
             except Exception as e:
                 pass
-            
+
         return "🤷"
-    
+
+
 async def __tests():
     t = [ActionPronunciatio(action_description="Taking a shower").run(),
          ActionPronunciatio(action_description="Drinking").run(),
@@ -63,7 +65,7 @@ async def __tests():
          ActionPronunciatio(action_description="Visiting a friend").run(),
          ActionPronunciatio(action_description="Walking around").run(),
          ActionPronunciatio(action_description="Going to the toilet").run(),]
-    
+
     return await asyncio.gather(*t)
 
 if __name__ == "__main__":
