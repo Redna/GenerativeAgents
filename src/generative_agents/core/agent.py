@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple
 from copy import deepcopy
 
 from async_lru import alru_cache
+from haystack import Pipeline
 from generative_agents.communication.models import AgentDTO, MovementDTO
 from generative_agents.conversational.chain.action_event_triple import ActionEventTriple
 from generative_agents.conversational.chain.action_location_arena import ActionArenaLocations
@@ -32,6 +33,7 @@ from generative_agents.conversational.chain.summarize_chat_relationship import C
 from generative_agents.conversational.chain.task_decomposition import TaskDecomposition
 from generative_agents.conversational.chain.poignance import Poignance
 from generative_agents.conversational.chain.wake_up_hour import WakeUpHour
+from generative_agents.core.cognitive_components.perception import Perception
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
@@ -66,6 +68,10 @@ class Agent:
         self.time = time
         self.scratch.tile = tile
         self.scratch.description = description
+
+        self.update_pipeline = Pipeline()
+        self.update_pipeline.add_component("perception", Perception(self))
+
 
         whisper(self.name, f"Initialized {self.name} at {self.scratch.tile}")
 
@@ -112,6 +118,8 @@ class Agent:
         return f"{self.name} is on the way to {event_description}"
 
     async def update(self, time: SimulationTime, maze: Maze, agents: Dict[str, 'Agent']) -> Tuple[Tile, str, str]:
+        
+        
         daytype: DayType = DayType.SAME_DAY
 
         if not self.scratch.time:
@@ -261,7 +269,6 @@ class Agent:
             event = PerceivedEvent(**asdict(event), event_type=type_, poignancy=event_poignancy)
             event = self.associative_memory.add(event)
         return event
-
 
     async def retrieve(self, perceived: List[PerceivedEvent]) -> Dict[str, Dict[str, List[PerceivedEvent]]]:
         retrieved = dict()

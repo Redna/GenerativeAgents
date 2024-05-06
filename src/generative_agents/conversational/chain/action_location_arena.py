@@ -3,45 +3,58 @@ import random
 import re
 from pydantic import BaseModel
 from generative_agents import global_state
+from generative_agents.conversational.chain.utils import merge_ai_opening_with_completion
 from generative_agents.conversational.llm import llm
 from langchain import LLMChain, PromptTemplate
 from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, AIMessagePromptTemplate, ChatPromptTemplate
 
-system = """Your task is to identify the next area for a character. You need to output valid JSON.
+system = """Your task is to identify the next area for a character. It has to be one area of the provided list. You need to output valid JSON.
 Output format: 
+```json
 {{
+    "possible_areas": ["<all areas provided in the list>"],
     "reason": "<for the next area selection>",
     "area": "<name of the area>"
-}}"""
+}}
+```"""
 
 user_shot_1 = """Jane Anderson is in the area "kitchen" in "Jane Anderson's house".
 Jane Anderson is going to "Jane Anderson's house" that has the following areas: [kitchen,  bedroom, bathroom]
 Stay in the current area if the activity can be done there. Never go into other people's rooms unless necessary.
 For cooking, to which area should Jane Anderson in "Jane Anderson's house"?"""
 
-ai_shot_1 = """
+ai_shot_1 = """```json
 {{
+    "possible_areas": ["kitchen", "bedroom", "bathroom"],
     "reason": "For cooking Jane Anderson should go to the kitchen.",
     "area": "kitchen"
 }}
-"""
+```"""
 
 user_shot_2 = """Tom Watson is in the area "common room" in "Tom Watson's apartment".
 Tom Watson is going to "Hobbs Cafe" that has the following areas: [cafe]
 Stay in the current area if the activity can be done there. Never go into other people's rooms unless necessary.
 For getting coffee, to which area should Tom Watson go in "Hobbs Cafe"?"""
 
-ai_shot_2 = """
+ai_shot_2 = """```json
 {{
-    "reason": "For getting coffee Tom Watson should go to the cafe.",
+    "possible_areas": ["cafe"],
     "area": "cafe"
 }}
-"""
+```"""
 
-user_shot_3 = """{name} is in the area "{current_area}" in "{current_sector}".
+user = """{name} is in the area "{current_area}" in "{current_sector}".
 {name} is going to "{sector}" that has the following areas: [{sector_arenas}]
 Stay in the current area if the activity can be done there. Never go into other people's rooms unless necessary.
 For {action_description}, to which area should {name} go in "{sector}"?"""
+
+ai = """```json
+{{
+    "possible_areas": [{sector_arenas}],
+    "reason": "For {action_description} {name} """
+
+
+
 
 
 class ActionArenaLocations(BaseModel):
@@ -60,7 +73,8 @@ class ActionArenaLocations(BaseModel):
             AIMessagePromptTemplate.from_template(ai_shot_1),
             HumanMessagePromptTemplate.from_template(user_shot_2),
             AIMessagePromptTemplate.from_template(ai_shot_2),
-            HumanMessagePromptTemplate.from_template(user_shot_3)])
+            HumanMessagePromptTemplate.from_template(user),
+            AIMessagePromptTemplate.from_template(ai)])
 
         _action_arena_locations_chain = LLMChain(prompt=chat_template, llm=llm, llm_kwargs={
             "max_tokens": 80,
@@ -68,19 +82,25 @@ class ActionArenaLocations(BaseModel):
             "temperature": 0.4,
         }, verbose=True)
 
-        possible_arenas = [
-            arena.strip() for arena in self.sector_arenas.split(",") if arena.strip()]
+        possible_arenas = [arena.strip() for arena in self.sector_arenas.split(",") if arena.strip()]
         possible_arenas.append(self.current_area)
 
         for i in range(5):
-            completion = await _action_arena_locations_chain.ainvoke(input={"name": self.name,
-                                                                            "action_description": self.action_description,
-                                                                            "current_area": self.current_area,
-                                                                            "current_sector": self.current_sector,
-                                                                            "sector_arenas": self.sector_arenas,
-                                                                            "sector": self.sector})
+            inputs = {"name": self.name,
+                        "current_area": self.current_area,
+                        "current_sector": self.current_sector,
+                        "sector": self.sector,
+                        "sector_arenas": ",".join(f'"{arena}"' for arena in possible_arenas),
+                        "action_description": self.action_description}
+            
+            completion = await _action_arena_locations_chain.ainvoke(input=inputs)
+
+            full_completion = merge_ai_opening_with_completion(chat_template, inputs, completion["text"])
+
+            pattern = r'```json(.*)```'
+            match = re.search(pattern, full_completion, re.DOTALL)
             try:
-                json_object = json.loads(completion["text"])
+                json_object = json.loads(match.group(1))
                 arena = json_object["area"]
                 if arena in possible_arenas:
                     return arena

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Tuple
 from queue import Queue
 from generative_agents.conversational.chain.identity import Identity
 
+from generative_agents.conversational.pipelines.identity import formulate_identity
 from generative_agents.simulation.time import SimulationTime
 from generative_agents.core.events import Action
 from generative_agents.simulation.maze import Tile
@@ -140,7 +141,7 @@ class Scratch():
                 return path
 
     @property
-    async def identity(self):
+    def identity(self):
         commonset = ""
         commonset += f"Name: {self.name}\n"
         commonset += f"Age: {self.age}\n"
@@ -158,7 +159,7 @@ class Scratch():
         key, cached_identity = self._identity
 
         if key != new_hash:
-            cached_identity = await Identity(agent=self.name,identity=commonset).run()
+            cached_identity = formulate_identity(self.name, commonset)
             self.description = cached_identity
             self._identity = (new_hash, cached_identity)
 

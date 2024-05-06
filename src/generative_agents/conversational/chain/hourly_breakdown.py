@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import yaml
 from random import random
 import re
@@ -7,6 +8,7 @@ from typing import Dict, List, Tuple
 
 from pydantic import BaseModel
 from generative_agents.conversational.chain.json_expert import JsonExpert
+from generative_agents.conversational.chain.utils import merge_ai_opening_with_completion
 from generative_agents.conversational.llm import llm
 
 from langchain.chains import LLMChain
@@ -21,13 +23,15 @@ hours = ["12:00 AM", "01:00 AM", "02:00 AM", "03:00 AM", "04:00 AM", "05:00 AM",
 system = """You are a character in a role play game. You are thinking about your day and create an hourly schedule. 
 Note: In this villiage neither cars, nor bikes exist. The only way to get around is by walking.
 
-Output format: Output a valid yaml of the following format:
-    ```yaml
-    daily_schedule: {% for hour in hours %}
-        - time: {{hour}}
-          activity: <activity during that hour in one brief sentence>
-          duration: <duration in minutes>
-    {%- endfor %}
+Output format: Output a valid json of the following format:
+    ```json
+    {
+        "daily_schedule": [
+          {%- for hour in hours %}
+            { "time": "<time in 12-hour clock format>", "activity": "<activity during that hour in one brief sentence>"},
+          {%- endfor %}
+        ]
+    }
     ```
 """
 
@@ -49,80 +53,35 @@ How does Alex Rivera's complete hourly schedule look for today? You must follow 
 
 ai_shot_1 = """Here is Emily Johnson's complete hourly schedule for today:
 
-```yaml
-daily_schedule: 
-    - time: 12:00 AM
-      activity: sleeping
-      duration: 60
-    - time: 01:00 AM
-      activity: sleeping
-      duration: 60
-    - time: 02:00 AM
-      activity: sleeping
-      duration: 60
-    - time: 03:00 AM
-      activity: sleeping
-      duration: 60
-    - time: 04:00 AM
-      activity: sleeping
-      duration: 60
-    - time: 05:00 AM
-      activity: sleeping
-      duration: 60
-    - time: 06:00 AM
-      activity: feeding her cats and starting morning routine
-      duration: 60
-    - time: 07:00 AM
-      activity: waking up and finishing morning routine
-      duration: 60
-    - time: 08:00 AM
-      activity: having breakfast
-      duration: 60
-    - time: 09:00 AM
-      activity: starting work as a graphic designer
-      duration: 60
-    - time: 10:00 AM
-      activity: working on design projects
-      duration: 60
-    - time: 11:00 AM
-      activity: preparing for lunch break
-      duration: 60
-    - time: 12:00 PM
-      activity: having lunch
-      duration: 60
-    - time: 01:00 PM
-      activity: resuming work as a graphic designer
-      duration: 60
-    - time: 02:00 PM
-      activity: working on design projects
-      duration: 60
-    - time: 03:00 PM
-      activity: finishing work for the day and packing up
-      duration: 60
-    - time: 04:00 PM
-      activity: walking to the town square
-      duration: 60
-    - time: 05:00 PM
-      activity: socializing, meeting new people at the town square
-      duration: 60
-    - time: 06:00 PM
-      activity: preparing for an evening beer at a local pub
-      duration: 60
-    - time: 07:00 PM
-      activity: visiting a local pub for an evening beer
-      duration: 60
-    - time: 08:00 PM
-      activity: leaving the local pub and walking back home
-      duration: 60
-    - time: 09:00 PM
-      activity: preparing dinner and cooking a healthy meal
-      duration: 60
-    - time: 10:00 PM
-      activity: having dinner and relaxing
-      duration: 60
-    - time: 11:00 PM
-      activity: sleeping
-      duration: 60
+```json
+{
+    "daily_schedule": [
+        {time: "12:00 AM", activity: "sleeping"},
+        {time: "01:00 AM", activity: "sleeping"},
+        {time: "02:00 AM", activity: "sleeping"},
+        {time: "03:00 AM", activity: "sleeping"},
+        {time: "04:00 AM", activity: "sleeping"},
+        {time: "05:00 AM", activity: "sleeping"},
+        {time: "06:00 AM", activity: "feeding her cats and starting morning routine"},
+        {time: "07:00 AM", activity: "waking up and finishing morning routine"},
+        {time: "08:00 AM", activity: "having breakfast"},
+        {time: "09:00 AM", activity: "starting work as a graphic designer"},
+        {time: "10:00 AM", activity: "working on design projects"},
+        {time: "11:00 AM", activity: "preparing for lunch break"},
+        {time: "12:00 PM", activity: "having lunch"},
+        {time: "01:00 PM", activity: "resuming work as a graphic designer"},
+        {time: "02:00 PM", activity: "working on design projects"},
+        {time: "03:00 PM", activity: "finishing work for the day and packing up"},
+        {time: "04:00 PM", activity: "walking to the town square"},
+        {time: "05:00 PM", activity: "socializing, meeting new people at the town square"},
+        {time: "06:00 PM", activity: "preparing for an evening beer at a local pub"},
+        {time: "07:00 PM", activity: "visiting a local pub for an evening beer"},
+        {time: "08:00 PM", activity: "leaving the local pub and walking back home"},
+        {time: "09:00 PM", activity: "preparing dinner and cooking a healthy meal"},
+        {time: "10:00 PM", activity: "having dinner and relaxing"},
+        {time: "11:00 PM", activity: "sleeping"}
+    ]
+}
 ```"""
 
 user = """You will act as {{name}}.
@@ -138,14 +97,13 @@ How does {{name}}'s complete hourly schedule look for today? You must follow the
 
 ai = """Here is {{name}}'s complete hourly schedule for today:
 
-```yaml
-daily_schedule: {% for hour, activity, duration in prior_schedule %}
-    - time: {{hour}}
-      activity: {{activity}}
-      duration: {{duration}}
+```json
+{
+    "daily_schedule": [
+{%- for hour, activity, duration in prior_schedule %}
+      { "time": "{{hour}}", "activity": "{{activity}}" },
 {%- endfor %}
-    - time: {{next_hour}}
-      activity: """
+      { "time": "{{next_hour}}", "activity": """
 
 class HourlyBreakdown(BaseModel):
 
@@ -172,17 +130,22 @@ class HourlyBreakdown(BaseModel):
             opening = self._build_hourly_schedule_opening()
             next_hour = hours[hours.index(opening[-1][0]) + 1]
 
-            completion = await _hourly_breakdown_chain.ainvoke(input={"identity": self.identity,
-                                                                      "name": self.name,
-                                                                      "hours": hours,
-                                                                      "daily_plan": self.hourly_organized_activities,
-                                                                      "prior_schedule": opening,
-                                                                      "next_hour": next_hour})
-            pattern = r'```yaml(.*)```'
-            match = re.search(pattern, completion["text"], re.DOTALL)
+            inputs = {
+                "name": self.name,
+                "identity": self.identity,
+                "daily_plan": self.hourly_organized_activities,
+                "hours": hours,
+                "prior_schedule": opening,
+                "next_hour": next_hour
+            }
+            opening = chat_template.format_messages(**inputs)[-1].content
+            completion = await _hourly_breakdown_chain.ainvoke(input=inputs)
+            
+            pattern = r'```json(.*)```'
+            match = re.search(pattern, opening + completion["text"], re.DOTALL)
             if match:
                 try:
-                    output = yaml.safe_load(match.group(1))
+                    output = json.loads(match.group(1))
                 except Exception as error:
                     try:
                         output = await JsonExpert(wrong_json=match.group(1),

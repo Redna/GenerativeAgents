@@ -2,10 +2,12 @@ import asyncio
 
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAI
 
-llm = ChatOpenAI(openai_api_key="na", openai_api_base="http://localhost:9000/v1/")
+from transformers import AutoTokenizer
 
+llm = OpenAI(openai_api_key="na", openai_api_base="http://localhost:9000/v1/")
+tokenizer = AutoTokenizer.from_pretrained("upstage/SOLAR-10.7B-Instruct-v1.0")
 
 async def __run():
     tasks = [llm.ainvoke("Tell me a joke."), llm.ainvoke("Tell me a good joke."), llm.ainvoke("Tell me a bad joke.")]

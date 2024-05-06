@@ -5,11 +5,8 @@ pydantic==2.2.1
 qdrant-client==1.5.0
 jupyterlab==4.0.7
 ipykernel==6.25.2
-psycopg-binary==3.1.16
-pgvector
-sqlalchemy
-langchain==0.1.4
-langchain-community==0.0.16
-langchain-core==0.1.16
-langchain-openai==0.0.5
 openai
+haystack-ai
+qdrant-haystack
+llama-cpp-haystack
+langfuse-haystack
