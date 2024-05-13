@@ -1,19 +1,14 @@
-import re
 from pydantic import BaseModel, Field
-from generative_agents import global_state
-from generative_agents.conversational.llm import llm
-from langchain import LLMChain, PromptTemplate
-from langchain.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """Your task is write a concise description about {agent}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...).
+template = """Your task is write a concise description about {{agent}}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...).
 Respond in valid json format.
 
 Context:
-{context}
+{{context}}
 
-Who is {agent}?
+Who is {{agent}}?
 """
 
 class Identity(BaseModel):

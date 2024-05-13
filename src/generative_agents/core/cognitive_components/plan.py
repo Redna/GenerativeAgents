@@ -16,6 +16,7 @@ from generative_agents.simulation.maze import Level, Maze
 from generative_agents.simulation.time import DayType
 
 from generative_agents.conversational.pipelines.wake_up_hour import estimate_wake_up_hour
+from generative_agents.conversational.pipelines
 
 @component
 class Plan:
@@ -124,11 +125,9 @@ class Plan:
             # if this is the start of generation (so there is no previous day's
             # daily requirement, or if we are on a new day, we want to create a new
             # set of daily requirements.
-            self.agent.scratch.daily_requirements = await FirstDailyPlan(agent_name=self.agent.name,
-                                                                   agent_identity=await self.agent.scratch.identity,
-                                                                   agent_lifestyle=self.agent.scratch.lifestyle,
-                                                                   current_day=self.agent.scratch.time.today,
-                                                                   wake_up_hour=wake_up_hour).run()
+            self.agent.scratch.daily_requirements = 
+
+
             whisper(
                 self.agent.name, f"first daily plan is {self.agent.scratch.daily_requirements}")
         elif daytype == DayType.NEW_DAY:

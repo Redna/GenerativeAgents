@@ -1,4 +1,3 @@
-import asyncio
 from pydantic import BaseModel, Field
 from generative_agents.conversational.llm import llm
 
