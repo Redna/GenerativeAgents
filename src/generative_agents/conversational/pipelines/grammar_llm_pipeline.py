@@ -16,10 +16,10 @@ def pydantic_to_grammar(model: BaseModel) -> LlamaGrammar:
 
 @component
 class GrammarGenerator:
-    @component.output_types(grammar=LlamaGrammar)
+    @component.output_types(generation_kwargs=dict[str, any])
     def run(self, model: BaseModel):
         schema = model.model_json_schema()
-        return {"grammar": LlamaGrammar.from_json_schema(schema)}
+        return {"generation_kwargs": {"grammar": LlamaGrammar.from_json_schema(schema)}}
 
 @component
 class LLMOutputParser:
@@ -39,7 +39,7 @@ class _GrammarPipeline:
         self.pipe.add_component("output_parser", LLMOutputParser())
 
         self.pipe.connect("prompt.prompt", "llm.prompt")
-        self.pipe.connect("grammar_generator.grammar", "llm.grammar")
+        self.pipe.connect("grammar_generator", "llm.generation_kwargs")
         self.pipe.connect("llm.replies", "output_parser.replies")
     
     def run(self, model: BaseModel, prompt_template: str, template_variables: dict[str, any]):

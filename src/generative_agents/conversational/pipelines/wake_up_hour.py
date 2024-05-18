@@ -1,7 +1,5 @@
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.llm import llm
-
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
 

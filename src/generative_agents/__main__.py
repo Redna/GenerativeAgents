@@ -1,4 +1,4 @@
-import asyncio
+from time import sleep
 from typing import List
 from generative_agents import global_state
 
@@ -85,8 +85,8 @@ class Simulation():
             f"spawning agent {data.name}, at {data.movement.col}, {data.movement.row}")
         self.agents[data.name] = Agent.from_dto(data, self.maze, self.simulated_time)
 
-    async def run_loop(self):
-        await asyncio.sleep(0.01)
+    def run_loop(self):
+        sleep(0.5)
         global_state.time.tick()
         print(
             f"round: {self.round_updates.current_round} time: {global_state.time.as_string()}")
@@ -94,15 +94,13 @@ class Simulation():
         updates = []
         for name, agent in self.agents.items():
             print(f"scheduling update for {name}")
-            updates.append(agent.update(global_state.time, self.maze, self.agents))
-
-        updates = await asyncio.gather(*updates)
+            agent.update(global_state.time, self.maze, self.agents)
 
         for agent, tile in zip(self.agents.values(), updates):
             old_tile = agent.scratch.tile
 
-            while not agent.scratch.finished_action_queue.empty():
-                action = agent.scratch.finished_action_queue.get()
+            while not agent.scratch.finished_action:
+                action = agent.scratch.finished_action.pop()
                 if action.event.subject in old_tile.events:
                     del old_tile.events[action.event.subject]
 
@@ -135,8 +133,8 @@ class Simulation():
 def main():
     round_updates = RoundUpdateSnapshots()
     simulation = Simulation(round_updates)
-    api.start(simulation.run_loop, simulation.spawn_agent)
-
+    # api.start(simulation.run_loop, simulation.spawn_agent)
+    simulation.run_loop()
 
 if __name__ == '__main__':
     main()

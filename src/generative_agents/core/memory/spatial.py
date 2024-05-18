@@ -19,6 +19,9 @@ class ArenaMemory:
 
     def __getattr__(self, name):
         return getattr(self.game_objects, name)
+    
+    def __deepcopy__(self, memo):
+        return ArenaMemory(game_objects=self.game_objects.copy())
 
 
 @dataclass
@@ -42,6 +45,9 @@ class SectorMemory:
 
     def __getattr__(self, name):
         return getattr(self.arenas, name)
+    
+    def __deepcopy__(self, memo):
+        return SectorMemory(arenas=self.arenas.copy())
 
 @dataclass
 class WorldMemory:
@@ -64,6 +70,9 @@ class WorldMemory:
 
     def __getattr__(self, name):
         return getattr(self.sectors, name)
+    
+    def __deepcopy__(self, memo):
+        return WorldMemory(sectors=self.sectors.copy())
 
 @dataclass
 class MemoryTree:
@@ -150,3 +159,6 @@ class MemoryTree:
         except:
             return None
         return x
+    
+    def __deepcopy__(self, memo):
+        return MemoryTree(tree=self.tree.copy())

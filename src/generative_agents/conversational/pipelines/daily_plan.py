@@ -74,7 +74,7 @@ class Reflections(BaseModel):
 
 
 def define_current_status(name: str, yesterday: str, today: str, current_activity: str, thought_note: str, plan_note: str, identity: str) -> str:
-    status = grammar_pipeline.run(model=Currently, prompt_template=template, template_variables={
+    status = grammar_pipeline.run(model=Reflections, prompt_template=template, template_variables={
         "name": name,
         "yesterday": yesterday,
         "today": today,

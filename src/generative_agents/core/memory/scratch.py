@@ -1,9 +1,8 @@
 
 from dataclasses import dataclass, field
 import datetime
-from typing import Any, Dict, List, Tuple
 from queue import Queue
-from generative_agents.conversational.chain.identity import Identity
+from typing import Tuple
 
 from generative_agents.conversational.pipelines.identity import formulate_identity
 from generative_agents.simulation.time import SimulationTime
@@ -17,33 +16,33 @@ class Scratch():
     age: int
     tile: Tile
     home: Tile
-    innate_traits: List[str]
+    innate_traits: list[str]
 
     description: str = ""
     time: SimulationTime = None
     action: Action = None  
-    learned_traits: List[str] = field(default_factory=list)
+    learned_traits: list[str] = field(default_factory=list)
     vision_radius: int = 6
     attention_bandwith: int = 4
     retention: int = 5
     reflection_trigger_counter: int = 255
     reflection_trigger_max: int = 255
-    planned_path: List[Tile] = field(default_factory=list)
+    planned_path: list[Tile] = field(default_factory=list)
 
     action_path_set = False
     lifestyle: str = "" # TODO generate lifestyle in reflect
 
-    finished_action_queue: Queue[Action] = Queue()
+    finished_action: list[Action] = field(default_factory=list)
 
     daily_requirements: str = ""
     current_status: str = ""
-    daily_schedule: List[Tuple[str, int]] = None
-    daily_schedule_hourly_organzied: List[Tuple[str, int]] = None
-    hourly_activity_history: List[str] = field(default_factory=list)
+    daily_schedule: list[Tuple[str, int]] = None
+    daily_schedule_hourly_organzied: list[Tuple[str, int]] = None
+    hourly_activity_history: list[str] = field(default_factory=list)
     
     chatting_with: str = ""
     chatting_end_time: datetime.datetime = None
-    chat: Any = None
+    chat: any = None
     # e.g., ["Dolores Murphy"] = self.vision_r
     chatting_with_buffer = dict()
 

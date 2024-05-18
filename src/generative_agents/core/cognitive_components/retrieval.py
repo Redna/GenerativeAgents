@@ -19,7 +19,7 @@ class Retrieval:
     def __init__(self, agent):
         self.agent = agent
 
-    @component.output_types(perceived_events=dict[str, dict[str, list[PerceivedEvent]]])
+    @component.output_types(retrieved=dict[str, dict[str, list[PerceivedEvent]]])
     def run(self, perceived: list[PerceivedEvent]) -> dict[str, dict[str, list[PerceivedEvent]]]:
         retrieved = dict()
 
@@ -33,4 +33,4 @@ class Retrieval:
 
             whisper(
                 self.name, f"{event.description} has {len(retrieved[event.description]['events'])} related events and {len(retrieved[event.description]['thoughts'])} related thoughts")
-        return retrieved
+        return {"retrieved": retrieved}

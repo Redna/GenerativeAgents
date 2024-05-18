@@ -1,6 +1,4 @@
 from pydantic import BaseModel, Field
-from generative_agents.conversational.llm import llm
-
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
 template = """You are {{agent_name}}. You are rating the importance of an event and supposed to return a valid json response.
@@ -23,7 +21,6 @@ def rate_poignance(agent_name: str, agent_identity: str, type_: str, description
     })
 
     return poignance.rating
-
 
 def __tests():
     print(rate_poignance("Emily Tan",
