@@ -51,8 +51,8 @@ class Tile:
             address += f":{self.arena}"
         if self.game_object:
             address += f":{self.game_object}"
-        if self.spawning_location:
-            address = f'<spawn_loc>{self.spawning_location}'
+        #if self.spawning_location:
+        #    address = f'<spawn_loc>{self.spawning_location}'
 
         return address
     
@@ -90,6 +90,9 @@ class Tile:
     
     def is_walkable(self):
         return not self.collision
+    
+    def l2_distance(self, other: 'Tile') -> float:
+        return ((self.x - other.x)**2 + (self.y - other.y)**2)**0.5
 
     def __str__(self):
         return f"Tile(world={self.world}, sector={self.sector}, arena={self.arena}, game_object={self.game_object}, spawning_location={self.spawning_location}, collision={self.collision}, events={self.events})"
@@ -251,7 +254,7 @@ class Maze:
                 game_object = game_object_blocks_dict[game_object_maze[i][j]] if game_object_maze[i][j] in game_object_blocks_dict else ""
                 spawning_location = spawning_location_blocks_dict[spawning_location_maze[i][j]] if spawning_location_maze[i][j] in spawning_location_blocks_dict else ""
                 collision = collision_maze[i][j] != "0"
-                row += [Tile(j, i, world_block, sector, arena, game_object, spawning_location, collision, set())]           
+                row += [Tile(j, i, world_block, sector, arena, game_object, spawning_location, collision, dict())]           
                 node = self.grid.node(j,i)
                 node.walkable = not collision
                 node.weight = 0 if collision else 1
@@ -268,11 +271,9 @@ class Maze:
         #   == {(29, 14), (31, 11), (30, 14), (32, 11), ...}, 
         
         self.address_tiles = dict()
-        for i in range(self.maze_height):
-            for j in range(self.maze_width): 
-                
-                tile = self.tiles[i][j]
 
+        for row in self.tiles:
+            for tile in row:
                 if tile.collision:
                     continue
 
@@ -293,11 +294,27 @@ class Maze:
         path = self.find_path(f, t)
         print(self.grid)
 
-    def get_random_tile(self, tile) -> Tile:
+    def filter_address_tiles(self, fuzzy_address: str) -> List[Tile]:
+        """
+        Given a fuzzy address, we return a list of tiles that match the address.
+        ARGS:
+            fuzzy_address: a string representing a fuzzy address
+        RETURNS:
+            a list of tiles that match the fuzzy address
+        """
+        return {address: tiles for address, tiles in self.address_tiles.items() if fuzzy_address in address}
+
+    def get_random_tile(self, tile=None) -> Tile:
         """
         returns a random tile from the maze and make sure it is not the same as the tile given
         """
         tiles = self.address_tiles[list(self.address_tiles)[random.randint(0, len(self.address_tiles) - 1)]]
+
+        if tile:
+            while True:
+                random_tile = tiles[random.randint(0, len(tiles) - 1)]
+                if random_tile != tile:
+                    return random_tile
         return tiles[random.randint(0, len(tiles) - 1)]
     
     def find_path(self, start: Tile, end: Tile) -> List[Tile]:
@@ -366,7 +383,7 @@ class Maze:
                 
                 nearby_tile = self.get_tile(tile.x + i, tile.y + j)
 
-                if tile.is_walkable():
+                if nearby_tile.is_walkable():
                     nearby_tiles += [nearby_tile]
 
         return nearby_tiles

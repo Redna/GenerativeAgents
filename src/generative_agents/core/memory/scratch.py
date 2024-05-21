@@ -1,12 +1,14 @@
 
 from dataclasses import dataclass, field
 import datetime
-from typing import Any, List, Tuple
 from queue import Queue
+from typing import Tuple
 
+from generative_agents.conversational.pipelines.identity import formulate_identity
 from generative_agents.simulation.time import SimulationTime
 from generative_agents.core.events import Action
 from generative_agents.simulation.maze import Tile
+from generative_agents.utils import hash_string
 
 @dataclass
 class Scratch():
@@ -14,34 +16,37 @@ class Scratch():
     age: int
     tile: Tile
     home: Tile
-    innate_traits: List[str]
+    innate_traits: list[str]
 
+    description: str = ""
     time: SimulationTime = None
     action: Action = None  
-    learned_traits: List[str] = field(default_factory=list)
-    vision_radius: int = 8
-    attention_bandwith: int = 3
+    learned_traits: list[str] = field(default_factory=list)
+    vision_radius: int = 6
+    attention_bandwith: int = 4
     retention: int = 5
     reflection_trigger_counter: int = 255
     reflection_trigger_max: int = 255
-    planned_path: List[Tile] = field(default_factory=list)
+    planned_path: list[Tile] = field(default_factory=list)
 
     action_path_set = False
     lifestyle: str = "" # TODO generate lifestyle in reflect
 
-    action_queue: Queue = Queue()
+    finished_action: list[Action] = field(default_factory=list)
 
     daily_requirements: str = ""
     current_status: str = ""
-    daily_schedule: List[Tuple[str, int]] = None
-    daily_schedule_hourly_organzied: List[Tuple[str, int]] = None
-    hourly_activity_history: List[str] = field(default_factory=list)
+    daily_schedule: list[Tuple[str, int]] = None
+    daily_schedule_hourly_organzied: list[Tuple[str, int]] = None
+    hourly_activity_history: list[str] = field(default_factory=list)
     
     chatting_with: str = ""
     chatting_end_time: datetime.datetime = None
-    chat: Any = None
+    chat: any = None
     # e.g., ["Dolores Murphy"] = self.vision_r
     chatting_with_buffer = dict()
+
+    _identity: Tuple[str, str] = ("", "")
 
     def should_reflect(self):
         if (self.reflection_trigger_counter <= 0): 
@@ -73,10 +78,10 @@ class Scratch():
             if start.second != 0: 
                 start = start.replace(second=0)
                 start = (start + datetime.timedelta(minutes=1))
-        end_time = (start + datetime.timedelta(minutes=self.action.duration))
+            end_time = (start + datetime.timedelta(minutes=self.action.duration))
 
-        if end_time.strftime("%H:%M:%S") == self.time.time.strftime("%H:%M:%S"): 
-            return True
+        if end_time and self.time.time.strftime("%H:%M:%S") >= end_time.strftime("%H:%M:%S"): 
+              return True
         return False
 
     def get_daily_schedule_index(self, advance=0):
@@ -103,15 +108,18 @@ class Scratch():
         today_min_elapsed += advance
 
         x = 0
-            
-        for _, duration in self.daily_schedule_hourly_organzied: 
-            x += int(duration)
+        try:
+            for _, duration in self.daily_schedule_hourly_organzied: 
+                x += duration
+        except:
+            print("ERROR")
+
 
         # We then calculate the current index based on that. 
         curr_index = 0
         elapsed = 0
         
-        for _, duration in self.daily_schedule: 
+        for _, duration in self.daily_schedule_hourly_organzied: 
             elapsed += duration
             if elapsed > today_min_elapsed: 
                 return curr_index
@@ -136,6 +144,7 @@ class Scratch():
         commonset = ""
         commonset += f"Name: {self.name}\n"
         commonset += f"Age: {self.age}\n"
+        commonset += f"{self.description}"
         commonset += f"Innate traits: {self.innate_traits}\n"
         commonset += f"Learned traits: {self.learned_traits}\n"
         if self.action:
@@ -143,4 +152,14 @@ class Scratch():
         commonset += f"Lifestyle: {self.lifestyle}\n"
         commonset += f"Daily plan requirement: {self.daily_requirements}\n"
         commonset += f"Current Date: {self.time.today}\n"
-        return commonset
+
+        new_hash = hash_string(commonset)
+
+        key, cached_identity = self._identity
+
+        if key != new_hash:
+            cached_identity = formulate_identity(self.name, commonset)
+            self.description = cached_identity
+            self._identity = (new_hash, cached_identity)
+
+        return cached_identity

@@ -3,9 +3,13 @@ import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Tuple
+from generative_agents import global_state
 
 from generative_agents.persistence.database import ConversationFilling, MemoryEntry
 from pydantic import BaseModel
+from generative_agents.simulation.maze import Tile
+
+from generative_agents.utils import hash_string
 
 
 class EventType(Enum):
@@ -23,6 +27,14 @@ class Event:
     predicate: str
     object_: str
     description: str
+    filling: List[ConversationFilling | str] = field(default_factory=list)
+    hash_key: str = None
+    tile: Tile = None
+
+    def __post_init__(self):
+        if not self.hash_key:
+            tile_hash = "" if not self.tile else hash(self.tile)
+            self.hash_key = hash_string(f"{self.filling} {self.description} {self.spo_summary} {tile_hash}")
 
     @property
     def spo_summary(self):
@@ -34,10 +46,9 @@ class PerceivedEvent(Event):
     id: str = None
     event_type: EventType = EventType.EVENT
     poignancy: float = .5
-    created: datetime.datetime = datetime.datetime.now()
+    created: datetime.datetime = global_state.time.time
     expiration: datetime.datetime = None
-    last_accessed: datetime.datetime = datetime.datetime.now()
-    filling: List[ConversationFilling | str] = field(default_factory=list)
+    last_accessed: datetime.datetime = global_state.time.time
     keywords: List[str] = field(default_factory=list)
 
     @classmethod
@@ -50,35 +61,39 @@ class PerceivedEvent(Event):
                    description=entry.content,
                    event_type=EventType(entry.memory_type),
                    poignancy=entry.poignancy,
-                   created=entry.created,
-                   expiration=entry.expiration,
-                   last_accessed=entry.last_accessed,
+                   created=entry.created_at,
+                   expiration=entry.expiration_date,
+                   last_accessed=entry.last_accessed_at,
                    filling=entry.filling,
-                   keywords=entry.keywords)
+                   keywords=entry.keywords,
+                   hash_key = entry.hash_key)
 
     def to_db_entry(self):
         return MemoryEntry(
                            content=self.description,
                            memory_type=self.event_type.value,
                            depth=self.depth,
-                           created=self.created,
-                           expiration=self.expiration,
-                           last_accessed=self.last_accessed,
+                           created_at=self.created,
+                           expiration_date=self.expiration,
+                           last_accessed_at=self.last_accessed,
                            subject=self.subject,
                            predicate=self.predicate,
                            object_=self.object_,
                            poignancy=self.poignancy,
                            keywords=self.keywords,
-                           filling=self.filling)
+                           filling=self.filling,
+                           hash_key=self.hash_key)
 
 
-class ObjectAction(BaseModel):
+@dataclass
+class ObjectAction:
     address: str
     emoji: str
     event: Event
 
 
-class Action(BaseModel):
+@dataclass
+class Action:
     address: str
     start_time: datetime.datetime
     duration: int
@@ -89,7 +104,7 @@ class Action(BaseModel):
     @classmethod
     def idle(cls, address: str):
         return cls(address=address,
-                   start_time=datetime.datetime.now(),
+                   start_time=global_state.time.time,
                    duration=0,
                    emoji="⏳",
                    event=Event(depth=0, subject="", predicate="", object_="", description="idle"))

@@ -3,6 +3,9 @@ frontend_server/settings/local.py
 storage/*
 static_dirs/*
 
+conversation.db
+
+
 !storage/base_the_ville_isabella_maria_klaus/*
 !storage/base_the_ville_n25/*
 

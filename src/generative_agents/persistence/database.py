@@ -1,3 +1,4 @@
+from abc import ABC
 from enum import Enum
 from time import sleep
 from typing import Dict, List, Optional, Tuple
@@ -38,6 +39,8 @@ class MemoryEntry(TimeAndImportanceBaseSchema):
     keywords: List[str] = []
     filling: List[str | ConversationFilling] = []
 
+    hash_key: str = None
+
 
 def initialize_database(recreate: bool = False):
     if recreate:
@@ -64,12 +67,12 @@ def _get_last_conversation_id(agent_name: str, with_agent_name: str):
     return result[-1] if result else None
 
 def _set_active_conversation_id(agent_name: str, with_agent_name: str, conversation_id: str):
-    _connection.execute('INSERT OR REPLACE INTO conversation (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
+    _connection.execute('INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
                         (agent_name, with_agent_name, conversation_id))
     _connection.commit()
 
 def _set_last_conversation_id(agent_name: str, with_agent_name: str, conversation_id: str):
-    _connection.execute('INSERT OR REPLACE INTO conversation (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
+    _connection.execute('INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
                         (agent_name, with_agent_name, conversation_id))
     _connection.commit()
 
@@ -95,13 +98,13 @@ def add(agent_name: str, memory_entry: MemoryEntry) -> MemoryEntry:
 
     if memory_entry.memory_type == MemoryType.CHAT.value:
         _set_active_conversation_id(
-            agent_name, memory_entry.object, memory_entry.id)
+            agent_name, memory_entry.object_, memory_entry.id)
         
         if memory_entry.filling[-1] and memory_entry.filling[-1].end:
             _set_last_conversation_id(
-                agent_name, memory_entry.object, memory_entry.id)
+                agent_name, memory_entry.object_, memory_entry.id)
             _delete_active_conversation_id(
-                agent_name, memory_entry.object)
+                agent_name, memory_entry.object_)
 
     return memory_entry
 
@@ -113,6 +116,23 @@ def get(agent_name: str, context: str, limit=50) -> MemoryEntry:
     result_set = _collections[agent_name].get_relevant_entries(context, limit=limit)
     return result_set
 
+def get_by_hash(agent_name: str, hash_key:str):
+    if not agent_name in _collections:
+        raise Exception(f"Agent {agent_name} does not exist")
+
+    collection = _collections[agent_name]
+
+    filter = models.Filter(
+        must=[
+            models.FieldCondition(
+                key="hash_key",
+                match=models.MatchText(text=hash_key),
+            )
+        ]
+    )
+
+    result_set = collection.get_relevant_entries(query="", filter=filter)
+    return result_set
 
 def get_by_type(agent_name: str, context: str, memory_type: MemoryType):
     if not agent_name in _collections:
@@ -132,7 +152,6 @@ def get_by_type(agent_name: str, context: str, memory_type: MemoryType):
     result_set = collection.get_relevant_entries(context, filter=filter)
     return result_set
 
-
 def get_last_chat(agent_name, with_agent_name) -> Optional[MemoryEntry]:
     if not agent_name in _collections:
         raise Exception(f"Agent {agent_name} does not exist")
@@ -150,8 +169,8 @@ def get_active_chat(agent_name, with_agent_name) -> Optional[MemoryEntry]:
     collection = _collections[agent_name]
 
     id = _get_active_conversation_id(agent_name, with_agent_name)
-
-    return collection.get_by_id(id)
+    record = collection.get_by_id(id)
+    return MemoryEntry(**record.payload) if record else None
 
 if __name__ == '__main__':
 

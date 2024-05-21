@@ -21,15 +21,23 @@ class SimulationTime():
         self.time = datetime.datetime.today()
 
         if from_time_string:
-            date_string = self.time.strftime('%Y-%m-%d')
-            datetime_string = f"{date_string} {from_time_string}"
-            self.time = datetime.datetime.strptime(datetime_string, '%Y-%m-%d %H:%M')
+            self.time = self.time_from_string(from_time_string)
 
+    @staticmethod
+    def time_string_from_minutes(minutes: int):
+        time = datetime.min + datetime.timedelta(minutes=minutes)
+        return time.strftime("%H:%M")
 
-
+    @staticmethod
+    def time_from_string(time_string: str):
+        date_string = datetime.datetime.today().strftime('%Y-%m-%d')
+        datetime_string = f"{date_string} {time_string}"
+        return datetime.datetime.strptime(datetime_string, '%Y-%m-%d %H:%M')
+    
     def tick(self):
         self.time += datetime.timedelta(seconds=self.increment)
         global_state.tick += 1
+        global_state.time = self
 
     def get(self):
         return self.time
