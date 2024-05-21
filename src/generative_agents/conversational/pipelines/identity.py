@@ -8,8 +8,7 @@ Respond in valid json format.
 Context:
 {{context}}
 
-Who is {{agent}}?
-"""
+Task: Formulate the identity of {{agent}}."""
 
 class Identity(BaseModel):
     identity: str = Field(description="Context of the agent's personality, family situation and characteristics.")

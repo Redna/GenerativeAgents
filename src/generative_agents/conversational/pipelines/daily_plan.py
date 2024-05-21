@@ -57,7 +57,7 @@ def find_feelings(name: str, identity: str, statements: str) -> str:
 
 
 template = """You are {{name} acting in a role play game. Your identity is:
-{identity}}
+{{identity}}
 
 {{name}}'s status from {{yesterday}}:
 {{current_activity}}

@@ -25,25 +25,35 @@ Here is today's plan in broad-strokes:
 How does {{name}}'s complete hourly schedule look for today? You must follow the schedule format above. {{name}}'s day starts at {{wake_up_hour}}. Before that, {{name}} is sleeping."""
 
 
-def create_hourly_schedule(name: str, identity: str, daily_plan: list[dict[str, str]]) -> str:
+def create_hourly_schedule(name: str, identity: str, daily_plan: list[dict[str, str]], wake_up_hour: str) -> str:
 
-    HourlySchedule = create_model("HourlySchedule", **{hour: (str, ...) for hour in hours})
+    HourlySchedule = create_model("HourlySchedule", **{hour: (str, Field(..., description=f"Brief activity at this time. Must not be empty", min_length=2)) for hour in hours})
 
     schedule = grammar_pipeline.run(model=HourlySchedule, prompt_template=template, template_variables={
         "name": name,
         "identity": identity,
-        "daily_plan": daily_plan
+        "daily_plan": daily_plan, 
+        "wake_up_hour": wake_up_hour
     })
 
     def to_schedule(schedule, wake_up_hour: int) -> List[Dict[str, str]]:
         wake_up_hour_index = hours.index(wake_up_hour.zfill(8))
 
-        for i in enumerate(hours[:wake_up_hour_index]):
-            schedule[i]["activity"] = "sleeping"
+        list_schedule = list()
 
-        return schedule
+        for i, (hour, activity) in enumerate(schedule.items()):
+            if i < wake_up_hour_index:
+                list_schedule.append({"time": hour, "activity": "Sleeping"})
+            elif i == wake_up_hour_index:
+                list_schedule.append({"time": hour, "activity": "Wake up and get ready for the day"})
+            else: 
+                list_schedule.append({"time": hour, "activity": activity})
 
-    return to_schedule(schedule.dict(), schedule.wake_up_hour)
+        return list_schedule
+
+    schedule = to_schedule(schedule.model_dump(), wake_up_hour)
+
+    return schedule
 
 
 if __name__ == "__main__":

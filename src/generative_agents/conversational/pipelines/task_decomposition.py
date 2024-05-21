@@ -1,62 +1,53 @@
 
 import datetime
-from pydantic import BaseModel, Field
+from enum import Enum
+from typing import Literal
+from pydantic import BaseModel, Field, create_model
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-from generative_agents.utils import hour_string_to_time
+from generative_agents.utils import get_time_string, hour_string_to_time, time_string_to_time
 
 
 template = """You are in a roleplay and act as an agent. You will be asked to decompose a task into subtasks.
 Break down the task in subtasks 5 minute increments. At the end no time should be left. Include a hint on main task in all subtasks.
 
-Output format: Output a valid json of the following format:
-
-{
-    "total_duration": "<total duration in minutes>",
-    "subtasks": [
-        {
-            "duration": "<duration in minutes>",
-            "remaining_minutes": "<remaining minutes after completing this subtask>",
-            "activity": "<activity in one brief sentence>"
-        },
-        {
-            "duration": "<duration in minutes>",
-            "remaining_minutes": "<remaining minutes after completing this subtask>",
-            "activity": "<activity in one brief sentence>"
-        },
-        # ...
-        {
-            "duration": "<duration in minutes>",
-            "remaining_minutes": "<remaining minutes after completing this subtask>",
-            "activity": "<activity in one brief sentence>"
-        }
-    ]
-}
-
-
 {{identity}}
 
+Today is {{today}}. {{task_context}}
 In minimum 5 minutes increments, what are the subtasks that {{name}} does when {{name}} is "{{task_description}}" from {{task_start_time}} ~ {{task_end_time}}? (total duration in minutes: {{task_duration}})"""
 
-class Subtask(BaseModel):
-    time: str = Field(pattern="^(0[0-9]|1[0-2]):[0-5][0-9] (AM|PM)$", description="The time of the day in 12-hour clock format (hh:mm AM/PM)")
-    activity: str = Field(description="The activity planned for the time.")
+def create_decomposition_schedule(name: str, identity: str, task_description: str, task_start_time: str, task_end_time: str, task_duration: int, today: str, task_context: str) -> list[dict[str, str]]:
 
-class DecompositionSchedule(BaseModel):
-    total_duration: int = Field(description="The total duration of the task in minutes.")
-    subtasks: list[Subtask] = Field(description="The list of tasks for the day with their scheduled times.")
+    # iterate all 5 minutes increments
+    subtasks = {}
 
-def create_decomposition_schedule(name: str, identity: str, task_description: str, task_start_time: str, task_end_time: str, task_duration: int) -> list[dict[str, str]]:
+    # startime in datetime format from xx:xx AM/PM
+    start_time = time_string_to_time(task_start_time)
+
+    for minutes in range(0, task_duration, 5):
+        start_time = start_time + datetime.timedelta(minutes=minutes)
+
+        Subtask = create_model(f"Subtask_{minutes//5}", time=(Enum("Time", [get_time_string(start_time)]), Field(description="The start time of the activity in 12-hour clock format (hh:mm AM/PM)")),
+                               duration=(Enum("Duration", ["5"]), Field(description="5 minutes duration")),
+                               activity=(str, Field(..., description="The activity planned for the time.")))
+
+        subtasks[f"Subtask {minutes//5}/{task_duration // 5}"] = (Subtask, Field(..., description=f"Activity for subtask {minutes//5} of {task_description}"))
+
+    DecompositionSchedule = create_model("DecompositionSchedule", **subtasks)
+
     schedule = grammar_pipeline.run(model=DecompositionSchedule, prompt_template=template, template_variables={
         "name": name,
         "identity": identity,
         "task_description": task_description,
         "task_start_time": task_start_time,
         "task_end_time": task_end_time,
-        "task_duration": task_duration
+        "task_duration": task_duration,
+        "today": today,
+        "task_context": task_context
     })
 
-    return schedule.subtasks
+    subtasks = [task for task in schedule.model_dump().values()]
+    return subtasks
 
 if __name__ == "__main__":
     print(create_decomposition_schedule(name="James Peterson",

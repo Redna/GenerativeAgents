@@ -1,7 +1,7 @@
 pathfinding==1.0.4
 python-socketio==5.8.0
 aiohttp==3.8.5
-pydantic==2.2.1
+pydantic
 qdrant-client==1.5.0
 jupyterlab==4.0.7
 ipykernel==6.25.2
@@ -10,3 +10,4 @@ haystack-ai
 qdrant-haystack
 llama-cpp-haystack
 langfuse-haystack
+sentence-transformers

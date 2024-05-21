@@ -1,22 +1,20 @@
 
-
-from copy import deepcopy
-from dataclasses import asdict
-from datetime import datetime
+import datetime
 from enum import Enum
 from functools import lru_cache
-import math
-from operator import itemgetter
 import random
-from haystack import Pipeline, component
+from generative_agents.utils import get_time_string
+from haystack import component
 
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 
 from generative_agents.core.events import Action, Event, EventType, ObjectAction, PerceivedEvent
 from generative_agents.core.whisper.whisper import whisper
 from generative_agents.persistence.database import ConversationFilling
-from generative_agents.simulation.maze import Level, Maze
+from generative_agents.simulation.maze import Level
 from generative_agents.simulation.time import DayType
+from generative_agents.persistence import database
+
 
 from generative_agents.conversational.pipelines.wake_up_hour import estimate_wake_up_hour
 from generative_agents.conversational.pipelines.daily_plan import create_daily_plan_and_status
@@ -37,6 +35,8 @@ from generative_agents.conversational.pipelines.conversation_summary import conv
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 from generative_agents.conversational.pipelines.new_decomposition_schedule import create_new_decomposition_schedule
 from generative_agents.conversational.pipelines.task_decomposition import create_decomposition_schedule
+from generative_agents.conversational.pipelines.first_daily_plan import create_daily_plan
+
 
 class ReactionMode(Enum):
     CHAT = "chat"
@@ -143,13 +143,15 @@ class Plan:
         # When it is a new day, we start by creating the daily_req of the persona.
         # Note that the daily_req is a list of strings that describe the persona's
         # day in broad strokes.
-        if daytype in (DayType.NEW_DAY, DayType.FIRST_DAY):
-            daily_plan, current_status = create_daily_plan_and_status(self.agent.name,
-                                                                      self.agent.scratch.identity,
-                                                                      self.agent.scratch.time.today,
-                                                                      self.agent.scratch.time.yesterday,
-                                                                      self.agent.scratch.statements,
-                                                                      self.agent.scratch.current_activity)
+        if daytype == DayType.FIRST_DAY:
+            self.agent.scratch.daily_requirements = create_daily_plan(self.agent.scratch.identity,
+                                                                              self.agent.scratch.time.today,
+                                                                              self.agent.name,
+                                                                              wake_up_hour)
+
+
+        if daytype == DayType.NEW_DAY:
+            daily_plan, current_status = self._generate_daily_plan_and_current_status()
 
             whisper(self.agent.name, f"new daily plan is {daily_plan}")
             whisper(self.agent.name, f"new current status is {current_status}")
@@ -187,7 +189,36 @@ class Plan:
 
         self.agent.associative_memory.add(perceived_plan)
 
-    async def _determine_action(self):
+    def _generate_daily_plan_and_current_status(self):
+        retrieved_events = self._get_related_to_text(
+            f"{self.agent.name}'s plan for {self.agent.scratch.time.as_string()}.", EventType.PLAN)
+        retrieved_events += self._get_related_to_text(
+            f"Important recent events for {self.agent.name}'s life.")
+
+        statements = "[Statements]\n"
+
+        for retrieved_event in retrieved_events:
+            statements += f"{retrieved_event.created.strftime('%A %B %d -- %H:%M %p')}: {retrieved_event.description}\n"
+        
+        return create_daily_plan_and_status(self.agent.name,
+                                        self.agent.scratch.identity,
+                                        self.agent.scratch.time.today,
+                                        self.agent.scratch.time.yesterday,
+                                        statements,
+                                        self.agent.scratch.current_activity)
+
+    def _get_related_to_text(self, text: str,  event_type: EventType = None):
+        if event_type:
+            memories = database.get_by_type(self.agent.name, text, event_type.value)
+        else:
+            memories = database.get(self.agent.name, text)
+
+        return [PerceivedEvent.from_db_entry(memory.text, memory.metadata) for memory in memories]
+
+    def _get_related_events(self, event: PerceivedEvent, event_type: EventType = None):
+        return self._get_related_to_text(event.description, event_type)
+    
+    def _determine_action(self):
 
         def needs_decomposition(action_description: str, action_duration: int):
             # TODO reformulate this logic
@@ -831,21 +862,23 @@ class Plan:
             end_time_str = end_time.strftime("%H:%M:%S")
             taks_name = self.agent.scratch.daily_schedule[task_id][0]
 
-            summary = f"{start_time_str} ~ {end_time_str}, {self.name} is planning on {taks_name}"
+            summary = f"{start_time_str} ~ {end_time_str}, {self.agent.name} is planning on {taks_name}"
             task_sumaries += [summary]
 
         task_context = f"From {', and '.join(task_sumaries)}."
 
-        start_time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S")
-                      + datetime.timedelta(minutes=start_min)).strftime("%H:%M:%S")
-        end_time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S")
-                    + datetime.timedelta(minutes=end_min)).strftime("%H:%M:%S")
+        start_time = get_time_string(datetime.datetime.strptime("00:00:00", "%H:%M:%S")
+                      + datetime.timedelta(minutes=start_min))
+        end_time = get_time_string(datetime.datetime.strptime("00:00:00", "%H:%M:%S")
+                    + datetime.timedelta(minutes=end_min))
 
-        return create_decomposition_schedule(name=self.name,
+        return create_decomposition_schedule(name=self.agent.name,
                                             identity=self.agent.scratch.identity,
                                             today=self.agent.scratch.time.today,
                                             task_context=task_context,
                                             task_description=action_description,
-                                            task_duration=str(action_duration),
+                                            task_duration=action_duration,
                                             task_start_time=start_time,
                                             task_end_time=end_time)
+
+    
