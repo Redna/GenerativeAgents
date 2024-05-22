@@ -1,7 +1,6 @@
 
 from dataclasses import dataclass, field
 import datetime
-from queue import Queue
 from typing import Tuple
 
 from generative_agents.conversational.pipelines.identity import formulate_identity
@@ -153,13 +152,12 @@ class Scratch():
         commonset += f"Daily plan requirement: {self.daily_requirements}\n"
         commonset += f"Current Date: {self.time.today}\n"
 
-        new_hash = hash_string(commonset)
-
         key, cached_identity = self._identity
 
-        if key != new_hash:
+        if key != hash_string(commonset):
             cached_identity = formulate_identity(self.name, commonset)
             self.description = cached_identity
+            new_hash = hash_string(commonset)
             self._identity = (new_hash, cached_identity)
 
         return cached_identity

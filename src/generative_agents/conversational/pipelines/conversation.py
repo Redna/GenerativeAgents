@@ -3,25 +3,25 @@ from pydantic import BaseModel, Field
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
 template = """You will act as a person in a role-playing game. You are in a conversation with another person. You will be given a context and a conversation so far. You need to output valid JSON describing the next utterance and whether the conversation ended with your utterance.
-You are {agent}. Your identity is: 
-{identity}
+You are {{agent}}. Your identity is: 
+{{identity}}
 
-Here is the memory that is in {agent}'s head:
-{memory}
+Here is the memory that is in {{agent}}'s head:
+{{memory}}
 
 Past Context:
-{past_context}
+{{past_context}}
 
-Current Location: {location}
+Current Location: {{location}}
 
 Current Context:
-{agent} was {agent_action} when {agent} saw {agent_with} in the middle of {agent_with_action}.
-{agent} is initiating a conversation with {agent_with}.
+{{agent}} was {{agent_action}} when {{agent}} saw {{agent_with}} in the middle of {{agent_with_action}}.
+{{agent}} is initiating a conversation with {{agent_with}}.
 
-{agent} and {agent_with} are chatting. Here is their conversation so far:
-{conversation}
+{{agent}} and {{agent_with}} are chatting. Here is their conversation so far:
+{{conversation}}
 
-Given the context above, what does {agent} say to {agent_with} next in the conversation? And did it end the conversation?"""
+Given the context above, what does {{agent}} say to {{agent_with}} next in the conversation? And did it end the conversation?"""
 
 
 class ConversationRound(BaseModel):

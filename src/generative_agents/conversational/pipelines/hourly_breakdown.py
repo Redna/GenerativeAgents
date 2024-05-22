@@ -11,7 +11,6 @@ hours = ["12:00 AM", "01:00 AM", "02:00 AM", "03:00 AM", "04:00 AM", "05:00 AM",
 
 template = """You are a character in a role play game. You are thinking about your day and create an hourly schedule. 
 Note: In this villiage neither cars, nor bikes exist. The only way to get around is by walking.
-Output a schedule in a valid json format.
 
 You will act as {{name}}.
 Your identity is: 

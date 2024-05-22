@@ -8,11 +8,11 @@ template = """You follow the task given by the user as close as possible. You wi
 Choose an appropriate area from the area options for a given activity. Stay in the current area if the activity can be done there. Only go out if the activity needs to take place in another place.
 Also if the activity cannot be done in the available options, try to identify the closest area that can be used for the activity.
 
-{agent_name} lives in [{agent_home}] that has {agent_home_arenas}.
-{agent_name} is currently in [{agent_current_sector}] that has {agent_current_sector_arenas}.
-The following areas are nearby: [{available_sectors_nearby}].
+{{agent_name}} lives in [{{agent_home}}] that has {{agent_home_arenas}}.
+{{agent_name}} is currently in [{{agent_current_sector}}] that has {{agent_current_sector_arenas}}.
+The following areas are nearby: [{{available_sectors_nearby}}].
 
-Task: For "{curr_action_description}", where should {agent_name} go?"""
+Task: For "{{curr_action_description}", where should {{agent_name} go?"""
 
 
 def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:

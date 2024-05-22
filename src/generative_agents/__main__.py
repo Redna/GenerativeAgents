@@ -4,7 +4,7 @@ from generative_agents import global_state
 
 from generative_agents.communication import api
 from generative_agents.communication.models import AgentDTO, RoundUpdateDTO
-from generative_agents.core.agent import Agent
+from generative_agents.core.agent import Agent, AgentRunner
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.persistence.database import initialize_database
 from generative_agents.simulation.maze import Maze
@@ -45,35 +45,39 @@ class Simulation():
         self.agents: List[Agent] = dict()
         self.__vision_start_tile = self.maze.get_random_tile()
         initialize_database(True)
-
-        self.agents["Giorgio Rossi"] = Agent(name="Giorgio Rossi",
-                                          time=global_state.time,
-                                          description="Giorgio Rossi, known for his warm and attentive service, is a popular waiter at Hobbs Cafe, a local favorite for both its ambiance and cuisine. When he's not bustling around the cafe, Giorgio indulges in his love for reading, often losing himself in the pages of a good book. He also enjoys taking long, leisurely walks through the village, embracing the tranquility and charm of his surroundings, a perfect contrast to the lively atmosphere of the cafe. Giorgio's simple pleasures and dedication to his job make him a well-regarded member of the community.",
-                                          innate_traits=["Easy going", "Competitive", "Confident"],
-                                          age=25,
-                                          location="the Ville:Giorgio Rossi's apartment:bathroom:shower",
-                                          emoji="🤖",
-                                          activity="idle",
-                                          tile=self.maze.address_tiles["the Ville:Giorgio Rossi's apartment:main room:bed"][0],
-                                          tree=self.initialize_visible_memory_tree())
         
-        self.agents["John Lin"] = Agent(name="John Lin",
-                                          time=global_state.time,
-                                          description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews.",
-                                          innate_traits=["Easy going", "Competitive", "Confident"],
-                                          age=25,
-                                          location="the Ville:Lin family's house:Mei and John Lin's bedroom:bed",
-                                          emoji="🤖",
-                                          activity="idle",
-                                          tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0],
-                                          tree=self.initialize_visible_memory_tree())
-                                          #tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0])
+        self.agents["Giorgio Rossi"] = self.initialize_agent(name="Giorgio Rossi",
+                                            age=25,
+                                            time=global_state.time,
+                                            innate_traits=["Easy going", "Competitive", "Confident"],
+                                            location="the Ville:Giorgio Rossi's apartment:main room:bed",
+                                            emoji="🤖",
+                                            activity="idle",
+                                            tree=self.initialize_visible_memory_tree(),
+                                            tile=self.maze.address_tiles["the Ville:Giorgio Rossi's apartment:main room:bed"][0],
+                                            description="Giorgio Rossi, known for his warm and attentive service, is a popular waiter at Hobbs Cafe, a local favorite for both its ambiance and cuisine. When he's not bustling around the cafe, Giorgio indulges in his love for reading, often losing himself in the pages of a good book. He also enjoys taking long, leisurely walks through the village, embracing the tranquility and charm of his surroundings, a perfect contrast to the lively atmosphere of the cafe. Giorgio's simple pleasures and dedication to his job make him a well-regarded member of the community."
+                                            )
+
+        self.agents["John Lin"] = self.initialize_agent(name="John Lin",
+                                            age=25,
+                                            time=global_state.time,
+                                            innate_traits=["Easy going", "Competitive", "Confident"],
+                                            location="the Ville:Lin family's house:Mei and John Lin's bedroom",
+                                            emoji="🤖",
+                                            activity="idle",
+                                            tree=self.initialize_visible_memory_tree(),
+                                            tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0],
+                                            description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews."
+                                            )
         
         
         self.round_updates = round_updates
 
-    def initialize_visible_memory_tree(self):
+    def initialize_agent(self, name, age, time, innate_traits, location, emoji, activity, tree, tile, description): 
+        agent = Agent(name=name, age=age, time=time, innate_traits=innate_traits, location=location, emoji=emoji, activity=activity, tile=tile, tree=tree, description=description)
+        return AgentRunner(agent)
 
+    def initialize_visible_memory_tree(self):
         tree = MemoryTree()
         for tile in self.maze.get_nearby_tiles(self.__vision_start_tile, 1000):
             tree.add(tile)
@@ -92,9 +96,12 @@ class Simulation():
             f"round: {self.round_updates.current_round} time: {global_state.time.as_string()}")
         
         updates = []
+
+        agents = [agent.agent for agent in self.agents.values()]
+
         for name, agent in self.agents.items():
             print(f"scheduling update for {name}")
-            agent.update(global_state.time, self.maze, self.agents)
+            agent.update(global_state.time, self.maze, agents)
 
         for agent, tile in zip(self.agents.values(), updates):
             old_tile = agent.scratch.tile

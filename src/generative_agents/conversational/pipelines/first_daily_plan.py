@@ -11,7 +11,7 @@ Today is {{today}}. What is {{name}}'s plan today in broad-strokes? (Mention for
 
 
 class PlanOutline(BaseModel):
-    hour: int = Field(description="The hour of the day. (0-23)", ge=0, le=23)
+    hour: int = Field(description="The hour of the day. (1-24)", ge=1, le=24)
     description: str = Field(
         description="A brief description of the activity planned for the hour.")
 

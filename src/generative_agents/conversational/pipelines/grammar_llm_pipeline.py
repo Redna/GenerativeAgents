@@ -1,4 +1,5 @@
 import json
+import os
 from haystack import Pipeline, component
 from haystack.components.builders import DynamicPromptBuilder
 from haystack_integrations.components.generators.llama_cpp import LlamaCppGenerator
@@ -7,7 +8,6 @@ from haystack_integrations.components.generators.llama_cpp import LlamaCppGenera
 from llama_cpp import LlamaGrammar
 from pydantic import BaseModel
 from pydantic_core import from_json
-from tenacity import retry, stop_after_attempt
 
 
 def pydantic_to_grammar(model: BaseModel) -> LlamaGrammar:
@@ -18,16 +18,20 @@ def pydantic_to_grammar(model: BaseModel) -> LlamaGrammar:
 
 def escape_json_string(input_str):
     escaped_str = (
-        input_str.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
+        input_str.replace("\n", "\\n").replace("\r", "\\r")
     )
     return escaped_str
 
+@component
+class PydanticToJSONSchema:
+    @component.output_types(schema=str)
+    def run(self, model: BaseModel):
+        return {"schema": json.dumps(model.model_json_schema(), indent=4)}
 
 @component
 class GrammarGenerator:
     @component.output_types(generation_kwargs=dict[str, any])
-    def run(self, model: BaseModel):
-        schema = json.dumps(model.model_json_schema())
+    def run(self, schema: str):
         return {"generation_kwargs": {"grammar": LlamaGrammar.from_json_schema(schema)}}
 
 
@@ -47,16 +51,19 @@ class _GrammarPipeline:
     def __init__(self):
         self.pipe = Pipeline()
 
+        # print current working directory
+        print(os.getcwd())
+
         generator = LlamaCppGenerator(
             model="models/Meta-Llama-3-8B-Instruct-Q8_0.gguf",
-            n_ctx=4096,
+            n_ctx=8096,
             n_batch=512,
             model_kwargs={
                 "n_gpu_layers": -1,
                 "verbose": True
             },
             generation_kwargs={
-                "max_tokens": 4000,
+                "max_tokens": 4096,
                 "temperature": 1,
             }
         )
@@ -73,16 +80,16 @@ class _GrammarPipeline:
     def run(
         self, model: BaseModel, prompt_template: str, template_variables: dict[str, any]
     ):
-        schema = json.dumps(model.model_json_schema())
+        schema = json.dumps(model.model_json_schema(), indent=4)
 
-        prompt_template += "\n### Output format:\n" + schema + "\n###"
+        prompt_template += "\n\n### JSON Schema to use for the output:\n" + schema + "\n###"
         return self.pipe.run(
             data={
                 "prompt": {
                     "prompt_source": prompt_template,
                     "template_variables": template_variables,
                 },
-                "grammar_generator": {"model": model},
+                "grammar_generator": {"schema": schema},
                 "output_parser": {"model": model},
             }
         )["output_parser"]["model"]

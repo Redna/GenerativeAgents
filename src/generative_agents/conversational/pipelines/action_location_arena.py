@@ -6,10 +6,10 @@ from generative_agents.conversational.pipelines.grammar_llm_pipeline import gram
 
 template = """Your task is to identify the next area for a character. It has to be one area of the provided list. You need to output valid JSON.
 
-{name} is in the area "{current_area}" in "{current_sector}".
-{name} is going to "{sector}" that has the following areas: [{sector_arenas}]
+{{name}} is in the area "{{current_area}}" in "{{current_sector}}".
+{{name}} is going to "{{sector}}" that has the following areas: [{{sector_arenas}}]
 Stay in the current area if the activity can be done there. Never go into other people's rooms unless necessary.
-For {action_description}, to which area should {name} go in "{sector}"?
+For {{action_description}}, to which area should {{name}} go in "{{sector}}"?
 """
 
 

@@ -8,7 +8,7 @@ template = """You summarize a conversation in one sentence.
 
 Conversation:
 ---
-{conversation}
+{{conversation}}
 ---
 
 What is the summary of the conversation above? Answer in valid json.

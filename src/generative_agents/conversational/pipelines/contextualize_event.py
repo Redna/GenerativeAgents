@@ -2,14 +2,14 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You are {agent}. You will write about the personality and observations of {agent} based on a given event and related events.
+template = """You are {{agent}}. You will write about the personality and observations of {{agent}} based on a given event and related events.
 Context
-{identity}
-{agent} perceived the following event: {event_description}
-He remembered the following related events: {events}
-He thought the following about the event: {thoughts}
+{{identity}}
+{{agent}} perceived the following event: {{event_description}}
+He remembered the following related events: {{events}}
+He thought the following about the event: {{thoughts}}
 
-What is {agent}'s personality and {agent}'s observations? Bring the event into context."""
+What is {{agent}}'s personality and {{agent}}'s observations? Bring the event into context."""
 
 
 class Context(BaseModel):

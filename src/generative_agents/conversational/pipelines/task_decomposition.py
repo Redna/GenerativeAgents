@@ -27,11 +27,12 @@ def create_decomposition_schedule(name: str, identity: str, task_description: st
     for minutes in range(0, task_duration, 5):
         start_time = start_time + datetime.timedelta(minutes=minutes)
 
-        Subtask = create_model(f"Subtask_{minutes//5}", time=(Enum("Time", [get_time_string(start_time)]), Field(description="The start time of the activity in 12-hour clock format (hh:mm AM/PM)")),
-                               duration=(Enum("Duration", ["5"]), Field(description="5 minutes duration")),
+        Subtask = create_model(f"Subtask_{minutes//5+1}", 
+                               time=(Literal[get_time_string(start_time)], Field(description="The start time of the activity in 12-hour clock format (hh:mm AM/PM)", frozen=True)), # type: ignore
+                               duration=(Literal["5"], Field(description="5 minutes duration", frozen=True)),
                                activity=(str, Field(..., description="The activity planned for the time.")))
 
-        subtasks[f"Subtask {minutes//5}/{task_duration // 5}"] = (Subtask, Field(..., description=f"Activity for subtask {minutes//5} of {task_description}"))
+        subtasks[f"Subtask {minutes//5+1}/{task_duration // 5}"] = (Subtask, Field(..., description=f"Activity for subtask {minutes//5+1} of {task_description}"))
 
     DecompositionSchedule = create_model("DecompositionSchedule", **subtasks)
 

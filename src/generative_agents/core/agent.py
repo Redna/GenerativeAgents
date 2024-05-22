@@ -1,5 +1,9 @@
+from dataclasses import dataclass
 from enum import Enum
 from haystack import Pipeline
+from haystack_integrations.components.connectors.langfuse import LangfuseConnector
+
+
 from generative_agents.communication.models import AgentDTO, MovementDTO
 from generative_agents.core.cognitive_components.execution import Execution
 from generative_agents.core.cognitive_components.reflection import Reflection
@@ -31,42 +35,7 @@ class Agent:
         self.scratch.tile = tile
         self.scratch.description = description
 
-        self.update_pipeline = Pipeline()
-        self.update_pipeline.add_component("perception", Perception(self))
-        self.update_pipeline.add_component("retrieval", Retrieval(self))
-        self.update_pipeline.add_component("plan", Plan(self))
-        self.update_pipeline.add_component("execution", Execution(self))
-        self.update_pipeline.add_component("reflection", Reflection(self))
-
-        self.update_pipeline.connect("perception", "retrieval")
-        self.update_pipeline.connect("retrieval", "plan")
-        self.update_pipeline.connect("plan", "execution")
-
         whisper(self.name, f"Initialized {self.name} at {self.scratch.tile}")
-
-    def update(self, time: SimulationTime, maze: Maze, agents: dict[str, 'Agent']):
-        # random movement
-        # if not self.scratch.planned_path:
-        #    self.scratch.planned_path = self.__get_random_path(maze)
-        #
-        # self.agent.tile = self.scratch.planned_path.pop(0)
-        # print("Moving to", self.tile)
-
-        daytype: DayType = DayType.SAME_DAY
-
-        if not self.scratch.time:
-            daytype = daytype.FIRST_DAY
-        elif (self.scratch.time.today != time.today):
-            daytype = daytype.NEW_DAY
-
-        self.scratch.time = time
-
-        result = self.update_pipeline.run(
-                    data={"perception": {"maze": maze},
-                            "plan": {"agents": agents, "daytype": daytype},
-                            "execution": {"maze": maze, "agents": agents}})
-
-        return result["execution"]["next_tile"]
     
     def to_dto(self):
         return AgentDTO(
@@ -109,3 +78,44 @@ class Agent:
                 return f"{self.name} is {event_description}"
 
         return f"{self.name} is on the way to {event_description}"
+
+
+class AgentRunner:
+    def __init__(self, agent: Agent):
+        self.agent = agent
+
+        self.update_pipeline = Pipeline()
+        self.update_pipeline.add_component("tracer", LangfuseConnector(self.agent.name))
+        self.update_pipeline.add_component("perception", Perception(self.agent))
+        self.update_pipeline.add_component("retrieval", Retrieval(self.agent))
+        self.update_pipeline.add_component("plan", Plan(self.agent))
+        self.update_pipeline.add_component("execution", Execution(self.agent))
+        self.update_pipeline.add_component("reflection", Reflection(self.agent))
+
+        self.update_pipeline.connect("perception", "retrieval")
+        self.update_pipeline.connect("retrieval", "plan")
+        self.update_pipeline.connect("plan", "execution")
+
+    def update(self, time: SimulationTime, maze: Maze, agents: dict[str, 'Agent']):
+        # random movement
+        # if not self.scratch.planned_path:
+        #    self.scratch.planned_path = self.__get_random_path(maze)
+        #
+        # self.agent.tile = self.scratch.planned_path.pop(0)
+        # print("Moving to", self.tile)
+
+        daytype: DayType = DayType.SAME_DAY
+
+        if not self.agent.scratch.time:
+            daytype = daytype.FIRST_DAY
+        elif (self.agent.scratch.time.today != time.today):
+            daytype = daytype.NEW_DAY
+
+        self.agent.scratch.time = time
+
+        result = self.update_pipeline.run(
+                    data={"perception": {"maze": maze},
+                            "plan": {"agents": agents, "daytype": daytype},
+                            "execution": {"maze": maze, "agents": agents}})
+
+        return result["execution"]["next_tile"]

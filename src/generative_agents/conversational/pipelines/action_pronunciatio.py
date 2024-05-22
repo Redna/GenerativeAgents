@@ -5,7 +5,7 @@ from generative_agents.conversational.pipelines.grammar_llm_pipeline import gram
 
 template = """You follow the tasks given by the user as close as possible.
 
-Task: Provide one or two emoji that best represents the following statement or emotion: {action_description}"""
+Task: Provide one or two emoji that best represents the following statement or emotion: {{action_description}}"""
 
 class Emoji(BaseModel):
     emoji: str = Field(

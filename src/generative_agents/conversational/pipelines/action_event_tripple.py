@@ -4,15 +4,21 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You follow the tasks given by the user as close as possible. You need to return a valid JSON.
+template = """Given a sentence identify the subject, predicate, and object from the sentence.
 
-Task: Given a sentence identify the subject, predicate, and object from the sentence.
-Sentence: {name} is {action_description}"""
+Sentence: {{name}} is {{action_description}}"""
+
+class X(Enum):
+    XYZ: str = "XYZ"
+
+class Z(BaseModel):
+    x: X
+    a: str = 5
 
 
 def _model_from_predefined_subject(enum: Enum) -> Type[BaseModel]:
     class ActionEvent(BaseModel):
-        subject: enum = Field(description="The entity performing the action")
+        subject: enum
         predicate: str = Field(description="The action being performed")
         object: str = Field(description="The entity that the action is being performed on")
     
@@ -20,7 +26,7 @@ def _model_from_predefined_subject(enum: Enum) -> Type[BaseModel]:
 
 
 def action_event_triple(name: str, action_description: str, address: str = None, ) -> str:
-    model = _model_from_predefined_subject(enum=Enum("Subject", [name]))
+    model = _model_from_predefined_subject(enum=Enum("Subject", {name: name}))
 
     action_event = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
         "name": name,

@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
 template = """Your task is to identify the next object for an action. You need to output valid JSON.
-Current activity: {action_description}
-Objects available: [{available_objects}]
+Current activity: {{action_description}}
+Objects available: [{{available_objects}}]
 Which object is the most relevant one, you MUST pick one?
 """
 
