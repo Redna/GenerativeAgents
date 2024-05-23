@@ -17,7 +17,7 @@ from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.persistence.database import initialize_agent
 from generative_agents.simulation.time import DayType, SimulationTime
-
+from generative_agents.global_state import tick
 
 class Agent:
     def __init__(self, name: str, age: int, description: str, innate_traits: list[str], time: SimulationTime, location: str, emoji: str, activity: str, tile: Tile, tree: MemoryTree = None):
@@ -85,7 +85,7 @@ class AgentRunner:
         self.agent = agent
 
         self.update_pipeline = Pipeline()
-        self.update_pipeline.add_component("tracer", LangfuseConnector(self.agent.name))
+        self.update_pipeline.add_component("tracer", LangfuseConnector(f"Round {tick}: {self.agent.name}"))
         self.update_pipeline.add_component("perception", Perception(self.agent))
         self.update_pipeline.add_component("retrieval", Retrieval(self.agent))
         self.update_pipeline.add_component("plan", Plan(self.agent))

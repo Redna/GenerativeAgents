@@ -17,9 +17,7 @@ def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
     class ActionArenaLocation(BaseModel):
         reasoning: str = Field(
             description="Reasoning for yes or no and the next area selection in one brief sentence.")
-        next_area: dynamic_enum = Field(
-            description="The next area the character should go to.")
-
+        next_area: dynamic_enum
     return ActionArenaLocation
 
 

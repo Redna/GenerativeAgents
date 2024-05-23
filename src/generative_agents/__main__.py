@@ -16,7 +16,7 @@ class RoundUpdateSnapshots():
         self.rounds = []
 
     def add(self, time, agents: List[Agent]):
-        agents_dto = [agent.to_dto() for agent in agents.values()]
+        agents_dto = [agent_runner.agent.to_dto() for agent_runner in agents.values()]
 
         converted_date_time = time.as_string()
         round_update = RoundUpdateDTO(
@@ -141,7 +141,8 @@ def main():
     round_updates = RoundUpdateSnapshots()
     simulation = Simulation(round_updates)
     # api.start(simulation.run_loop, simulation.spawn_agent)
-    simulation.run_loop()
+    while(True):
+        simulation.run_loop()
 
 if __name__ == '__main__':
     main()
