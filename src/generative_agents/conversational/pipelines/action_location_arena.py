@@ -24,8 +24,7 @@ def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
 
 
 def action_area_locations(name: str, current_area: str, current_sector: str, sector: str, sector_arenas: str, action_description: str) -> str:
-    possible_areas = sector_arenas.split(", ")
-    areas = Enum("Areas", possible_areas)
+    areas = Enum("Areas", {arena: arena for arena in sector_arenas.split(", ")})
     model = model_from_enum(areas)
 
     action_arena_location = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
@@ -37,7 +36,7 @@ def action_area_locations(name: str, current_area: str, current_sector: str, sec
         "action_description": action_description
     })
 
-    return action_arena_location.next_area
+    return action_arena_location.next_area.value
 
 
 if __name__ == "__main__":

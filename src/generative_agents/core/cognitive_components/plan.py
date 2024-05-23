@@ -293,29 +293,24 @@ class Plan:
 
         action_game_object = None
         next_address = ""
-        try:
-            whisper(
-                self.agent.name, f"determined next action: {action_description}")
-            action_sector = self._generate_next_action_sector(action_description)
+        whisper(
+            self.agent.name, f"determined next action: {action_description}")
+        action_sector = self._generate_next_action_sector(action_description)
 
-            whisper(self.agent.name,
-                    f"determined next sector: {action_sector}")
-            action_arena = self._generate_next_action_arena(
-                action_description, action_sector)
-            whisper(self.agent.name, f"determined next arena: {action_arena}")
-            next_address = self._generate_next_action_game_object(
-                action_description, action_arena)
+        whisper(self.agent.name,
+                f"determined next sector: {action_sector}")
+        action_arena = self._generate_next_action_arena(
+            action_description, action_sector)
+        whisper(self.agent.name, f"determined next arena: {action_arena}")
+        next_address = self._generate_next_action_game_object(
+            action_description, action_arena)
 
-            address_parts = next_address.split(":")
-            tile = self.agent.spatial_memory[address_parts[0]][address_parts[1]
-                                                               ][address_parts[2]].game_objects[address_parts[3]]
+        address_parts = next_address.split(":")
+        tile = self.agent.spatial_memory[address_parts[0]][address_parts[1]
+                                                            ][address_parts[2]].game_objects[address_parts[3]]
 
-            whisper(self.agent.name,
-                    f"determined next game object: {action_game_object}")
-        except Exception as e:
-            print(f"Unable to generate next action: {e}")
-            next_address = "<random>"
-            tile = None
+        whisper(self.agent.name,
+                f"determined next game object: {action_game_object}")
 
         action_pronouncio = self._generate_action_pronunciatio(
             action_description)
@@ -599,12 +594,12 @@ class Plan:
     def _generate_next_action_sector(self, action_description):
         name = self.agent.name
         home = self.agent.scratch.home.sector
-        home_arenas = self.spatial_memory.get_str_accessible_sector_arenas(
+        home_arenas = self.agent.spatial_memory.get_str_accessible_sector_arenas(
             self.agent.scratch.home.get_path(Level.SECTOR))
         current_sector = self.agent.scratch.tile.sector
-        current_sector_arenas = self.spatial_memory.get_str_accessible_sector_arenas(
+        current_sector_arenas = self.agent.spatial_memory.get_str_accessible_sector_arenas(
             self.agent.scratch.tile.get_path(Level.SECTOR))
-        nearby_sectors = self.spatial_memory.get_str_accessible_sectors(
+        nearby_sectors = self.agent.spatial_memory.get_str_accessible_sectors(
             self.agent.scratch.tile.get_path(Level.WORLD))
 
         next_sector = action_sector_locations(agent_name=name,
@@ -627,22 +622,20 @@ class Plan:
                                       current_area=current_area,
                                       current_sector=current_sector,
                                       sector=sector,
-                                      sector_arenas=self.spatial_memory.get_str_accessible_sector_arenas(
+                                      sector_arenas=self.agent.spatial_memory.get_str_accessible_sector_arenas(
                                           action_sector),
-                                      available_sectors_nearby=self.spatial_memory.get_str_accessible_sectors(
-                                          list(self.spatial_memory.tree.keys())[-1]),
                                       action_description=action_description)
 
         return f"{action_sector}:{arena}"
 
     def _generate_next_action_game_object(self, action_description, action_arena):
         arena = action_arena
-        available_objects = self.spatial_memory.get_str_accessible_arena_game_objects(
+        available_objects = self.agent.spatial_memory.get_str_accessible_arena_game_objects(
             action_arena)
 
         if not available_objects:
             arena = self.agent.scratch.tile.get_path(Level.ARENA)
-            available_objects = self.spatial_memory.get_str_accessible_arena_game_objects(
+            available_objects = self.agent.spatial_memory.get_str_accessible_arena_game_objects(
                 arena)
 
         game_object = action_location_game_object(action_description=action_description,

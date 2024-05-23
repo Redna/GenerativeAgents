@@ -27,7 +27,7 @@ class Reflection:
             whisper(self.agent.name, f"reflected")
             self.agent.scratch.reset_reflection_counter()
 
-        last_conversation = self.associative_memory.last_conversation_with(
+        last_conversation = self.agent.associative_memory.last_conversation_with(
             self.scratch.chatting_with)
 
         if last_conversation and last_conversation.filling and last_conversation.filling[-1].end:

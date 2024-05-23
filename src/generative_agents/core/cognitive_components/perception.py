@@ -128,7 +128,7 @@ class Perception:
             if event.subject == self.agent.name and event.predicate == "chat with":
                 final_events += [self._perceive_event(event, type_=EventType.CHAT)]
             else:
-                final_events += [event]
+                final_events += [evenft]
 
         for event in final_events:
             self.agent.scratch.reflection_trigger_max -= event.poignancy * 10

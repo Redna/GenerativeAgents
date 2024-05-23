@@ -13,13 +13,13 @@ Which object is the most relevant one, you MUST pick one?
 
 def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
     class ActionObjectLocation(BaseModel):
-        next_object: dynamic_enum = Field(
-            description="The next object the character should use.")
+        next_object: dynamic_enum
     return ActionObjectLocation
 
 def action_location_game_object(action_description: str, available_objects: str) -> str:
     possible_objects = available_objects.split(", ")
-    objects = Enum("Objects", possible_objects)
+
+    objects = Enum("Objects", {obj: obj for obj in possible_objects.split(",")})
     model = model_from_enum(objects)
 
     action_object_location = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
@@ -27,7 +27,7 @@ def action_location_game_object(action_description: str, available_objects: str)
         "available_objects": available_objects
     })
 
-    return action_object_location.next_object
+    return action_object_location.next_object.value
 
 if __name__ == "__main__":
     print(action_location_game_object(action_description="napping",

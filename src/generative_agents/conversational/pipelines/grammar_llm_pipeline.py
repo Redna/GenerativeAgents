@@ -1,5 +1,8 @@
 import json
 import os
+import hashlib
+import pickle
+
 from haystack import Pipeline, component
 from haystack.components.builders import DynamicPromptBuilder
 from haystack_integrations.components.generators.llama_cpp import LlamaCppGenerator
@@ -8,6 +11,8 @@ from haystack_integrations.components.generators.llama_cpp import LlamaCppGenera
 from llama_cpp import LlamaGrammar
 from pydantic import BaseModel
 from pydantic_core import from_json
+
+from generative_agents import global_state
 
 
 def pydantic_to_grammar(model: BaseModel) -> LlamaGrammar:
@@ -79,20 +84,35 @@ class _GrammarPipeline:
 
     def run(
         self, model: BaseModel, prompt_template: str, template_variables: dict[str, any]
-    ):
+    ): 
+
+        hash_key = hashlib.sha256((model.__name__ + prompt_template + json.dumps(template_variables) + str(global_state.tick)).encode()).hexdigest()
+
+        cache_dir = f".generation_cache/tick_{global_state.tick}"
+        os.makedirs(cache_dir, exist_ok=True)
+
+        cache_file_path = f"{cache_dir}/{hash_key}.json"
+
+        if os.path.exists(cache_file_path):
+            with open(cache_file_path, "rb") as cache_file:
+                return model.model_validate_json(cache_file.read())
+
         schema = json.dumps(model.model_json_schema(), indent=4)
 
         prompt_template += "\n\n### JSON Schema to use for the output:\n" + schema + "\n###"
-        return self.pipe.run(
-            data={
+        output = self.pipe.run(data={
                 "prompt": {
                     "prompt_source": prompt_template,
                     "template_variables": template_variables,
                 },
                 "grammar_generator": {"schema": schema},
-                "output_parser": {"model": model},
+                "output_parser": {"model": model}
             }
         )["output_parser"]["model"]
+
+        json.dump(output.model_dump(mode='json'), open(cache_file_path, "w"), indent=4)
+
+        return output
 
 
 grammar_pipeline = _GrammarPipeline()
