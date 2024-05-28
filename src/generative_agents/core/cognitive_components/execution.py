@@ -15,6 +15,7 @@ from generative_agents.conversational.pipelines.action_event_tripple import acti
 from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
 from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
 from generative_agents.simulation.maze import Maze, Tile
+from generative_agents.utils import timeit
 
 
 @component
@@ -22,6 +23,7 @@ class Execution:
     def __init__(self, agent: 'Agent'):
         self.agent = agent
 
+    @timeit
     @component.output_types(next_tile=Tile)
     def run(self, maze: Maze, agents: dict[str, 'Agent'], plan: str) -> Tile:
         if "<random>" in plan or self.agent.scratch.planned_path == []:

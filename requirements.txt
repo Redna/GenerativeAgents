@@ -11,3 +11,4 @@ qdrant-haystack
 llama-cpp-haystack
 langfuse-haystack
 sentence-transformers
+colorama

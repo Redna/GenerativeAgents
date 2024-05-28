@@ -47,7 +47,7 @@ async def whisper_emitter(thought: Thought):
 
 async def updater():
     while True:   
-        update = await update_simulation()
+        update = update_simulation()
         # emit pydantic model as json dict
         await sio.emit('update', update.dict())     
 

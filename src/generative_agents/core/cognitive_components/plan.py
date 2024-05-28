@@ -3,7 +3,7 @@ import datetime
 from enum import Enum
 from functools import lru_cache
 import random
-from generative_agents.utils import get_time_string
+from generative_agents.utils import get_time_string, timeit
 from haystack import component
 
 from generative_agents.conversational.pipelines.poignance import rate_poignance
@@ -48,6 +48,7 @@ class Plan:
     def __init__(self, agent):
         self.agent = agent
 
+    @timeit
     @component.output_types(address=str)
     def run(self, agents: dict[str, 'Agent'], daytype: DayType, retrieved: dict[str, dict[str, list[PerceivedEvent]]]) -> str:
         if daytype == DayType.NEW_DAY or daytype == DayType.FIRST_DAY:
@@ -777,8 +778,6 @@ class Plan:
         self.agent.scratch.chatting_end_time = chatting_end_time
         self.associative_memory.add(event)
 
-
-    @lru_cache(maxsize=512)
     def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:
             return 0.1

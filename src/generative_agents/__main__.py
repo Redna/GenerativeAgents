@@ -1,4 +1,4 @@
-from time import sleep
+from time import sleep, time
 from typing import List
 from generative_agents import global_state
 
@@ -90,29 +90,27 @@ class Simulation():
         self.agents[data.name] = Agent.from_dto(data, self.maze, self.simulated_time)
 
     def run_loop(self):
-        sleep(0.5)
         global_state.time.tick()
         print(
             f"round: {self.round_updates.current_round} time: {global_state.time.as_string()}")
         
-        updates = []
-
         agents = [agent.agent for agent in self.agents.values()]
 
-        for name, agent in self.agents.items():
+        for name, agent_runner in self.agents.items():
+            start = time()
             print(f"scheduling update for {name}")
-            agent.update(global_state.time, self.maze, agents)
+            agent = agent_runner.agent
+            next_tile = agent_runner.update(global_state.time, self.maze, agents)
 
-        for agent, tile in zip(self.agents.values(), updates):
             old_tile = agent.scratch.tile
 
-            while not agent.scratch.finished_action:
-                action = agent.scratch.finished_action.pop()
+            while agent.scratch.finished_action:
+                action = agent.scratch.finished_action.pop(0)
                 if action.event.subject in old_tile.events:
                     del old_tile.events[action.event.subject]
 
             event = agent.scratch.action.event
-            tile.events[event.subject] = agent.scratch.action.event
+            next_tile.events[event.subject] = agent.scratch.action.event
             
             object_action = agent.scratch.action.object_action
             if object_action and object_action.event:
@@ -122,27 +120,29 @@ class Simulation():
                 else:
                     print(f"WARNING: {object_action.address} not in maze")
 
-            agent.scratch.tile = tile
+            agent.scratch.tile = next_tile
             
             print(agent.name.center(80, "-"))
-            if old_tile != tile:
-                print(f"{agent.scratch.name} moved from {old_tile} to {tile}")
+            if old_tile != next_tile:
+                print(f"{agent.scratch.name} moved from {old_tile} to {next_tile}")
             else:
-                print(f"{agent.scratch.name} is still at {tile}")
+                print(f"{agent.scratch.name} is still at {next_tile}")
             print(f"{agent.scratch.name} is {agent.emoji}")
             print(f"{agent.scratch.name} is {agent.description}")
 
-        self.round_updates.add(global_state.time, self.agents)
+            print("updated agent in: ", time() - start, " seconds")
 
+        updated_agents = {name: agent_runner.agent for name, agent_runner in self.agents.items()}
+        self.round_updates.add(global_state.time, self.agents)
         return self.round_updates.last
 
 
 def main():
     round_updates = RoundUpdateSnapshots()
     simulation = Simulation(round_updates)
-    # api.start(simulation.run_loop, simulation.spawn_agent)
-    while(True):
-        simulation.run_loop()
+    api.start(simulation.run_loop, simulation.spawn_agent)
+    #while(True):
+        #simulation.run_loop()
 
 if __name__ == '__main__':
     main()

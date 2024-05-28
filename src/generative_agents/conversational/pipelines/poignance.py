@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pydantic import BaseModel, Field
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
@@ -10,8 +11,9 @@ How would you rate the {{type_}} "{{description}}"?
 """
 
 class Poignance(BaseModel):
-    rating: int = Field(gt=0, lt=11, description="Rating of the poignance of the event.")
+    rating: int = Field(ge=0, lt=11, description="Rating of the poignance of the event. (0-10)")
 
+@lru_cache(maxsize=2048)
 def rate_poignance(agent_name: str, agent_identity: str, type_: str, description: str) -> int:
     poignance = grammar_pipeline.run(model=Poignance, prompt_template=template, template_variables={
         "agent_name": agent_name,

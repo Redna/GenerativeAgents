@@ -1,8 +1,33 @@
 
+from contextlib import contextmanager
 from datetime import datetime
 import hashlib
 
 from pathlib import Path
+from time import perf_counter, time
+
+from functools import wraps
+from colorama import Fore, Style, Back
+
+@contextmanager
+def colored(style, fore, back):
+    print(style + fore + back, end="")
+    yield
+    print(Style.RESET_ALL, end="")
+
+
+def timeit(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = perf_counter()
+        result = func(*args, **kwargs)
+        end = perf_counter()
+        with colored(Style.BRIGHT, Fore.CYAN, Back.BLACK):
+            print(f"{func.__qualname__} took {end - start}")
+        return result
+    return wrapper
+    
+
 
 
 def get_date_string(dt: datetime) -> str:

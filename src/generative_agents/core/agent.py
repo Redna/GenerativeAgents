@@ -3,7 +3,7 @@ from enum import Enum
 from haystack import Pipeline
 from haystack_integrations.components.connectors.langfuse import LangfuseConnector
 
-
+from generative_agents import global_state
 from generative_agents.communication.models import AgentDTO, MovementDTO
 from generative_agents.core.cognitive_components.execution import Execution
 from generative_agents.core.cognitive_components.reflection import Reflection
@@ -17,7 +17,7 @@ from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.persistence.database import initialize_agent
 from generative_agents.simulation.time import DayType, SimulationTime
-from generative_agents.global_state import tick
+from generative_agents.utils import timeit
 
 class Agent:
     def __init__(self, name: str, age: int, description: str, innate_traits: list[str], time: SimulationTime, location: str, emoji: str, activity: str, tile: Tile, tree: MemoryTree = None):
@@ -81,29 +81,28 @@ class Agent:
 
 
 class AgentRunner:
+    __TRACER_NAME = "tracer"
+
     def __init__(self, agent: Agent):
         self.agent = agent
+    
+    @property
+    def pipeline(self):
+        pipeline = Pipeline()
+        # pipeline.add_component(self.__TRACER_NAME, LangfuseConnector(f"Round {global_state.tick}: {self.agent.name}"))
+        pipeline.add_component("perception", Perception(self.agent))
+        pipeline.add_component("retrieval", Retrieval(self.agent))
+        pipeline.add_component("plan", Plan(self.agent))
+        pipeline.add_component("execution", Execution(self.agent))
+        pipeline.add_component("reflection", Reflection(self.agent))
 
-        self.update_pipeline = Pipeline()
-        self.update_pipeline.add_component("tracer", LangfuseConnector(f"Round {tick}: {self.agent.name}"))
-        self.update_pipeline.add_component("perception", Perception(self.agent))
-        self.update_pipeline.add_component("retrieval", Retrieval(self.agent))
-        self.update_pipeline.add_component("plan", Plan(self.agent))
-        self.update_pipeline.add_component("execution", Execution(self.agent))
-        self.update_pipeline.add_component("reflection", Reflection(self.agent))
+        pipeline.connect("perception", "retrieval")
+        pipeline.connect("retrieval", "plan")
+        pipeline.connect("plan", "execution")
+        return pipeline
 
-        self.update_pipeline.connect("perception", "retrieval")
-        self.update_pipeline.connect("retrieval", "plan")
-        self.update_pipeline.connect("plan", "execution")
-
+    @timeit
     def update(self, time: SimulationTime, maze: Maze, agents: dict[str, 'Agent']):
-        # random movement
-        # if not self.scratch.planned_path:
-        #    self.scratch.planned_path = self.__get_random_path(maze)
-        #
-        # self.agent.tile = self.scratch.planned_path.pop(0)
-        # print("Moving to", self.tile)
-
         daytype: DayType = DayType.SAME_DAY
 
         if not self.agent.scratch.time:
@@ -113,9 +112,21 @@ class AgentRunner:
 
         self.agent.scratch.time = time
 
-        result = self.update_pipeline.run(
-                    data={"perception": {"maze": maze},
-                            "plan": {"agents": agents, "daytype": daytype},
-                            "execution": {"maze": maze, "agents": agents}})
+        perception = Perception(self.agent)
+        retrieval = Retrieval(self.agent)
+        plan = Plan(self.agent)
+        execution = Execution(self.agent)
+        reflection = Reflection(self.agent)
 
-        return result["execution"]["next_tile"]
+        perceived = perception.run(maze)["perceived_events"]
+        retrieved = retrieval.run(perceived)["retrieved"]
+        address = plan.run(agents, daytype, retrieved)["address"]
+        next_tile = execution.run(maze, agents, address)["next_tile"]
+        reflection.run()
+
+        #result = self.pipeline.run(
+        #            data={"perception": {"maze": maze},
+        #                    "plan": {"agents": agents, "daytype": daytype},
+        #                    "execution": {"maze": maze, "agents": agents}})
+
+        return next_tile

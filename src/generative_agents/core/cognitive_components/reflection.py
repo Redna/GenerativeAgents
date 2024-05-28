@@ -14,6 +14,7 @@ from generative_agents.conversational.pipelines.action_event_tripple import acti
 from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
 from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
 from generative_agents.simulation.maze import Tile
+from generative_agents.utils import timeit
 
 
 @component
@@ -21,6 +22,7 @@ class Reflection:
     def __init__(self, agent: 'Agent'):
         self.agent = agent
 
+    @timeit
     def run(self):
         if self.agent.scratch.should_reflect():
             self._run_reflect()
@@ -110,7 +112,6 @@ class Reflection:
                                          filling=evidence, expiration=expiration, created=created)
         self.agent.associative_memory.add(perceived_event)
 
-    @lru_cache(maxsize=512)
     def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:
             return 0.1
