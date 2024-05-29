@@ -8,7 +8,8 @@ from haystack import Pipeline, component
 from haystack.core.component import Component
 from haystack.components.builders import DynamicPromptBuilder
 from haystack_integrations.components.generators.llama_cpp import LlamaCppGenerator
-
+from haystack.components.generators.openai import OpenAIGenerator
+from haystack.utils import Secret
 
 from llama_cpp import LlamaGrammar
 from pydantic import BaseModel
@@ -50,11 +51,15 @@ def get_output_hint(model: BaseModel, indent: int=2) -> dict[str, dict[str, any]
                 easy_string += _get_field_definitions(_get_ref_schema(ref), new_indent=new_indent + indent)
 
             else:
+                if "const" in details:
+                    description_str = f"Value: {details['const']}"
+                elif "enum" in details:
+                    description_str += f" | Possible Values: {details['enum']}"
                 easy_string += f"{field_name_str}: # {description_str} | Datatype: [{_type}]\n"
 
         easy_string += f"{indent_str}}}\n"
         return easy_string
-    
+    w
     return _get_field_definitions(schema, new_indent=indent)
 
 
@@ -74,7 +79,12 @@ class PydanticToJSONSchema:
 class GrammarGenerator:
     @component.output_types(generation_kwargs=dict[str, any])
     def run(self, schema: str):
-        return {"generation_kwargs": {"grammar": LlamaGrammar.from_json_schema(schema)}}
+        return {"generation_kwargs": {
+                    "extra_body": {
+                        "grammar": LlamaGrammar.from_json_schema(schema)
+                    }    
+                }}
+
 
 
 @component
@@ -96,7 +106,8 @@ class PrintableGenerator:
         self.__haystack_output__ = c.__haystack_output__
         self.input_name = input_name
         self.output_name = output_name
-        c.warm_up()
+        if hasattr(c, "warm_up"):
+            c.warm_up()
 
     def run(self, **kwargs):
         
@@ -107,7 +118,7 @@ class PrintableGenerator:
 
         with colored(Style.BRIGHT, Fore.GREEN, Back.BLACK):
             out = output[self.output_name][-1] if isinstance(output[self.output_name], list) else output[self.output_name]
-            print(json.loads(out))
+            print(json.dumps(json.loads(out), indent=4))
     
         return output
 
@@ -118,30 +129,24 @@ class _GrammarPipeline:
         # print current working directory
         print(os.getcwd())
 
-        generator = LlamaCppGenerator(
+        generator = OpenAIGenerator(
+            api_key=Secret.from_token("secret"),
             model="models/Meta-Llama-3-8B-Instruct-Q8_0.gguf",
-            n_ctx=8096,
-            n_batch=512,
-            model_kwargs={
-                "n_gpu_layers": -1,
-                "verbose": False
-            },
+            api_base_url="http://localhost:30091/v1/",
             generation_kwargs={
                 "max_tokens": 4096,
-                "temperature": 1,
+                "temperature": 0.8,
+                "top_p": 0.8
             }
         )
 
         printable = PrintableGenerator(generator, "prompt", "replies")
 
         self.pipe.add_component("prompt", instance=DynamicPromptBuilder())
-
-        self.pipe.add_component("grammar_generator", GrammarGenerator())
         self.pipe.add_component("llm", printable)
         self.pipe.add_component("output_parser", LLMOutputParser())
 
         self.pipe.connect("prompt.prompt", "llm.prompt")
-        self.pipe.connect("grammar_generator", "llm.generation_kwargs")
         self.pipe.connect("llm.replies", "output_parser.replies")
 
     def run(
@@ -160,12 +165,22 @@ class _GrammarPipeline:
                 return model.model_validate_json(cache_file.read())
 
         prompt_template += "\n\n### Answer in valid JSON. Output hint:\n" + get_output_hint(model) + "\n###"
+
+        generation_kwargs = {
+            "response_format": {
+                "type": "json_object",
+                "schema": model.model_json_schema()
+            }
+        }
+
         output = self.pipe.run(data={
                 "prompt": {
                     "prompt_source": prompt_template,
                     "template_variables": template_variables,
                 },
-                "grammar_generator": {"schema": json.dumps(model.model_json_schema(), indent=4)},
+                "llm": {
+                    "generation_kwargs": generation_kwargs
+                },
                 "output_parser": {"model": model}
             }
         )["output_parser"]["model"]

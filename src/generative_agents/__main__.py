@@ -140,9 +140,9 @@ class Simulation():
 def main():
     round_updates = RoundUpdateSnapshots()
     simulation = Simulation(round_updates)
-    api.start(simulation.run_loop, simulation.spawn_agent)
-    #while(True):
-        #simulation.run_loop()
+    #api.start(simulation.run_loop, simulation.spawn_agent)
+    while(True):
+        simulation.run_loop()
 
 if __name__ == '__main__':
     main()

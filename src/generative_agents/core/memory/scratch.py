@@ -8,6 +8,7 @@ from generative_agents.simulation.time import SimulationTime
 from generative_agents.core.events import Action
 from generative_agents.simulation.maze import Tile
 from generative_agents.utils import hash_string
+from generative_agents import global_state
 
 @dataclass
 class Scratch():
@@ -46,6 +47,7 @@ class Scratch():
     chatting_with_buffer = dict()
 
     _identity: Tuple[str, str] = ("", "")
+    _last_tick: int = -1
 
     def should_reflect(self):
         if (self.reflection_trigger_counter <= 0): 
@@ -153,11 +155,12 @@ class Scratch():
         commonset += f"Current Date: {self.time.today}\n"
 
         key, cached_identity = self._identity
-
-        if key != hash_string(commonset):
+        
+        if key != hash_string(commonset) and global_state.tick != self._last_tick:
             cached_identity = formulate_identity(self.name, commonset)
             self.description = cached_identity
             new_hash = hash_string(commonset)
             self._identity = (new_hash, cached_identity)
+            self._last_tick = global_state.tick
 
         return cached_identity

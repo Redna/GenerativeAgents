@@ -17,8 +17,8 @@ Your identity is:
 {{identity}}
 
 Here is today's plan in broad-strokes:
-{%- for daily_plan_item in daily_plan %}
-{{loop.index}}.) {{daily_plan_item.activity}} at {{daily_plan_item.time}}
+{%- for start_time, activity in daily_plan.items() %}
+{{loop.index}}.) {{activity}} at {{start_time}}
 {%- endfor %}
 
 How does {{name}}'s complete hourly schedule look for today? You must follow the schedule format above. {{name}}'s day starts at {{wake_up_hour}}. Before that, {{name}} is sleeping."""
