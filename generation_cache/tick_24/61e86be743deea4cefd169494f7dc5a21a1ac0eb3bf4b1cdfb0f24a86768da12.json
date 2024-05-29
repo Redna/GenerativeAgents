@@ -1,0 +1,62 @@
+{
+    "Subtask 1/12": {
+        "time": "09:10 AM",
+        "duration": "5",
+        "activity": "Check and respond to urgent emails"
+    },
+    "Subtask 2/12": {
+        "time": "09:15 AM",
+        "duration": "5",
+        "activity": "Review daily schedule and prioritize tasks"
+    },
+    "Subtask 3/12": {
+        "time": "09:20 AM",
+        "duration": "5",
+        "activity": "Update patient records and medical software"
+    },
+    "Subtask 4/12": {
+        "time": "09:25 AM",
+        "duration": "5",
+        "activity": "Main task: Opening the pharmacy"
+    },
+    "Subtask 5/12": {
+        "time": "09:30 AM",
+        "duration": "5",
+        "activity": "Check and organize dispensary"
+    },
+    "Subtask 6/12": {
+        "time": "09:35 AM",
+        "duration": "5",
+        "activity": "Restock inventory and supplies"
+    },
+    "Subtask 7/12": {
+        "time": "09:40 AM",
+        "duration": "5",
+        "activity": "Prepare for patient consultations"
+    },
+    "Subtask 8/12": {
+        "time": "09:45 AM",
+        "duration": "5",
+        "activity": "Check and respond to customer queries"
+    },
+    "Subtask 9/12": {
+        "time": "09:50 AM",
+        "duration": "5",
+        "activity": "Prepare for prescription filling"
+    },
+    "Subtask 10/12": {
+        "time": "09:55 AM",
+        "duration": "5",
+        "activity": "Review and update patient records"
+    },
+    "Subtask 11/12": {
+        "time": "10:00 AM",
+        "duration": "5",
+        "activity": "Prepare for next tasks"
+    },
+    "Subtask 12/12": {
+        "time": "10:05 AM",
+        "duration": "5",
+        "activity": "Final check and start of the day's operations"
+    }
+}

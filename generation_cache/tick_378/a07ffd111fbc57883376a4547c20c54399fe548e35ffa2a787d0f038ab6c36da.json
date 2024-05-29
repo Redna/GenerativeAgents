@@ -1,0 +1,62 @@
+{
+    "Subtask 1/12": {
+        "time": "10:10 AM",
+        "duration": "5",
+        "activity": "Continue reviewing tables, taking orders, and setting up for lunch service (main task: Work as a waiter at Hobbs Cafe)"
+    },
+    "Subtask 2/12": {
+        "time": "10:15 AM",
+        "duration": "5",
+        "activity": "Take drink orders from customers"
+    },
+    "Subtask 3/12": {
+        "time": "10:20 AM",
+        "duration": "5",
+        "activity": "Deliver drinks to the kitchen"
+    },
+    "Subtask 4/12": {
+        "time": "10:25 AM",
+        "duration": "5",
+        "activity": "Take additional orders from customers"
+    },
+    "Subtask 5/12": {
+        "time": "10:30 AM",
+        "duration": "5",
+        "activity": "Deliver food to tables"
+    },
+    "Subtask 6/12": {
+        "time": "10:35 AM",
+        "duration": "5",
+        "activity": "Check on customers and refill drinks"
+    },
+    "Subtask 7/12": {
+        "time": "10:40 AM",
+        "duration": "5",
+        "activity": "Take additional orders from customers"
+    },
+    "Subtask 8/12": {
+        "time": "10:45 AM",
+        "duration": "5",
+        "activity": "Deliver food to tables"
+    },
+    "Subtask 9/12": {
+        "time": "10:50 AM",
+        "duration": "5",
+        "activity": "Check on customers and refill drinks"
+    },
+    "Subtask 10/12": {
+        "time": "10:55 AM",
+        "duration": "5",
+        "activity": "Take additional orders from customers"
+    },
+    "Subtask 11/12": {
+        "time": "11:00 AM",
+        "duration": "5",
+        "activity": "Deliver food to tables"
+    },
+    "Subtask 12/12": {
+        "time": "11:05 AM",
+        "duration": "5",
+        "activity": "Finish up and prepare for the end of lunch service (main task: Work as a waiter at Hobbs Cafe)"
+    }
+}

@@ -1,0 +1,62 @@
+{
+    "Subtask 1/12": {
+        "time": "11:10 AM",
+        "duration": "5",
+        "activity": "Review tables, take orders"
+    },
+    "Subtask 2/12": {
+        "time": "11:15 AM",
+        "duration": "5",
+        "activity": "Continue reviewing tables, taking orders"
+    },
+    "Subtask 3/12": {
+        "time": "11:20 AM",
+        "duration": "5",
+        "activity": "Take drink orders from customers (main task)"
+    },
+    "Subtask 4/12": {
+        "time": "11:25 AM",
+        "duration": "5",
+        "activity": "Review and confirm drink orders"
+    },
+    "Subtask 5/12": {
+        "time": "11:30 AM",
+        "duration": "5",
+        "activity": "Deliver drinks to the kitchen (main task)"
+    },
+    "Subtask 6/12": {
+        "time": "11:35 AM",
+        "duration": "5",
+        "activity": "Start setting up for lunch service"
+    },
+    "Subtask 7/12": {
+        "time": "11:40 AM",
+        "duration": "5",
+        "activity": "Prepare tables and utensils for customers"
+    },
+    "Subtask 8/12": {
+        "time": "11:45 AM",
+        "duration": "5",
+        "activity": "Double-check drink orders with the kitchen staff"
+    },
+    "Subtask 9/12": {
+        "time": "11:50 AM",
+        "duration": "5",
+        "activity": "Restock supplies and condiments as needed"
+    },
+    "Subtask 10/12": {
+        "time": "11:55 AM",
+        "duration": "5",
+        "activity": "Finalize setup for lunch service"
+    },
+    "Subtask 11/12": {
+        "time": "12:00 PM",
+        "duration": "5",
+        "activity": "Prepare to take food orders from customers"
+    },
+    "Subtask 12/12": {
+        "time": "12:05 PM",
+        "duration": "5",
+        "activity": "Begin taking food orders and delivering them to the kitchen (main task)"
+    }
+}

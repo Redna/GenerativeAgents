@@ -39,12 +39,20 @@ def get_output_hint(model: BaseModel, indent: int=2) -> dict[str, dict[str, any]
                 return ref_schema
             
             if not _type:
-                easy_string += f"{field_name_str}: # {description_str} | Datatype: [object]\n"
                 ref = details.get('$ref')
                 if not ref:
                     ref = details.get('allOf', [{}])[0].get('$ref')
-                easy_string += _get_field_definitions(_get_ref_schema(ref), new_indent=new_indent + indent)
 
+                reference_schema = _get_ref_schema(ref)
+                if reference_schema["type"] not in ['object', 'array']:
+                    if "const" in reference_schema:
+                        description_str = f"Value: {reference_schema['const']}"
+                    elif "enum" in reference_schema:
+                        description_str += f" | Possible Values: {reference_schema['enum']}"
+                    easy_string += f"{field_name_str}: # {description_str} | Datatype: [{reference_schema['type']}]\n"
+                else:
+                    easy_string += f"{field_name_str}: # {description_str} | Datatype: [object]\n"
+                    easy_string += _get_field_definitions(_get_ref_schema(ref), new_indent=new_indent + indent)
             elif _type == 'array' and details.get('items', {}).get('$ref'):
                 easy_string += f"{field_name_str}: # {description_str} | Datatype: [{_type}]\n"
                 ref = details['items']['$ref']
@@ -53,13 +61,11 @@ def get_output_hint(model: BaseModel, indent: int=2) -> dict[str, dict[str, any]
             else:
                 if "const" in details:
                     description_str = f"Value: {details['const']}"
-                elif "enum" in details:
-                    description_str += f" | Possible Values: {details['enum']}"
                 easy_string += f"{field_name_str}: # {description_str} | Datatype: [{_type}]\n"
 
         easy_string += f"{indent_str}}}\n"
         return easy_string
-    w
+    
     return _get_field_definitions(schema, new_indent=indent)
 
 

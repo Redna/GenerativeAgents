@@ -1,0 +1,4 @@
+{
+    "reasoning": "The activity can be done directly in the current area, 'pub', as it involves taking drink orders from customers and delivering them to the kitchen, which is also located in the same area.",
+    "next_area": "pub"
+}

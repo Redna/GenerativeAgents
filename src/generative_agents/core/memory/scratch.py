@@ -148,18 +148,21 @@ class Scratch():
         commonset += f"{self.description}"
         commonset += f"Innate traits: {self.innate_traits}\n"
         commonset += f"Learned traits: {self.learned_traits}\n"
-        if self.action:
-            commonset += f"Currently: {self.action.event.description}\n"
+
         commonset += f"Lifestyle: {self.lifestyle}\n"
         commonset += f"Daily plan requirement: {self.daily_requirements}\n"
-        commonset += f"Current Date: {self.time.today}\n"
 
         key, cached_identity = self._identity
         
         if key != hash_string(commonset) and global_state.tick != self._last_tick:
+            new_hash = hash_string(commonset)
+            
+            if self.action:
+                commonset += f"Currently: {self.action.event.description}\n"
+            commonset += f"Current Date: {self.time.today}\n"
+
             cached_identity = formulate_identity(self.name, commonset)
             self.description = cached_identity
-            new_hash = hash_string(commonset)
             self._identity = (new_hash, cached_identity)
             self._last_tick = global_state.tick
 

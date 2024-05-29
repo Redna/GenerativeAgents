@@ -1,0 +1,4 @@
+{
+    "reasoning": "Update patient records and medical software requires a computer, which is not available in the common room, so John Lin needs to go to an area with a computer.",
+    "next_area": "kitchen"
+}

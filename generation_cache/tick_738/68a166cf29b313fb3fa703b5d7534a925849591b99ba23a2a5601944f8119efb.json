@@ -1,0 +1,62 @@
+{
+    "Subtask 1/12": {
+        "time": "11:10 AM",
+        "duration": "5",
+        "activity": "Eat lunch"
+    },
+    "Subtask 2/12": {
+        "time": "11:15 AM",
+        "duration": "5",
+        "activity": "Check and respond to urgent patient messages"
+    },
+    "Subtask 3/12": {
+        "time": "11:20 AM",
+        "duration": "5",
+        "activity": "Review medical journals for updates on relevant treatments"
+    },
+    "Subtask 4/12": {
+        "time": "11:25 AM",
+        "duration": "5",
+        "activity": "Make a few phone calls to family and friends"
+    },
+    "Subtask 5/12": {
+        "time": "11:30 AM",
+        "duration": "5",
+        "activity": "Take a short walk outside to clear mind"
+    },
+    "Subtask 6/12": {
+        "time": "11:35 AM",
+        "duration": "5",
+        "activity": "Plan evening video call with Mei Lin and Eddy"
+    },
+    "Subtask 7/12": {
+        "time": "11:40 AM",
+        "duration": "5",
+        "activity": "Meditate for a few minutes to relax"
+    },
+    "Subtask 8/12": {
+        "time": "11:45 AM",
+        "duration": "5",
+        "activity": "Plan and prepare tasks for the rest of the day"
+    },
+    "Subtask 9/12": {
+        "time": "11:50 AM",
+        "duration": "5",
+        "activity": "Make a to-do list for the next day"
+    },
+    "Subtask 10/12": {
+        "time": "11:55 AM",
+        "duration": "5",
+        "activity": "Take a few deep breaths and get ready to return to work"
+    },
+    "Subtask 11/12": {
+        "time": "12:00 PM",
+        "duration": "5",
+        "activity": "Return to patient records and medical software"
+    },
+    "Subtask 12/12": {
+        "time": "12:05 PM",
+        "duration": "5",
+        "activity": "Continue with tasks started before lunch break"
+    }
+}

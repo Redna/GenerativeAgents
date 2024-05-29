@@ -1,0 +1,4 @@
+{
+    "reasoning": "Deliver food to customers, check on their satisfaction, and refill drinks as needed can be done in the current area 'pub'",
+    "next_area": "pub"
+}
