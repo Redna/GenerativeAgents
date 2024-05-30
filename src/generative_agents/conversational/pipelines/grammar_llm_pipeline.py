@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from pydantic_core import from_json
 
 from generative_agents import global_state
-from generative_agents.utils import colored
+from generative_agents.utils import colored, generate_tick_hash_from_signature
 
 
 def get_output_hint(model: BaseModel, indent: int=2) -> dict[str, dict[str, any]]:
@@ -116,16 +116,24 @@ class PrintableGenerator:
             c.warm_up()
 
     def run(self, **kwargs):
-        
+        hash_key = generate_tick_hash_from_signature(**kwargs)
+        cache_dir = f".generation_cache/llm/tick_{global_state.tick}"
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file_path = f"{cache_dir}/{hash_key}.json"
+ 
         with colored(Style.BRIGHT, Fore.CYAN, Back.BLACK):
             print(kwargs[self.input_name])
-        
-        output = self.component.run(**kwargs)
+
+        if os.path.exists(cache_file_path):
+            output = json.load(open(cache_file_path, "r"))
+        else:
+            output = self.component.run(**kwargs)
+            json.dump(output, open(cache_file_path, "w"), indent=4)
 
         with colored(Style.BRIGHT, Fore.GREEN, Back.BLACK):
             out = output[self.output_name][-1] if isinstance(output[self.output_name], list) else output[self.output_name]
             print(json.dumps(json.loads(out), indent=4))
-    
+
         return output
 
 class _GrammarPipeline:
@@ -158,18 +166,6 @@ class _GrammarPipeline:
     def run(
         self, model: BaseModel, prompt_template: str, template_variables: dict[str, any]
     ): 
-
-        hash_key = hashlib.sha256((model.__name__ + prompt_template + json.dumps(template_variables, sort_keys=True) + str(global_state.tick)).encode()).hexdigest()
-
-        cache_dir = f".generation_cache/tick_{global_state.tick}"
-        os.makedirs(cache_dir, exist_ok=True)
-
-        cache_file_path = f"{cache_dir}/{hash_key}.json"
-
-        if os.path.exists(cache_file_path):
-            with open(cache_file_path, "rb") as cache_file:
-                return model.model_validate_json(cache_file.read())
-
         prompt_template += "\n\n### Answer in valid JSON. Output hint:\n" + get_output_hint(model) + "\n###"
 
         generation_kwargs = {
@@ -190,8 +186,6 @@ class _GrammarPipeline:
                 "output_parser": {"model": model}
             }
         )["output_parser"]["model"]
-
-        json.dump(output.model_dump(mode='json'), open(cache_file_path, "w"), indent=4)
 
         return output
 

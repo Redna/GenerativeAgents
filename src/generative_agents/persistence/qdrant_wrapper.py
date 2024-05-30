@@ -10,10 +10,10 @@ from qdrant_client import QdrantClient, models
 from datetime import datetime
 
 from generative_agents import global_state
-from sentence_transformers import SentenceTransformer
+from generative_agents.persistence.cachable_sentence_transformer import CachableSentenceTransformer
 
 
-_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+_model = CachableSentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
 DIMENSION = 768
 
