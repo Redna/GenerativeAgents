@@ -45,7 +45,7 @@ class Simulation():
         self.agents: List[Agent] = dict()
         self.__vision_start_tile = self.maze.get_random_tile()
         initialize_database(True)
-        
+
         self.agents["Giorgio Rossi"] = self.initialize_agent(name="Giorgio Rossi",
                                             age=25,
                                             time=global_state.time,
@@ -67,10 +67,43 @@ class Simulation():
                                             activity="idle",
                                             tree=self.initialize_visible_memory_tree(),
                                             tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0],
-                                            description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews."
-                                            )
-        
-        
+                                            description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews.")
+
+        self.agents["Klaus Mueller"] = self.initialize_agent(name="Klaus Mueller",
+                                            age=21,
+                                            time=global_state.time,
+                                            innate_traits=["openness", "extraversion"],
+                                            location="the Ville:Dorm for Oak Hill College:Klaus Mueller's room",
+                                            emoji="🤖",
+                                            activity="idle",
+                                            tree=self.initialize_visible_memory_tree(),
+                                            tile=self.maze.address_tiles["the Ville:Dorm for Oak Hill College:Klaus Mueller's room"][0],
+                                            description="Klaus Mueller, a talented writer, is a student at Oak Hill College, where he studies literature and creative writing. His room is filled with stacks of books and journals, as he spends hours crafting stories and poems that reflect his unique perspective on the world. Klaus's passion for writing is matched only by his love for his friends and family, who often gather in his room to share their own stories and ideas.")
+
+
+        self.agents["Maria Lopez"] = self.initialize_agent(name="Maria Lopez",
+                                            age=22,
+                                            time=global_state.time,
+                                            innate_traits=["Easy going", "Competitive", "Confident"],
+                                            location="the Ville:Dorm for Oak Hill College:Maria Lopez's room",
+                                            emoji="🤖",
+                                            activity="idle",
+                                            tree=self.initialize_visible_memory_tree(),
+                                            tile=self.maze.address_tiles["the Ville:Dorm for Oak Hill College:Maria Lopez's room"][0],
+                                            description="Maria Lopez, a talented musician, is a student at Oak Hill College, where she studies music theory and composition. Her room is filled with the sounds of her guitar and piano, as she practices new songs and melodies late into the night. Maria's passion for music is matched only by her love for her friends and family, who often gather in her room to listen to her latest compositions and share stories of their own.")
+
+        self.agents["Isabella Rodriguez"] = self.initialize_agent(name="Isabella Rodriguez",
+                                            age=28,
+                                            time=global_state.time,
+                                            innate_traits=["Easy going", "Competitive", "Confident"],
+                                            location="the Ville:Isabella Rodriguez's apartment:main room",
+                                            emoji="🤖",
+                                            activity="idle",
+                                            tree=self.initialize_visible_memory_tree(),
+                                            #the Ville, Isabella Rodriguez's apartment, main room, sp-A
+                                            tile=self.maze.address_tiles["the Ville:Isabella Rodriguez's apartment:main room"][0],
+                                            description="Isabella Rodriguez, a talented artist, is known for her vibrant and expressive paintings that capture the beauty of the Ville and its residents. Her studio is a cozy space filled with colorful canvases and the scent of fresh paint, where she spends hours creating new works of art. Isabella's passion for art is matched only by her love for her family and friends, who often inspire her creations with their unique personalities and stories.")
+ 
         self.round_updates = round_updates
 
     def initialize_agent(self, name, age, time, innate_traits, location, emoji, activity, tree, tile, description): 
@@ -140,9 +173,9 @@ class Simulation():
 def main():
     round_updates = RoundUpdateSnapshots()
     simulation = Simulation(round_updates)
-    #api.start(simulation.run_loop, simulation.spawn_agent)
-    while(True):
-        simulation.run_loop()
+    api.start(simulation.run_loop, simulation.spawn_agent)
+    #while(True):
+    #    simulation.run_loop()
 
 if __name__ == '__main__':
     main()

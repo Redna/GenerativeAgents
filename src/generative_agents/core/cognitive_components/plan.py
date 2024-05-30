@@ -224,11 +224,13 @@ class Plan:
         def needs_decomposition(action_description: str, action_duration: int):
             # TODO reformulate this logic
 
-            if "sleep" not in action_description and "bed" not in action_description:
+            desc = action_description.lower()
+
+            if "sleep" not in desc and "bed" not in desc:
                 return True
-            elif "sleeping" in action_description or "asleep" in action_description or "in bed" in action_description:
+            elif "sleeping" in desc or "asleep" in desc or "in bed" in desc:
                 return False
-            elif "sleep" in action_description or "bed" in action_description:
+            elif "sleep" in desc or "bed" in desc:
                 if action_duration > 60:
                     return False
                 return True

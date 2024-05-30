@@ -49,7 +49,8 @@ async def updater():
     while True:   
         update = update_simulation()
         # emit pydantic model as json dict
-        await sio.emit('update', update.dict())     
+        await sio.emit('update', update.dict())
+        await sio.sleep(0.01)
 
 async def init_app():
     whisper.emitter = whisper_emitter
@@ -61,5 +62,5 @@ def start(update: Callable, spawn_agent_function: Callable):
     global update_simulation
     spawn_agent = spawn_agent_function
     update_simulation = update
-    web.run_app(init_app())
+    web.run_app(init_app(), port=8000)
     
