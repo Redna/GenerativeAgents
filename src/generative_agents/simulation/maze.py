@@ -20,6 +20,8 @@ import os
 
 from generative_agents.utils import get_project_root
 
+ASSET_PATH = 'assets/matrix/half_ville'
+
 class Level(Enum):
     WORLD = "world"
     SECTOR = "sector"
@@ -178,11 +180,12 @@ class SimplePathFinder():
         return path[::-1]
 
 
-class Maze:
 
-    maze_name = "The Ville"
-    maze_width = 140
-    maze_height = 100
+class Maze:
+    #TODO load this from the json file
+    maze_name = "Half Ville" # "The Ville"
+    maze_width = 73 # 140
+    maze_height = 82 # 100
     tile_size = 32
 
     def __init__(self):
@@ -201,7 +204,7 @@ class Maze:
         # Tiled export. Then we basically have the block path: 
         # World, Sector, Arena, Game Object -- again, these paths need to be 
         # unique within an instance of Reverie. 
-        blocks_folder = os.path.join(get_project_root(), "assets/matrix/special_blocks")
+        blocks_folder = os.path.join(get_project_root(), f"{ASSET_PATH}/special_blocks")
 
         world_blocks = self.read_special_blocks(blocks_folder + "/world_blocks.csv")
         world_block = world_blocks[0][-1]
@@ -221,7 +224,7 @@ class Maze:
         # [SECTION 3] Reading in the matrices 
         # This is your typical two dimensional matrices. It's made up of 0s and 
         # the number that represents the color block from the blocks folder. 
-        maze_folder = os.path.join(get_project_root(), "assets/matrix/maze")
+        maze_folder = os.path.join(get_project_root(), f"{ASSET_PATH}/maze")
 
         collision_maze_raw = self.read_special_blocks(maze_folder + "/collision_maze.csv")[0]
         sector_maze_raw = self.read_special_blocks(maze_folder + "/sector_maze.csv")[0]
