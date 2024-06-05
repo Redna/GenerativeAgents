@@ -373,7 +373,7 @@ class Plan:
                 self.agent.scratch.action)
         self.agent.scratch.action = next_action
 
-    def _should_react(self, focused_event: dict[str, list[PerceivedEvent]], agents: list[str, 'Agent']):
+    def _should_react(self, focused_event: dict[str, list[PerceivedEvent]], agents: dict[str, 'Agent']):
         """
         Determines what form of reaction the persona should exihibit given the 
         retrieved values. 
@@ -475,10 +475,10 @@ class Plan:
                 if self.agent.scratch.chatting_with_buffer[target_agent.name] > 0:
                     return ReactionMode.DO_OTHER_THINGS, None
 
-            if lets_talk(self, agents[curr_event.subject], focused_event):
+            if lets_talk(self.agent, agents[curr_event.subject], focused_event):
                 return ReactionMode.CHAT, target_agent
 
-            return lets_react(self, agents[curr_event.subject], focused_event)
+            return lets_react(self.agent, agents[curr_event.subject], focused_event)
 
         return ReactionMode.DO_OTHER_THINGS, None
 
@@ -512,7 +512,7 @@ class Plan:
                                   filling=filling,
                                   action_start_time=action_start_time)
 
-        agent_with._create_react_action(inserted_action=description,
+        Plan(agent_with)._create_react_action(inserted_action=description,
                                         inserted_action_duration=10,
                                         action_address=f"<persona> {self.agent.name}",
                                         action_event=(
@@ -746,7 +746,7 @@ class Plan:
     def _generate_conversation_summary(self, conversation_filling: list[ConversationFilling]):
         conversation_history = "\n".join(
             [f"{filling.name}: {filling.utterance}" for filling in conversation_filling])
-        return conversation_summary(conversation_history=conversation_history)
+        return conversation_summary(conversation=conversation_history)
     
 
     def _create_react_action(self, inserted_action, inserted_action_duration,
@@ -778,7 +778,7 @@ class Plan:
         if chatting_with_buffer:
             self.agent.scratch.chatting_with_buffer = {**self.agent.scratch.chatting_with_buffer, **chatting_with_buffer}
         self.agent.scratch.chatting_end_time = chatting_end_time
-        self.associative_memory.add(event)
+        self.agent.associative_memory.add(event)
 
     def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:

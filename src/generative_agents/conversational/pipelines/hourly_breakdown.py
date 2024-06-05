@@ -25,7 +25,7 @@ How does {{name}}'s complete hourly schedule look for today? You must follow the
 
 
 def create_hourly_schedule(name: str, identity: str, daily_plan: list[dict[str, str]], wake_up_hour: str) -> str:
-
+    # TODO use create_model like in task_decomposition.py - freeze the ones until wake_up_hour to make it fixed
     HourlySchedule = create_model("HourlySchedule", **{hour: (str, Field(..., description=f"Brief activity at this time. Must not be empty", min_length=2)) for hour in hours})
 
     schedule = grammar_pipeline.run(model=HourlySchedule, prompt_template=template, template_variables={

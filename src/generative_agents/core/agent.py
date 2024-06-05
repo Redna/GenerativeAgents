@@ -118,10 +118,13 @@ class AgentRunner:
         execution = Execution(self.agent)
         reflection = Reflection(self.agent)
 
+
+        agent_list = {agent.name: agent for agent in agents}
+
         perceived = perception.run(maze)["perceived_events"]
         retrieved = retrieval.run(perceived)["retrieved"]
-        address = plan.run(agents, daytype, retrieved)["address"]
-        next_tile = execution.run(maze, agents, address)["next_tile"]
+        address = plan.run(agent_list, daytype, retrieved)["address"]
+        next_tile = execution.run(maze, agent_list, address)["next_tile"]
         reflection.run()
 
         #result = self.pipeline.run(

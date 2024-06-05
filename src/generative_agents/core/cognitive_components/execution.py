@@ -97,7 +97,7 @@ class Execution:
             # headed to the same location on the maze. It is ok if they end up on the
             # same time, but we try to lower that probability.
             # We take care of that overlap here.
-            persona_name_set = set(agent.name for agent in agents)
+            persona_name_set = set(agents)
             new_target_tiles = []
             for tile in target_tiles:
                 curr_event_set = tile.events

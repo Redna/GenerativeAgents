@@ -1,3 +1,5 @@
+import os
+import json
 from time import sleep, time
 from typing import List
 from generative_agents import global_state
@@ -7,7 +9,7 @@ from generative_agents.communication.models import AgentDTO, RoundUpdateDTO
 from generative_agents.core.agent import Agent, AgentRunner
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.persistence.database import initialize_database
-from generative_agents.simulation.maze import Maze
+from generative_agents.simulation.maze import Maze, BASE_PATH
 from generative_agents.simulation.time import SimulationTime
 
 
@@ -46,68 +48,24 @@ class Simulation():
         self.__vision_start_tile = self.maze.get_random_tile()
         initialize_database(True)
 
-        self.agents["Giorgio Rossi"] = self.initialize_agent(name="Giorgio Rossi",
-                                            age=25,
-                                            time=global_state.time,
-                                            innate_traits=["Easy going", "Competitive", "Confident"],
-                                            location="the Ville:Giorgio Rossi's apartment:main room:bed",
-                                            emoji="🤖",
-                                            activity="idle",
-                                            tree=self.initialize_visible_memory_tree(),
-                                            tile=self.maze.address_tiles["the Ville:Giorgio Rossi's apartment:main room:bed"][0],
-                                            description="Giorgio Rossi, known for his warm and attentive service, is a popular waiter at Hobbs Cafe, a local favorite for both its ambiance and cuisine. When he's not bustling around the cafe, Giorgio indulges in his love for reading, often losing himself in the pages of a good book. He also enjoys taking long, leisurely walks through the village, embracing the tranquility and charm of his surroundings, a perfect contrast to the lively atmosphere of the cafe. Giorgio's simple pleasures and dedication to his job make him a well-regarded member of the community."
-                                            )
+        # load the agents file
+        with open(os.path.join(BASE_PATH, "agents/agent_backstory.json"), "r") as f:
+            agents = json.load(f)['agents']
 
-        self.agents["John Lin"] = self.initialize_agent(name="John Lin",
-                                            age=25,
-                                            time=global_state.time,
-                                            innate_traits=["Easy going", "Competitive", "Confident"],
-                                            location="the Ville:Lin family's house:Mei and John Lin's bedroom",
-                                            emoji="🤖",
-                                            activity="idle",
-                                            tree=self.initialize_visible_memory_tree(),
-                                            tile=self.maze.address_tiles["the Ville:Lin family's house:Mei and John Lin's bedroom"][0],
-                                            description="John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews.")
-
-        self.agents["Klaus Mueller"] = self.initialize_agent(name="Klaus Mueller",
-                                            age=21,
-                                            time=global_state.time,
-                                            innate_traits=["openness", "extraversion"],
-                                            location="the Ville:Dorm for Oak Hill College:Klaus Mueller's room",
-                                            emoji="🤖",
-                                            activity="idle",
-                                            tree=self.initialize_visible_memory_tree(),
-                                            tile=self.maze.address_tiles["the Ville:Dorm for Oak Hill College:Klaus Mueller's room"][0],
-                                            description="Klaus Mueller, a talented writer, is a student at Oak Hill College, where he studies literature and creative writing. His room is filled with stacks of books and journals, as he spends hours crafting stories and poems that reflect his unique perspective on the world. Klaus's passion for writing is matched only by his love for his friends and family, who often gather in his room to share their own stories and ideas.")
-
-
-        self.agents["Maria Lopez"] = self.initialize_agent(name="Maria Lopez",
-                                            age=22,
-                                            time=global_state.time,
-                                            innate_traits=["Easy going", "Competitive", "Confident"],
-                                            location="the Ville:Dorm for Oak Hill College:Maria Lopez's room",
-                                            emoji="🤖",
-                                            activity="idle",
-                                            tree=self.initialize_visible_memory_tree(),
-                                            tile=self.maze.address_tiles["the Ville:Dorm for Oak Hill College:Maria Lopez's room"][0],
-                                            description="Maria Lopez, a talented musician, is a student at Oak Hill College, where she studies music theory and composition. Her room is filled with the sounds of her guitar and piano, as she practices new songs and melodies late into the night. Maria's passion for music is matched only by her love for her friends and family, who often gather in her room to listen to her latest compositions and share stories of their own.")
-
-        self.agents["Isabella Rodriguez"] = self.initialize_agent(name="Isabella Rodriguez",
-                                            age=28,
-                                            time=global_state.time,
-                                            innate_traits=["Easy going", "Competitive", "Confident"],
-                                            location="the Ville:Isabella Rodriguez's apartment:main room",
-                                            emoji="🤖",
-                                            activity="idle",
-                                            tree=self.initialize_visible_memory_tree(),
-                                            #the Ville, Isabella Rodriguez's apartment, main room, sp-A
-                                            tile=self.maze.address_tiles["the Ville:Isabella Rodriguez's apartment:main room"][0],
-                                            description="Isabella Rodriguez, a talented artist, is known for her vibrant and expressive paintings that capture the beauty of the Ville and its residents. Her studio is a cozy space filled with colorful canvases and the scent of fresh paint, where she spends hours creating new works of art. Isabella's passion for art is matched only by her love for her family and friends, who often inspire her creations with their unique personalities and stories.")
+        for agent in agents:
+            self.agents[agent['name']] = self.initialize_agent(name=agent['name'],
+                                                               age=agent['age'],
+                                                                innate_traits=agent['innate_traits'],
+                                                                location=agent['location'],
+                                                                emoji=agent['emoji'],
+                                                                activity="idle",
+                                                                description=agent['description'])
+        #[tile for tile in maze.address_tiles if "the Ville:artist's co-living space:Abigail Chen" in tile]
  
         self.round_updates = round_updates
 
-    def initialize_agent(self, name, age, time, innate_traits, location, emoji, activity, tree, tile, description): 
-        agent = Agent(name=name, age=age, time=time, innate_traits=innate_traits, location=location, emoji=emoji, activity=activity, tile=tile, tree=tree, description=description)
+    def initialize_agent(self, name, age, innate_traits, location, emoji, activity, description): 
+        agent = Agent(name=name, age=age, time=global_state.time, innate_traits=innate_traits, location=location, emoji=emoji, activity=activity, tile=self.maze.address_tiles[location][-1], tree=self.initialize_visible_memory_tree(), description=description)
         return AgentRunner(agent)
 
     def initialize_visible_memory_tree(self):

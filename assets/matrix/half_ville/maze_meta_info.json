@@ -1,0 +1,5 @@
+{"world_name": "the half ville", 
+ "maze_width": 73,
+ "maze_height": 82,
+ "sq_tile_size": 32,
+ "special_constraint": ""}
