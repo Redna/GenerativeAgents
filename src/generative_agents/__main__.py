@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 from time import sleep, time
@@ -10,7 +11,6 @@ from generative_agents.core.agent import Agent, AgentRunner
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.persistence.database import initialize_database
 from generative_agents.simulation.maze import Maze, BASE_PATH
-from generative_agents.simulation.time import SimulationTime
 
 
 class RoundUpdateSnapshots():
@@ -91,8 +91,8 @@ class Simulation():
             start = time()
             print(f"scheduling update for {name}")
             agent = agent_runner.agent
-            next_tile = agent_runner.update(global_state.time, self.maze, agents)
 
+            next_tile = agent_runner.update(global_state.time, self.maze, agents)
             old_tile = agent.scratch.tile
 
             while agent.scratch.finished_action:
