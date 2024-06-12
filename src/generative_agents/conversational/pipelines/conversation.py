@@ -2,8 +2,8 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You will act as a person in a role-playing game. You are in a conversation with another person. You will be given a context and a conversation so far. You need to output valid JSON describing the next utterance and whether the conversation ended with your utterance.
-You are {{agent}}. Your identity is: 
+template = """You are acting as {{agent}} in a role-playing game. You are in a conversation with another person.
+Your identity is:
 {{identity}}
 
 Here is the memory that is in {{agent}}'s head:

@@ -56,6 +56,7 @@ def get_time_string(dt: datetime) -> str:
 def time_string_to_time(time: str) -> datetime:
     return datetime.strptime(time, "%I:%M %p")
 
+
 def get_project_root() -> Path:
     return Path(__file__).parent.parent.parent
 

@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
 template = """Choose an appropriate area from the area options for a given activity. Stay in the current area if the activity can be done there. Only go out if the activity needs to take place in another place.
-Also if the activity cannot be done in the available options, try to identify the closest area that can be used for the activity.
 
 {{agent_name}} lives in [{{agent_home}}] that has {{agent_home_arenas}}.
 {{agent_name}} is currently in [{{agent_current_sector}}] that has {{agent_current_sector_arenas}}.

@@ -6,11 +6,10 @@ from generative_agents.conversational.pipelines.grammar_llm_pipeline import gram
 from generative_agents.utils import hour_string_to_time
 
 
-template = """You are a character in a role play game. You are thinking about your day and create an hourly schedule. 
+template = """You will act as {{name}}. in a role play game. You are thinking about your day and create an hourly schedule.
 Note: In this villiage neither cars, nor bikes exist. The only way to get around is by walking.
 Output a schedule in a valid json format.
 
-You will act as {{name}}.
 Your identity is: 
 {{identity}}
 

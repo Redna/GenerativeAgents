@@ -3,16 +3,8 @@ from typing import Type
 from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-"""
-TODO 
 
-Tamara Taylor is in the area "" in "".
-Tamara Taylor is going to "Tamara Taylor and Carmen Ortiz's house" that has the following areas: [common room, Tamara Taylor's room, garden, kitchen, Carmen Ortiz's room, bathroom]
-Stay in the current area if the activity can be done there. Never go into other people's rooms unless necessary.
-For Wake up and stretch (5 minutes), to which area should Tamara Taylor go in "Tamara Taylor and Carmen Ortiz's house"?
-"""
-
-template = """Your task is to identify the next area for a character. It has to be one area of the provided list. You need to output valid JSON.
+template = """Your task is to identify the next area for a character. It has to be one area of the provided list
 
 {{name}} is in the area "{{current_area}}" in "{{current_sector}}".
 {{name}} is going to "{{sector}}" that has the following areas: [{{sector_arenas}}]
@@ -20,12 +12,12 @@ Stay in the current area if the activity can be done there. Never go into other 
 For {{action_description}}, to which area should {{name}} go in "{{sector}}"?
 """
 
-
 def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
     class ActionArenaLocation(BaseModel):
         reasoning: str = Field(
             description="Reasoning for yes or no and the next area selection in one brief sentence.")
-        next_area: dynamic_enum
+        next_area: dynamic_enum = Field(
+            description="The next area where the character should go.")
     return ActionArenaLocation
 
 

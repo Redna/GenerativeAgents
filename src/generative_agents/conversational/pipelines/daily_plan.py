@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
 
-template = """You act as {{name}} in a roleplay game. Your identity is:
+template = """You act as {{name}} in a role-play game. Your identity is:
 {{identity}}
 
 [Statements]

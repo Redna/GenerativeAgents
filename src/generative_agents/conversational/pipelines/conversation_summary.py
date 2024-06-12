@@ -4,14 +4,11 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You summarize a conversation in one sentence.
-
-Conversation:
+template = """Conversation:
 ---
 {{conversation}}
 ---
-
-What is the summary of the conversation above? Answer in valid json.
+You summarize a conversation in one sentence.
 """
 
 

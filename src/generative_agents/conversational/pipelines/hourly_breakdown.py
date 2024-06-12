@@ -6,13 +6,15 @@ from typing import Dict, List
 
 from pydantic import BaseModel
 
+from generative_agents.utils import time_string_to_time
+
+
 hours = ["12:00 AM", "01:00 AM", "02:00 AM", "03:00 AM", "04:00 AM", "05:00 AM", "06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM",
          "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM", "10:00 PM", "11:00 PM"]
 
-template = """You are a character in a role play game. You are thinking about your day and create an hourly schedule. 
+template = """You will act as {{name}} in a role play game. You are thinking about your day and create an hourly schedule.
 Note: In this villiage neither cars, nor bikes exist. The only way to get around is by walking.
 
-You will act as {{name}}.
 Your identity is: 
 {{identity}}
 
@@ -25,8 +27,10 @@ How does {{name}}'s complete hourly schedule look for today? You must follow the
 
 
 def create_hourly_schedule(name: str, identity: str, daily_plan: list[dict[str, str]], wake_up_hour: str) -> str:
+
+
     # TODO use create_model like in task_decomposition.py - freeze the ones until wake_up_hour to make it fixed
-    HourlySchedule = create_model("HourlySchedule", **{hour: (str, Field(..., description=f"Brief activity at this time. Must not be empty", min_length=2)) for hour in hours})
+    HourlySchedule = create_model("HourlySchedule", **{hour: (str, Field(..., description="Brief activity at this time. Must not be empty", min_length=2)) for hour in hours if time_string_to_time(hour).hour > int(wake_up_hour)})
 
     schedule = grammar_pipeline.run(model=HourlySchedule, prompt_template=template, template_variables={
         "name": name,
@@ -40,10 +44,11 @@ def create_hourly_schedule(name: str, identity: str, daily_plan: list[dict[str, 
 
         list_schedule = list()
 
+        for i in range(wake_up_hour_index):
+            list_schedule.append({"time": hours[i], "activity": "Sleeping"})
+
         for i, (hour, activity) in enumerate(schedule.items()):
-            if i < wake_up_hour_index:
-                list_schedule.append({"time": hour, "activity": "Sleeping"})
-            elif i == wake_up_hour_index:
+            if i == wake_up_hour_index:
                 list_schedule.append({"time": hour, "activity": "Wake up and get ready for the day"})
             else: 
                 list_schedule.append({"time": hour, "activity": activity})

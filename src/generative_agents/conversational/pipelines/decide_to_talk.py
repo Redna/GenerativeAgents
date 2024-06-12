@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You will act as {{init_agent}}. Based on a given scenario you whether to initiate a conversation or not. You will only generate exactly 1 valid JSON.
+template = """You will act as {{init_agent}}. Based on a given scenario, decide whether to initiate a conversation or not.
 Context: {{context}}
 
 Right now, it is {{current_time}}. {{init_agent}} and {{agent_with}} {{last_chat_summary}}.

@@ -2,7 +2,7 @@ from functools import lru_cache
 from pydantic import BaseModel, Field
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You are {{agent_name}}. You are rating the importance of an event and supposed to return a valid json response.
+template = """You are {{agent_name}}. You are rating the importance of an event.
 
 Here is a brief description of {{agent_name}}:
 {{agent_identity}}

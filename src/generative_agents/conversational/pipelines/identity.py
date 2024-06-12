@@ -2,12 +2,11 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """Your task is write a concise description about {{agent}}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...).
-
-Context:
+template = """Context:
 {{context}}
 
-Task: Describe the identity of {{agent}}."""
+Write a concise description about {{agent}}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...).
+"""
 
 class Identity(BaseModel):
     identity: str = Field(description="A concise description about the {{agent}}'s personality, family situation and characteristics. It should answer the question: 'Who is {{agent}}?'")

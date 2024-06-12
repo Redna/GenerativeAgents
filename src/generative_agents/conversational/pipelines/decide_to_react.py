@@ -3,13 +3,13 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You will act as {{agent}}. Based on a given scenario you decide between two options. You will only generate exactly 1 valid JSON object
+template = """You will act as {{agent}}.
 
 Context: {{context}}
 Right now, it is {{current_time}}. 
 {{agent}} is {{agent_observation}} when {{agent}} saw {{agent_with}} in the middle of {{agent_with_observation}}.",
 
-Let's think step by step. Of the following three options, what should {{agent}} do?
+Let's think step by step. Of the following two options, what should {{agent}} do?
 - Option 1: Wait on {{initial_action_description}} until {{agent_with}} is done {{agent_with_action}}
 - Option 2: Continue on to {{initial_action_description}} now
 """
