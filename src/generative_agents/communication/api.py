@@ -3,26 +3,21 @@ from typing import Callable, Coroutine, Dict, Set, Tuple
 from aiohttp import web
 import socketio
 
-from generative_agents.core.whisper.thought import Thought
-from generative_agents.core.whisper import whisper
-
 from .models import AgentDTO
 
+from gevent import pywsgi
 
 sids = set()
 
-whisper_listeners: Set[Tuple] = set()
+sio = socketio.Server(async_mode='gevent', cors_allowed_origins='*')
+app = socketio.WSGIApp(sio)
 
-
-sio = socketio.AsyncServer(cors_allowed_origins="*")
-app = web.Application()
-sio.attach(app)
 
 spawn_agent: Callable = None
-update_simulation: Coroutine = None
+update_simulation: Callable = None
 
 @sio.event
-async def spawn(sid, data: AgentDTO):
+def spawn(sid, data: AgentDTO):
     if not spawn_agent:
         raise Exception("spawn_agent_function not set")
     
@@ -33,26 +28,14 @@ def watch(sid):
     print("Client attached to server", sid)
     sids.add(sid)
 
-@sio.event
-async def listen_to_whisper(sid, data):
-    global whisper_listeners
-    print(f"Client {sid} listening to {data['agent']} at level {data['level']}")
-    whisper_listeners.add((sid, data['agent'], data["level"]))
-
-async def whisper_emitter(thought: Thought):
-    global whisper_listeners
-    for sid, agent, level in whisper_listeners:
-        if agent == thought.agent and level >= thought.level:
-            await sio.emit('whisper', data=thought.__dict__, room=sid)
-
-async def updater():
+def updater():
     while True:   
-        update = await update_simulation()
+        update = update_simulation()
         # emit pydantic model as json dict
-        await sio.emit('update', update.dict())     
+        sio.emit('update', update.dict())
+        sio.sleep(0.01)
 
-async def init_app():
-    whisper.emitter = whisper_emitter
+def init_app():
     sio.start_background_task(updater)
     return app
 
@@ -61,5 +44,4 @@ def start(update: Callable, spawn_agent_function: Callable):
     global update_simulation
     spawn_agent = spawn_agent_function
     update_simulation = update
-    web.run_app(init_app())
-    
+    pywsgi.WSGIServer(('', 8000), init_app()).serve_forever()

@@ -2,8 +2,9 @@ import csv
 from enum import Enum
 from functools import lru_cache
 import heapq
+import json
 import random
-from typing import List, Tuple
+from typing import List, NamedTuple, Tuple
 from pathfinding.core.grid import Grid, GridNode
 from pathfinding.finder.a_star import AStarFinder
 
@@ -19,6 +20,25 @@ from pathfinding.finder.a_star import AStarFinder
 import os
 
 from generative_agents.utils import get_project_root
+
+BASE_PATH = os.path.join(get_project_root(), "assets/matrix/half_ville")
+
+#named tuple for the ville
+"""{"world_name": "the ville", 
+ "maze_width": 140,
+ "maze_height": 100,
+ "sq_tile_size": 32}"""
+MazeInfo = NamedTuple("MazeInfo", [("world_name", str), 
+                                   ("maze_width", int),
+                                   ("maze_height", int),
+                                   ("sq_tile_size", int)])
+
+def _load_maze_meta_info():
+    """load the json file containing the maze meta information"""
+    with open(os.path.join(BASE_PATH, "maze_meta_info.json"), "r") as file:
+        data = json.load(file)
+    
+    return MazeInfo(data["world_name"], data["maze_width"], data["maze_height"], data["sq_tile_size"])
 
 class Level(Enum):
     WORLD = "world"
@@ -179,13 +199,13 @@ class SimplePathFinder():
 
 
 class Maze:
-
-    maze_name = "The Ville"
-    maze_width = 140
-    maze_height = 100
-    tile_size = 32
-
     def __init__(self):
+        maze_info = _load_maze_meta_info()
+        self.maze_name = maze_info.world_name
+        self.maze_width = maze_info.maze_width
+        self.maze_height = maze_info.maze_height
+        self.tile_size = maze_info.sq_tile_size
+
         self.finder = AStarFinder()
         self.maze = []
 
@@ -201,7 +221,7 @@ class Maze:
         # Tiled export. Then we basically have the block path: 
         # World, Sector, Arena, Game Object -- again, these paths need to be 
         # unique within an instance of Reverie. 
-        blocks_folder = os.path.join(get_project_root(), "assets/matrix/special_blocks")
+        blocks_folder = os.path.join(BASE_PATH, "special_blocks")
 
         world_blocks = self.read_special_blocks(blocks_folder + "/world_blocks.csv")
         world_block = world_blocks[0][-1]
@@ -221,7 +241,7 @@ class Maze:
         # [SECTION 3] Reading in the matrices 
         # This is your typical two dimensional matrices. It's made up of 0s and 
         # the number that represents the color block from the blocks folder. 
-        maze_folder = os.path.join(get_project_root(), "assets/matrix/maze")
+        maze_folder = os.path.join(BASE_PATH, "maze")
 
         collision_maze_raw = self.read_special_blocks(maze_folder + "/collision_maze.csv")[0]
         sector_maze_raw = self.read_special_blocks(maze_folder + "/sector_maze.csv")[0]
@@ -288,11 +308,11 @@ class Maze:
 
         self.__visualize_grid_as_csv()
 
-        f = self.address_tiles["the Ville:Moreno family's house:common room"][0]
-        t = self.address_tiles["the Ville:artist's co-living space:Abigail Chen's room"][0]
+        #f = self.address_tiles["the Ville:Moreno family's house:common room"][0]
+        #t = self.address_tiles["the Ville:artist's co-living space:Abigail Chen's room"][0]
 
-        path = self.find_path(f, t)
-        print(self.grid)
+        #path = self.find_path(f, t)
+        #print(self.grid)
 
     def filter_address_tiles(self, fuzzy_address: str) -> List[Tile]:
         """

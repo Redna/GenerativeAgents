@@ -15,6 +15,7 @@ from generative_agents.conversational.pipelines.action_event_tripple import acti
 from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
 from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
 from generative_agents.simulation.maze import Maze, Tile
+from generative_agents.utils import timeit
 
 
 @component
@@ -22,6 +23,7 @@ class Execution:
     def __init__(self, agent: 'Agent'):
         self.agent = agent
 
+    @timeit
     @component.output_types(next_tile=Tile)
     def run(self, maze: Maze, agents: dict[str, 'Agent'], plan: str) -> Tile:
         if "<random>" in plan or self.agent.scratch.planned_path == []:
@@ -95,7 +97,7 @@ class Execution:
             # headed to the same location on the maze. It is ok if they end up on the
             # same time, but we try to lower that probability.
             # We take care of that overlap here.
-            persona_name_set = set(agent.name for agent in agents)
+            persona_name_set = set(agents)
             new_target_tiles = []
             for tile in target_tiles:
                 curr_event_set = tile.events

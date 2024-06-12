@@ -25,7 +25,7 @@ def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
 
 def action_sector_locations(agent_name: str, agent_home: str, agent_home_arenas: str, agent_current_sector: str, agent_current_sector_arenas: str, available_sectors_nearby: str, curr_action_description: str) -> str:
     possible_sectors = ",".join([agent_home, agent_current_sector, available_sectors_nearby]).replace(", ", ",")
-    areas = Enum("Areas", {sector: sector for sector in possible_sectors.split(",")})
+    areas = Enum("Areas", {sector: sector for sector in possible_sectors.split(",") if sector})
     model = model_from_enum(areas)
 
     action_sector_location = grammar_pipeline.run(model=model, prompt_template=template, template_variables={

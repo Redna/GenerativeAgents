@@ -12,6 +12,7 @@ from generative_agents.conversational.pipelines.poignance import rate_poignance
 from generative_agents.core.events import Event, EventType, PerceivedEvent
 from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Level, Maze
+from generative_agents.utils import timeit
 
 
 @component
@@ -19,6 +20,7 @@ class Perception:
     def __init__(self, agent):
         self.agent = agent
 
+    @timeit
     @component.output_types(perceived_events=list[PerceivedEvent])
     def run(self, maze: Maze) -> list[PerceivedEvent]:
         """
@@ -91,7 +93,6 @@ class Perception:
         # <ret_events> is a list of <ConceptNode> instances from the persona's
         # associative memory.
         final_events = []
-        perception_tasks = []
         
         for perceived_event in perceived_events:
             event = deepcopy(perceived_event)
@@ -102,14 +103,15 @@ class Perception:
 
             whisper(self.agent.name, f"{event.description}")
 
-            if type(event) != PerceivedEvent or event.event_type != EventType.CHAT:
+            if not isinstance(event, PerceivedEvent) or event.event_type != EventType.CHAT:
+                event = self._perceive_event(event, type_=EventType.EVENT)
                 event.description = f"{event.subject.split(':')[-1]} is {event.description}"
-
+    
             # We retrieve the latest persona.scratch.retention events. If there is
             # something new that is happening (that is, p_event not in latest_events),
             # then we add that event to the a_mem and return it.
 
-            latest_events = self.associative_memory.latest_events_summary
+            latest_events = self.agent.associative_memory.latest_events_summary
 
             if event.spo_summary not in latest_events:
                 # We start by managing keywords.
@@ -128,7 +130,7 @@ class Perception:
             if event.subject == self.agent.name and event.predicate == "chat with":
                 final_events += [self._perceive_event(event, type_=EventType.CHAT)]
             else:
-                final_events += [evenft]
+                final_events += [event]
 
         for event in final_events:
             self.agent.scratch.reflection_trigger_max -= event.poignancy * 10
@@ -141,11 +143,10 @@ class Perception:
 
             whisper(self.agent.name, f"event poignancy is {event_poignancy}")
             event = PerceivedEvent(**asdict(event), event_type=type_, poignancy=event_poignancy)
-            event = self.associative_memory.add(event)
+            event = self.agent.associative_memory.add(event)
         return event
     
-    @lru_cache(maxsize=512)
-    async def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
+    def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:
             return 0.1
         

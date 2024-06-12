@@ -17,9 +17,7 @@ def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
     return ActionObjectLocation
 
 def action_location_game_object(action_description: str, available_objects: str) -> str:
-    possible_objects = available_objects.split(", ")
-
-    objects = Enum("Objects", {obj: obj for obj in possible_objects.split(",")})
+    objects = Enum("Objects", {obj: obj for obj in available_objects.split(", ")})
     model = model_from_enum(objects)
 
     action_object_location = grammar_pipeline.run(model=model, prompt_template=template, template_variables={

@@ -3,7 +3,7 @@ import datetime
 from enum import Enum
 from functools import lru_cache
 import random
-from generative_agents.utils import get_time_string
+from generative_agents.utils import get_time_string, timeit
 from haystack import component
 
 from generative_agents.conversational.pipelines.poignance import rate_poignance
@@ -48,6 +48,7 @@ class Plan:
     def __init__(self, agent):
         self.agent = agent
 
+    @timeit
     @component.output_types(address=str)
     def run(self, agents: dict[str, 'Agent'], daytype: DayType, retrieved: dict[str, dict[str, list[PerceivedEvent]]]) -> str:
         if daytype == DayType.NEW_DAY or daytype == DayType.FIRST_DAY:
@@ -223,11 +224,13 @@ class Plan:
         def needs_decomposition(action_description: str, action_duration: int):
             # TODO reformulate this logic
 
-            if "sleep" not in action_description and "bed" not in action_description:
+            desc = action_description.lower()
+
+            if "sleep" not in desc and "bed" not in desc:
                 return True
-            elif "sleeping" in action_description or "asleep" in action_description or "in bed" in action_description:
+            elif "sleeping" in desc or "asleep" in desc or "in bed" in desc:
                 return False
-            elif "sleep" in action_description or "bed" in action_description:
+            elif "sleep" in desc or "bed" in desc:
                 if action_duration > 60:
                     return False
                 return True
@@ -370,7 +373,7 @@ class Plan:
                 self.agent.scratch.action)
         self.agent.scratch.action = next_action
 
-    def _should_react(self, focused_event: dict[str, list[PerceivedEvent]], agents: list[str, 'Agent']):
+    def _should_react(self, focused_event: dict[str, list[PerceivedEvent]], agents: dict[str, 'Agent']):
         """
         Determines what form of reaction the persona should exihibit given the 
         retrieved values. 
@@ -472,10 +475,10 @@ class Plan:
                 if self.agent.scratch.chatting_with_buffer[target_agent.name] > 0:
                     return ReactionMode.DO_OTHER_THINGS, None
 
-            if lets_talk(self, agents[curr_event.subject], focused_event):
+            if lets_talk(self.agent, agents[curr_event.subject], focused_event):
                 return ReactionMode.CHAT, target_agent
 
-            return lets_react(self, agents[curr_event.subject], focused_event)
+            return lets_react(self.agent, agents[curr_event.subject], focused_event)
 
         return ReactionMode.DO_OTHER_THINGS, None
 
@@ -509,7 +512,7 @@ class Plan:
                                   filling=filling,
                                   action_start_time=action_start_time)
 
-        agent_with._create_react_action(inserted_action=description,
+        Plan(agent_with)._create_react_action(inserted_action=description,
                                         inserted_action_duration=10,
                                         action_address=f"<persona> {self.agent.name}",
                                         action_event=(
@@ -743,7 +746,7 @@ class Plan:
     def _generate_conversation_summary(self, conversation_filling: list[ConversationFilling]):
         conversation_history = "\n".join(
             [f"{filling.name}: {filling.utterance}" for filling in conversation_filling])
-        return conversation_summary(conversation_history=conversation_history)
+        return conversation_summary(conversation=conversation_history)
     
 
     def _create_react_action(self, inserted_action, inserted_action_duration,
@@ -775,10 +778,8 @@ class Plan:
         if chatting_with_buffer:
             self.agent.scratch.chatting_with_buffer = {**self.agent.scratch.chatting_with_buffer, **chatting_with_buffer}
         self.agent.scratch.chatting_end_time = chatting_end_time
-        self.associative_memory.add(event)
+        self.agent.associative_memory.add(event)
 
-
-    @lru_cache(maxsize=512)
     def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:
             return 0.1

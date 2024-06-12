@@ -14,6 +14,7 @@ from generative_agents.conversational.pipelines.action_event_tripple import acti
 from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
 from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
 from generative_agents.simulation.maze import Tile
+from generative_agents.utils import timeit
 
 
 @component
@@ -21,6 +22,7 @@ class Reflection:
     def __init__(self, agent: 'Agent'):
         self.agent = agent
 
+    @timeit
     def run(self):
         if self.agent.scratch.should_reflect():
             self._run_reflect()
@@ -28,23 +30,25 @@ class Reflection:
             self.agent.scratch.reset_reflection_counter()
 
         last_conversation = self.agent.associative_memory.last_conversation_with(
-            self.scratch.chatting_with)
+            self.agent.scratch.chatting_with)
 
         if last_conversation and last_conversation.filling and last_conversation.filling[-1].end:
             evidence = [last_conversation.id]
 
             planning_thought = self._generate_planning_thought_on_conversation(
                 last_conversation.filling)
-            whisper(self.name, f"planning thought is {planning_thought}")
-            planning_thought = f"For {self.scratch.name}'s planning: {planning_thought}"
+            whisper(self.agent.name, f"planning thought is {planning_thought}")
+            planning_thought = f"For {self.agent.scratch.name}'s planning: {planning_thought}"
             self._add_reflection_thought(planning_thought, evidence)
-            whisper(self.name, f"added reflection thought")
+            whisper(self.agent.name, f"added reflection thought")
 
             memo_thought = self._generate_memo_on_conversation(
                 last_conversation.filling)
-            memo_thought = f"{self.name} {memo_thought}"
-            whisper(self.name, f"memo thought is {memo_thought}")
+            memo_thought = f"{self.agent.name} {memo_thought}"
+            whisper(self.agent.name, f"memo thought is {memo_thought}")
             self._add_reflection_thought(memo_thought, evidence)
+        
+        return {}
 
     def _run_reflect(self):
         """
@@ -108,7 +112,6 @@ class Reflection:
                                          filling=evidence, expiration=expiration, created=created)
         self.agent.associative_memory.add(perceived_event)
 
-    @lru_cache(maxsize=512)
     def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:
             return 0.1
