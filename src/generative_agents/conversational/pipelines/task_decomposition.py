@@ -8,13 +8,12 @@ from generative_agents.conversational.pipelines.grammar_llm_pipeline import gram
 from generative_agents.utils import get_time_string, hour_string_to_time, time_string_to_time
 
 
-template = """You are in a roleplay and act as an agent. You will be asked to decompose a task into subtasks.
-Break down the task in subtasks 5 minute increments. At the end no time should be left. Include a hint on main task in all subtasks.
+template = """You act as {{name}}. You will decompose a task into subtasks.
 
 {{identity}}
 
 Today is {{today}}. {{task_context}}
-In minimum 5 minutes increments, what are the subtasks that {{name}} does when {{name}} is "{{task_description}}" from {{task_start_time}} ~ {{task_end_time}}? (total duration in minutes: {{task_duration}})"""
+In 10 minutes increments, what are the subtasks that {{name}} does when {{name}} is "{{task_description}}" from {{task_start_time}} ~ {{task_end_time}}? (total duration in minutes: {{task_duration}})"""
 
 def create_decomposition_schedule(name: str, identity: str, task_description: str, task_start_time: str, task_end_time: str, task_duration: int, today: str, task_context: str) -> list[dict[str, str]]:
 
@@ -26,7 +25,7 @@ def create_decomposition_schedule(name: str, identity: str, task_description: st
 
     for minutes in range(0, task_duration, 5):
         next_task_start_time = start_time + datetime.timedelta(minutes=minutes)
-        subtasks[f"Subtask {minutes//5+1}/{task_duration // 5}"] = (str, Field(..., description=f"The 5 minutes activity planned at {get_time_string(next_task_start_time)}."))
+        subtasks[f"Subtask {minutes//10+1}/{task_duration // 10}"] = (str, Field(..., description=f"The 10 minutes activity planned at {get_time_string(next_task_start_time)}."))
 
     DecompositionSchedule = create_model("DecompositionSchedule", **subtasks)
 
@@ -40,7 +39,7 @@ def create_decomposition_schedule(name: str, identity: str, task_description: st
         "today": today,
         "task_context": task_context
     })
-    return [(task, 5) for task in schedule.model_dump().values()]
+    return [(task, 10) for task in schedule.model_dump().values()]
 
 if __name__ == "__main__":
     print(create_decomposition_schedule(name="James Peterson",

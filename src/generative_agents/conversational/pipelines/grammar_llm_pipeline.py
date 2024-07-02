@@ -2,22 +2,32 @@ import json
 import os
 import hashlib
 import pickle
+from typing import Any, Dict, List, Optional
 
 from colorama import Back, Fore, Style
 from haystack import Pipeline, component
 from haystack.core.component import Component
-from haystack.components.builders import DynamicPromptBuilder
+from haystack.components.builders import DynamicPromptBuilder, DynamicChatPromptBuilder
 from haystack_integrations.components.generators.llama_cpp import LlamaCppGenerator
 from haystack.components.generators.openai import OpenAIGenerator
 from haystack.utils import Secret
+from haystack.dataclasses import ChatMessage
 
+import instructor
 from llama_cpp import LlamaGrammar
-from pydantic import BaseModel
+from openai import BadRequestError
+from pydantic import BaseModel, ValidationError
 from pydantic_core import from_json
+
+
+from groq import Groq
 
 from generative_agents import global_state
 from generative_agents.utils import colored, generate_tick_hash_from_signature
 
+import contextvars
+
+last_cache_file = contextvars.ContextVar("last_cache_file")
 
 def get_output_hint(model: BaseModel, indent: int=2) -> dict[str, dict[str, any]]:
     schema = model.model_json_schema()
@@ -69,17 +79,43 @@ def get_output_hint(model: BaseModel, indent: int=2) -> dict[str, dict[str, any]
     return _get_field_definitions(schema, new_indent=indent)
 
 
-def escape_json_string(input_str):
-    escaped_str = (
-        input_str.replace("\n", "\\n").replace("\r", "\\r")
-    )
-    return escaped_str
-
 @component
 class PydanticToJSONSchema:
     @component.output_types(schema=str)
     def run(self, model: BaseModel):
         return {"schema": json.dumps(model.model_json_schema(), indent=4)}
+
+
+
+@component
+class GroqInstrcutorGenerator:
+
+    def __init__(
+        self,
+        api_key: Secret = Secret.from_env_var("GROQ_API_KEY"),
+        model: str = "gpt-3.5-turbo",
+    ):
+        client = Groq(
+            api_key=api_key._token,
+        )
+
+        self.client = instructor.from_groq(client, mode=instructor.Mode.TOOLS)
+
+        self.model = model
+
+    @component.output_types(model=BaseModel)
+    def run(self, messages: List[ChatMessage], pydantic_model: BaseModel, generation_kwargs: Optional[Dict[str, Any]] = None):
+        try:
+            response_model = self.client.chat.completions.create(
+                model=self.model,
+                response_model=pydantic_model,
+                messages=[message.to_openai_format() for message in messages]
+            )
+        except Exception as e:
+            raise BadRequestError(f"Error generating response: {e}")
+
+        return {"model": response_model}
+
 
 @component
 class GrammarGenerator:
@@ -98,7 +134,7 @@ class LLMOutputParser:
     @component.output_types(model=BaseModel)
     def run(self, model: BaseModel, replies: list[str]):
 
-        json_result = from_json(escape_json_string(replies[0]))
+        json_result = from_json(replies[0])
         for key, value in json_result.items():
             json_result[key] = value.strip() if isinstance(value, str) else value
 
@@ -116,23 +152,40 @@ class PrintableGenerator:
             c.warm_up()
 
     def run(self, **kwargs):
-        hash_key = generate_tick_hash_from_signature(**kwargs)
+        hashable_kwargs = {k: str(v) for k, v in kwargs.items()}
+
+        hash_key = generate_tick_hash_from_signature(**hashable_kwargs)
         cache_dir = f".generation_cache/llm/tick_{global_state.tick}"
         os.makedirs(cache_dir, exist_ok=True)
         cache_file_path = f"{cache_dir}/{hash_key}.json"
+
+        last_cache_file.set(cache_file_path)
  
         with colored(Style.BRIGHT, Fore.CYAN, Back.BLACK):
             print(kwargs[self.input_name])
 
         if os.path.exists(cache_file_path):
-            output = json.load(open(cache_file_path, "r"))
+            output = dict()
+            cached_output = json.load(open(cache_file_path, "r"))
+
+            if "pydantic_model" in kwargs:
+                pydantic_model = kwargs["pydantic_model"]
+                output[self.output_name] = pydantic_model(**json.loads(cached_output))
         else:
             output = self.component.run(**kwargs)
-            json.dump(output, open(cache_file_path, "w"), indent=4)
+
+            if isinstance(output[self.output_name], BaseModel):
+                json.dump(output[self.output_name].model_dump_json(), open(cache_file_path, "w"), indent=4)
+            else:
+                out = output[self.output_name][-1] if isinstance(output[self.output_name], list) else output[self.output_name]
+                json.dump(out, open(cache_file_path, "w"), indent=4)
 
         with colored(Style.BRIGHT, Fore.GREEN, Back.BLACK):
-            out = output[self.output_name][-1] if isinstance(output[self.output_name], list) else output[self.output_name]
-            print(json.dumps(json.loads(out), indent=4))
+            if isinstance(output[self.output_name], BaseModel):
+                print(json.dumps(output[self.output_name].model_dump_json(), indent=4))
+            else:
+                out = output[self.output_name][-1] if isinstance(output[self.output_name], list) else output[self.output_name]
+                print(json.dumps(json.loads(out), indent=4))
 
         return output
 
@@ -144,13 +197,12 @@ class _GrammarPipeline:
         print(os.getcwd())
 
         generator = OpenAIGenerator(
-            api_key=Secret.from_token("secret"),
-            model="models/Meta-Llama-3-8B-Instruct-Q8_0.gguf",
-            api_base_url="http://localhost:30091/v1/",
+            api_key=Secret.from_token("<API_KEY>"),
+            model="llama3-8b-8192", #"models/Meta-Llama-3-8B-Instruct-Q8_0.gguf",
+            api_base_url="https://api.groq.com/openai/v1", #"http://localhost:30091/v1/",
             generation_kwargs={
                 "max_tokens": 4096,
-                "temperature": 0.8,
-                "top_p": 0.8
+                "temperature": 0.6
             }
         )
 
@@ -166,7 +218,9 @@ class _GrammarPipeline:
     def run(
         self, model: BaseModel, prompt_template: str, template_variables: dict[str, any]
     ): 
-        prompt_template += "\n\n### Answer in valid JSON. Output hint:\n" + get_output_hint(model) + "\n###"
+        #prompt_template += "\n\n### Answer in valid JSON. Output hint:\n" + get_output_hint(model) + "\n###"
+        
+        prompt_template += "\n\n### Answer in valid JSON. Output hint:\n" + json.dumps(model.model_json_schema(), indent=2) + "\n###"
 
         generation_kwargs = {
             "response_format": {
@@ -175,19 +229,77 @@ class _GrammarPipeline:
             }
         }
 
-        output = self.pipe.run(data={
-                "prompt": {
-                    "prompt_source": prompt_template,
-                    "template_variables": template_variables,
-                },
-                "llm": {
-                    "generation_kwargs": generation_kwargs
-                },
-                "output_parser": {"model": model}
-            }
-        )["output_parser"]["model"]
+        try:
+            output = self.pipe.run(data={
+                    "prompt": {
+                        "prompt_source": prompt_template,
+                        "template_variables": template_variables,
+                    },
+                    "llm": {
+                        "generation_kwargs": generation_kwargs
+                    },
+                    "output_parser": {"model": model}
+                }
+            )["output_parser"]["model"]
+        except ValidationError as e:
+            print(f"Error: {e}")
+            #delete the cache file
+            os.remove(last_cache_file.get())
+            raise e
+        except BadRequestError as e:
+            print(f"Error: {e}")
+            raise e
 
         return output
 
 
-grammar_pipeline = _GrammarPipeline()
+class _GroqGrammarPipeline:
+    def __init__(self):
+        self.pipe = Pipeline()
+
+        # print current working directory
+        print(os.getcwd())
+
+        generator = GroqInstrcutorGenerator(
+            api_key=Secret.from_token("<api_key>"),
+            model="llama3-8b-8192"
+        )
+
+        printable = PrintableGenerator(generator, "messages", "model")
+
+        self.pipe.add_component("prompt", instance=DynamicChatPromptBuilder())
+        self.pipe.add_component("llm", printable)
+
+        self.pipe.connect("prompt.prompt", "llm.messages")
+
+    def run(
+        self, model: BaseModel, prompt_template: str, template_variables: dict[str, any]
+    ): 
+        #prompt_template += "\n\n### Answer in valid JSON. Output hint:\n" + get_output_hint(model) + "\n###"
+        
+        messages = [ChatMessage.from_system("Follow the task as closely as possible. Answer in valid JSON. Output hint:\n" + get_output_hint(model)),
+                    ChatMessage.from_user(prompt_template)]
+
+        try:
+            output = self.pipe.run(data={
+                    "prompt": {
+                        "prompt_source": messages,
+                        "template_variables": template_variables
+                    },
+                    "llm": {
+                        "pydantic_model": model
+                    }
+                }
+            )["llm"]["model"]
+        except ValidationError as e:
+            print(f"Error: {e}")
+            #delete the cache file
+            os.remove(last_cache_file.get())
+            raise e
+        except BadRequestError as e:
+            print(f"Error: {e}")
+            raise e
+
+        return output
+
+grammar_pipeline = _GroqGrammarPipeline()

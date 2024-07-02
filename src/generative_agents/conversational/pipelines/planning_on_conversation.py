@@ -3,11 +3,11 @@ from pydantic import BaseModel, Field
 
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You are {{agent}}. You will write in the first person.
+template = """You are {{agent}}.
 Conversation:
 {{conversation}}
 
-What do you need to remember from the conversation? (it is for my planning and should be one full sentence)"""
+In one sentence, what do you need to remember from the conversation? (write it in the first person)"""
 
 
 class PlanningOnConversation(BaseModel):

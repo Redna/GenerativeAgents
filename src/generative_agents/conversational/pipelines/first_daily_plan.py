@@ -6,12 +6,12 @@ from generative_agents.conversational.pipelines.grammar_llm_pipeline import gram
 template = """You are {{name}}. Your identity is:
 {{identity}}
 
-Today is {{today}}. What is {{name}}'s plan today in broad-strokes? (Mention for each activity the time in 12-hour clock format.)
+Today is {{today}}. What is {{name}}'s plan today in broad-strokes?
 {{name}} will wake up and complete the morning routine at {{wake_up_hour}}"""
 
 
 class PlanOutline(BaseModel):
-    hour: int = Field(description="The hour of the day. (1-24)", ge=1, le=24)
+    hour: int = Field(description="The hour of the day when the activity needs to happen. MUST be between 1 and 24. (1-24)", ge=1, le=24)
     description: str = Field(
         description="A brief description of the activity planned for the hour.")
 

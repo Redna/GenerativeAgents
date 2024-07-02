@@ -3,8 +3,8 @@ from pydantic import BaseModel, Field
 from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
 
-template = """You are in a roleplay game and act as an agent. Your task is to estimate the wake up hour of an agent.
-You are {{agent_name}}. Your identity is: 
+template = """Estimate the wake up hour of {{agent_name}}.
+His identity is: 
 {{agent_identity}}. 
 
 {{agent_lifestyle}}.
@@ -13,7 +13,7 @@ When does {{agent_name}} wake up today?"""
 
 
 class WakeUpHour(BaseModel):
-    rationale: str = Field(description="maximum three sentences reason for the wake up hour")
+    rationale: str = Field(description="maximum two sentences reason for the wake up hour")
     wake_up_hour: int = Field(gt=0, lt=13, description="time in 12-hour clock format")
 
 def estimate_wake_up_hour(agent_name: str, agent_identity: str, agent_lifestyle: str) -> str:
