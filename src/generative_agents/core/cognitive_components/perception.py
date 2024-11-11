@@ -8,11 +8,22 @@ import math
 from operator import itemgetter
 from haystack import component
 
+from langgraph.graph import StateGraph
+from langgraph.constants import START, END, Send
+
+from typing import TypedDict
+
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 from generative_agents.core.events import Event, EventType, PerceivedEvent
 from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Level, Maze
-from generative_agents.utils import timeit
+
+class PerceptionState(TypedDict):
+    perceived_events: list[PerceivedEvent]
+
+class Perception:
+    def __init__(self, agent):
+        self.agent = agent   
 
 
 @component
@@ -20,122 +31,62 @@ class Perception:
     def __init__(self, agent):
         self.agent = agent
 
-    @timeit
-    @component.output_types(perceived_events=list[PerceivedEvent])
-    def run(self, maze: Maze) -> list[PerceivedEvent]:
-        """
-        Perceives events around the persona and saves it to the memory, both events 
-        and spaces. 
-
-        We first perceive the events nearby the persona, as determined by its 
-        <vision_radius>. If there are a lot of events happening within that radius, we 
-        take the <att_bandwidth> of the closest events. Finally, we check whether
-        any of them are new, as determined by <retention>. If they are new, then we
-        save those and return the <ConceptNode> instances for those events. 
-
-        INPUT: 
-            maze: An instance of <Maze> that represents the current maze in which the 
-                persona is acting in. 
-        OUTPUT: 
-            ret_events: a list of <ConceptNode> that are perceived and new. 
-        """
-        # PERCEIVE SPACE
-        # We get the nearby tiles given our current tile and the persona's vision
-        # radius.
-        nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile,
-                                             self.agent.scratch.vision_radius)
-
-        # Perceive all nearby tiles and store it in the spatial memory if not already done
+        workflow = StateGraph(PerceptionState)
+        workflow.add_node("perceive_space", self.perceive_space)
+        workflow.add_node("perceive_events", self.perceive_events)
+        workflow.add_node("store_events", self.store_events)
+        workflow.add_edge(START, "perceive_space")
+        workflow.add_edge("perceive_space", "perceive_events")
+        workflow.add_conditional_edges("process_events", self.process_events, ["store_events"])
+        workflow.add_edge("store_events", END)
+    
+    def perceive_space(self, maze: Maze):
+        nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
         for tile in nearby_tiles:
             self.agent.spatial_memory.add(tile)
-
-        # PERCEIVE EVENTS.
-        # We will perceive events that take place in the same arena as the
-        # persona's current arena.
+        
+    def perceive_events(self, maze: Maze):
         current_arena = self.agent.scratch.tile.get_path(Level.ARENA)
-
-        # We do not perceive the same event twice (this can happen if an object_ is
-        # extended across multiple tiles).
         percept_events_dict = dict()
-        # We will order our percept based on the distance, with the closest ones
-        # getting priorities.
         percept_events_list = []
-        # First, we put all events that are occuring in the nearby tiles into the
-        # percept_events_list
+        nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
         for tile in nearby_tiles:
             if not tile.events or tile.get_path(Level.ARENA) != current_arena:
                 continue
-
-            # This calculates the distance between the persona's current tile,
-            # and the target tile.
-            dist = math.dist([tile.x, tile.y], [
-                             self.agent.scratch.tile.x, self.agent.scratch.tile.y])
-
-            # Add any relevant events to our temp set/list with the distant info.
-            
+            dist = math.dist([tile.x, tile.y], [self.agent.scratch.tile.x, self.agent.scratch.tile.y])
             try:
                 for event in tile.events.values():
                     if event.spo_summary not in percept_events_dict:
                         percept_events_list += [[dist, event]]
                         percept_events_dict[event.spo_summary] = event
-                        whisper(self.agent.name, f"nearby event {event.description}")
             except Exception as e:
                 print(e)
-        # We sort, and perceive only persona.scratch.att_bandwidth of the closest
-        # events. If the bandwidth is larger, then it means the persona can perceive
-        # more elements within a small area.
         percept_events_list = sorted(percept_events_list, key=itemgetter(0))
         perceived_events = []
         for dist, event in percept_events_list[:self.agent.scratch.attention_bandwith]:
             perceived_events += [event]
+        return perceived_events
 
-        # Storing events.
-        # <ret_events> is a list of <ConceptNode> instances from the persona's
-        # associative memory.
-        final_events = []
+    def process_events(self, state: PerceptionState):
+        perceived_events = state["perceived_events"]
+        return [Send("store_events", {"perceived_events": [perceived_event]}) for perceived_event in perceived_events]
+
+    def store_events(self, state: PerceptionState):
+        event = state["perceived_events"][0]
+
+        if not event.predicate:
+            event.predicate = "is"
+
+        if not isinstance(event, PerceivedEvent) or event.event_type != EventType.CHAT:
+            event = self._perceive_event(event, type_=EventType.EVENT)
+            event.description = f"{event.subject.split(':')[-1]} is {event.description}"
         
-        for perceived_event in perceived_events:
-            event = deepcopy(perceived_event)
 
-            if not event.predicate:
-                # If the object_ is not present, then we default the event to "idle".
-                event.predicate = "is"
-
-            whisper(self.agent.name, f"{event.description}")
-
-            if not isinstance(event, PerceivedEvent) or event.event_type != EventType.CHAT:
-                event = self._perceive_event(event, type_=EventType.EVENT)
-                event.description = f"{event.subject.split(':')[-1]} is {event.description}"
-    
-            # We retrieve the latest persona.scratch.retention events. If there is
-            # something new that is happening (that is, p_event not in latest_events),
-            # then we add that event to the a_mem and return it.
-
-            latest_events = self.agent.associative_memory.latest_events_summary
-
-            if event.spo_summary not in latest_events:
-                # We start by managing keywords.
-                if ":" in event.object_:
-                    event.object_ = event.object_.split(":")[-1]
-
-            if "(" in event.description:
-                event.description = (event.description.split("(")[1]
-                                     .split(")")[0]
-                                     .strip())
-
-            # If we observe the persona's self chat, we include that in the memory
-            # of the persona here.
-            final_events = []
-
-            if event.subject == self.agent.name and event.predicate == "chat with":
-                final_events += [self._perceive_event(event, type_=EventType.CHAT)]
-            else:
-                final_events += [event]
-
-        for event in final_events:
-            self.agent.scratch.reflection_trigger_max -= event.poignancy * 10
-
-        return {"perceived_events": final_events}
+        if event.subject == self.agent.name and event.predicate == "chat with":
+            event = self._perceive_event(event, type_=EventType.CHAT)
+        self.agent.scratch.reflection_trigger_max -= event.poignancy * 10
+        
+        return {"perceived_events": [event]}
     
     def _perceive_event(self, event: Event, type_: EventType = EventType.EVENT):
         if type(event) != PerceivedEvent:
