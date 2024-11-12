@@ -4,9 +4,6 @@
 from copy import deepcopy
 from dataclasses import asdict
 from functools import lru_cache
-import math
-from operator import itemgetter
-from haystack import Pipeline, component
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 
@@ -18,21 +15,25 @@ from generative_agents.utils import timeit
 
 from generative_agents.persistence import database
 
+ADD_CURRENT_EVENT = "add_current_event"
+RETRIEVE_EVENTS = "retrieve_events"
+RETRIEVE_THOUGHTS = "retrieve_thoughts"
+
+
 class RetrievalState(TypedDict):
     retrieved: dict[str, dict[str, list[PerceivedEvent]]]
 
-@component
 class Retrieval:
     def __init__(self, agent):
         self.agent = agent
         workflow = StateGraph(RetrievalState)
-        workflow.add_node(self.add_current_event)
-        workflow.add_node(self.retrieve_events)
-        workflow.add_node(self.retrieve_thoughts)
-        workflow.add_edge(START, self.add_current_event)
-        workflow.add_edge(self.add_current_event, self.retrieve_events)
-        workflow.add_edge(self.retrieve_events, self.retrieve_thoughts)
-        workflow.add_edge(self.retrieve_thoughts, END)
+        workflow.add_node(ADD_CURRENT_EVENT, self.add_current_event)
+        workflow.add_node(RETRIEVE_EVENTS, self.retrieve_events)
+        workflow.add_node(RETRIEVE_THOUGHTS, self.retrieve_thoughts)
+        workflow.add_edge(START, ADD_CURRENT_EVENT)
+        workflow.add_edge(ADD_CURRENT_EVENT, RETRIEVE_EVENTS)
+        workflow.add_edge(RETRIEVE_EVENTS, RETRIEVE_THOUGHTS)
+        workflow.add_edge(RETRIEVE_THOUGHTS, END)
         self.workflow = workflow
 
     def add_current_event(self, state: RetrievalState) -> RetrievalState:

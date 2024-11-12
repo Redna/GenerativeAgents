@@ -39,6 +39,13 @@ from generative_agents.conversational.pipelines.task_decomposition import create
 from generative_agents.conversational.pipelines.first_daily_plan import create_daily_plan
 
 
+LONG_TERM_PLANNING = "long_term_planning"
+DETERMINE_ACTION = "determine_action"
+CHOOSE_RETRIEVED = "choose_retrieved"
+REACT = "react"
+WRAP_UP = "wrap_up"
+
+
 class ReactionMode(Enum):
     CHAT = "chat"
     WAIT = "wait"
@@ -56,19 +63,18 @@ class Plan:
         self.agents = agents
         workflow = StateGraph(PlanState)
 
-        workflow.add_node("long_term_planning", self._long_term_planning)
-        workflow.add_node("determine_action", self._determine_action)
-        workflow.add_node("choose_retrieved", self._choose_retrieved)
-        workflow.add_node("react", self._react)
-        workflow.add_node("wrap_up", self._wrap_up)
+        workflow.add_node(LONG_TERM_PLANNING, self._long_term_planning)
+        workflow.add_node(DETERMINE_ACTION, self._determine_action)
+        workflow.add_node(CHOOSE_RETRIEVED, self._choose_retrieved)
+        workflow.add_node(REACT, self._react)
+        workflow.add_node(WRAP_UP, self._wrap_up)
 
-        workflow.add_edge(START, "long_term_planning")
-        workflow.add_edge("long_term_planning", "determine_action")
-        workflow.add_edge("determine_action", "choose_retrieved")
-        workflow.add_edge("choose_retrieved", "plan_focused_event")
-        workflow.add_edge("plan_focused_event", "react")
-        workflow.add_edge("react", "wrap_up")
-        workflow.add_edge("wrap_up", END)
+        workflow.add_edge(START, LONG_TERM_PLANNING)
+        workflow.add_edge(LONG_TERM_PLANNING, DETERMINE_ACTION)
+        workflow.add_edge(DETERMINE_ACTION, CHOOSE_RETRIEVED)
+        workflow.add_edge(CHOOSE_RETRIEVED, REACT)
+        workflow.add_edge(REACT, WRAP_UP)
+        workflow.add_edge(WRAP_UP, END)
         self.workflow = workflow
 
     def _react(self, state: PlanState) -> PlanState:

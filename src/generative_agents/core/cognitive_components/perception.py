@@ -5,7 +5,7 @@ from operator import itemgetter
 from langgraph.graph import StateGraph
 from langgraph.constants import START, END, Send
 
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 from generative_agents.core.events import Event, EventType, PerceivedEvent
@@ -13,33 +13,55 @@ from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Level, Maze
 from generative_agents.core.agent import Agent
 
+PERCEIVE_SPACE = "perceive_space"
+PERCEIVE_EVENTS = "perceive_events"
+STORE_EVENTS = "store_events"
+
+def upsert(left: list, right: list):
+    if left is None:
+        left = []
+    if right is None:
+        right = []
+    
+    new_list = left
+
+    for item in right:
+        if item in new_list:
+            new_list[new_list.index(item)] = item
+        else:
+            new_list += [item]
+
+    return new_list
+
 class PerceptionState(TypedDict):
-    perceived_events: list[PerceivedEvent]
+    perceived_events: Annotated[list[PerceivedEvent], upsert]
 
 class Perception:
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: Agent, maze: Maze):
         self.agent = agent
+        self.maze = maze
 
         workflow = StateGraph(PerceptionState)
-        workflow.add_node("perceive_space", self.perceive_space)
-        workflow.add_node("perceive_events", self.perceive_events)
-        workflow.add_node("store_events", self.store_events)
-        workflow.add_edge(START, "perceive_space")
-        workflow.add_edge("perceive_space", "perceive_events")
-        workflow.add_conditional_edges("process_events", self.process_events, ["store_events"])
-        workflow.add_edge("store_events", END)
+        workflow.add_node(PERCEIVE_SPACE, self.perceive_space)
+        workflow.add_node(PERCEIVE_EVENTS, self.perceive_events)
+        workflow.add_node(STORE_EVENTS, self.store_events)
+        workflow.add_edge(START, PERCEIVE_SPACE)
+        workflow.add_edge(PERCEIVE_SPACE, PERCEIVE_EVENTS)
+        workflow.add_conditional_edges(PERCEIVE_EVENTS, self.process_events, [STORE_EVENTS, END])
+        workflow.add_edge(STORE_EVENTS, END)
         self.workflow = workflow
 
-    def perceive_space(self, maze: Maze):
-        nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
+    def perceive_space(self, state: PerceptionState) -> PerceptionState:
+        nearby_tiles = self.maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
         for tile in nearby_tiles:
             self.agent.spatial_memory.add(tile)
+        return PerceptionState(perceived_events=[])
 
-    def perceive_events(self, maze: Maze):
+    def perceive_events(self, state: PerceptionState) -> PerceptionState:
         current_arena = self.agent.scratch.tile.get_path(Level.ARENA)
         percept_events_dict = dict()
         percept_events_list = []
-        nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
+        nearby_tiles = self.maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
         for tile in nearby_tiles:
             if not tile.events or tile.get_path(Level.ARENA) != current_arena:
                 continue
@@ -55,11 +77,12 @@ class Perception:
         perceived_events = []
         for dist, event in percept_events_list[:self.agent.scratch.attention_bandwith]:
             perceived_events += [event]
-        return perceived_events
+        return {"perceived_events": perceived_events}
 
-    def process_events(self, state: PerceptionState):
-        perceived_events = state["perceived_events"]
-        return [Send("store_events", {"perceived_events": [perceived_event]}) for perceived_event in perceived_events]
+    def process_events(self, state: PerceptionState) -> list:
+        perceived_events = state.get("perceived_events", [])
+        send_events = [Send("store_events", {"perceived_events": [perceived_event]}) for perceived_event in perceived_events]
+        return send_events if send_events else [END]
 
     def store_events(self, state: PerceptionState):
         event = state["perceived_events"][0]

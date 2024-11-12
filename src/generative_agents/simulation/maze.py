@@ -290,7 +290,7 @@ class Maze:
         # self.address_tiles['double studio:recreation:pool table'] 
         #   == {(29, 14), (31, 11), (30, 14), (32, 11), ...}, 
         
-        self.address_tiles = dict()
+        self.address_tiles: dict[str, list[Tile]] = dict()
 
         for row in self.tiles:
             for tile in row:

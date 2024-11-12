@@ -35,7 +35,7 @@ class Agent:
             name=self.name,
             age=self.scratch.age,
             inniate_traits=self.scratch.innate_traits,
-            description=self.description,
+            description=self.scratch.description,
             location=self.location,
             emoji=self.emoji,
             activity=self.activity,

@@ -18,6 +18,11 @@ from generative_agents.conversational.pipelines.memo_on_conversation import memo
 from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
 
 
+REFLECT = "reflect"
+RETRIEVE_LAST_CONVERSATION = "retrieve_last_conversation"
+REFLECT_ON_CONVERSATION = "reflect_on_conversation"
+
+
 
 class ReflectionState(TypedDict):
     last_conversation: ConversationFilling
@@ -28,15 +33,17 @@ class Reflection:
         self.agent = agent
 
         workflow = StateGraph(ReflectionState)
-        workflow.add_node("reflect", self._run_reflect)
-        workflow.add_node("retrieve_last_conversation", self._retrieve_last_conversation)
-        workflow.add_node("reflect_on_conversation", self._reflect_on_conversation)
+        workflow.add_node(REFLECT, self._run_reflect)
+        workflow.add_node(RETRIEVE_LAST_CONVERSATION, self._retrieve_last_conversation)
+        workflow.add_node(REFLECT_ON_CONVERSATION, self._reflect_on_conversation)
 
-        workflow.add_conditional_edges(START, self.agent.scratch.should_reflect, "reflect")
-        workflow.add_edge("reflect", END)
-        workflow.add_edge(START, self._retrieve_last_conversation)
-        workflow.add_conditional_edges("retrieve_last_conversation", self._should_reflect_on_conversation, {True: "reflect_on_conversation", False: END})
-        workflow.add_edge("reflect_on_conversation", END)
+        workflow.add_conditional_edges(START, self.agent.scratch.should_reflect, {True: REFLECT, False: END})
+        workflow.add_edge(REFLECT, END)
+        workflow.add_edge(START, RETRIEVE_LAST_CONVERSATION)
+        workflow.add_conditional_edges(RETRIEVE_LAST_CONVERSATION, 
+                                       self._should_reflect_on_conversation, 
+                                       {True: REFLECT_ON_CONVERSATION, False: END})
+        workflow.add_edge(REFLECT_ON_CONVERSATION, END)
         self.workflow = workflow
 
     def _retrieve_last_conversation(self, state: ReflectionState) -> ReflectionState:
