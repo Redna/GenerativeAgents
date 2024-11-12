@@ -1,10 +1,13 @@
 import datetime
-from functools import lru_cache
 
-from haystack import component
+from typing import TypedDict
 
+from langgraph.graph import StateGraph
+from langgraph.constants import START, END
+
+from generative_agents.core.agent import Agent
 from generative_agents.conversational.pipelines.poignance import rate_poignance
-from generative_agents.core.events import Event, EventType, PerceivedEvent
+from generative_agents.core.events import EventType, PerceivedEvent
 from generative_agents.core.whisper.whisper import whisper
 from generative_agents.persistence.database import ConversationFilling
 
@@ -13,22 +16,41 @@ from generative_agents.conversational.pipelines.evidence_and_insights import evi
 from generative_agents.conversational.pipelines.action_event_tripple import action_event_triple
 from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
 from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
-from generative_agents.simulation.maze import Tile
-from generative_agents.utils import timeit
 
 
-@component
+
+class ReflectionState(TypedDict):
+    last_conversation: ConversationFilling
+
+
 class Reflection:
-    def __init__(self, agent: 'Agent'):
+    def __init__(self, agent: Agent):
         self.agent = agent
 
-    @timeit
-    def run(self):
-        if self.agent.scratch.should_reflect():
-            self._run_reflect()
-            whisper(self.agent.name, f"reflected")
-            self.agent.scratch.reset_reflection_counter()
+        workflow = StateGraph(ReflectionState)
+        workflow.add_node("reflect", self._run_reflect)
+        workflow.add_node("retrieve_last_conversation", self._retrieve_last_conversation)
+        workflow.add_node("reflect_on_conversation", self._reflect_on_conversation)
 
+        workflow.add_conditional_edges(START, self.agent.scratch.should_reflect, "reflect")
+        workflow.add_edge("reflect", END)
+        workflow.add_edge(START, self._retrieve_last_conversation)
+        workflow.add_conditional_edges("retrieve_last_conversation", self._should_reflect_on_conversation, {True: "reflect_on_conversation", False: END})
+        workflow.add_edge("reflect_on_conversation", END)
+        self.workflow = workflow
+
+    def _retrieve_last_conversation(self, state: ReflectionState) -> ReflectionState:
+        last_conversation = self.agent.associative_memory.last_conversation_with(
+            self.agent.scratch.chatting_with)
+
+        return {"last_conversation": last_conversation}
+
+    def _should_reflect_on_conversation(self, state: ReflectionState) -> bool:
+        last_conversation = state.get("last_conversation")
+        return last_conversation and last_conversation.filling and last_conversation.filling[-1].end
+
+
+    def _reflect_on_conversation(self, state: ReflectionState) -> ReflectionState:
         last_conversation = self.agent.associative_memory.last_conversation_with(
             self.agent.scratch.chatting_with)
 
@@ -47,8 +69,6 @@ class Reflection:
             memo_thought = f"{self.agent.name} {memo_thought}"
             whisper(self.agent.name, f"memo thought is {memo_thought}")
             self._add_reflection_thought(memo_thought, evidence)
-        
-        return {}
 
     def _run_reflect(self):
         """
@@ -77,11 +97,13 @@ class Reflection:
             for thought, evidence in thoughts.items():
                 self._add_reflection_thought(thought, evidence)
 
+        self.agent.scratch.reset_reflection_counter()
+
     def _generate_reflection_points(self, num_points: int):
             memories = self.agent.associative_memory.get_most_recent_memories(num_points)
             return reflection_points(memory=memories, count=num_points)
-    
-     
+
+
     def _generate_insights_and_evidence(self, memories: list[PerceivedEvent], num_insights: int):
         """
         Generate insights and evidence for the given memories. 
@@ -119,7 +141,7 @@ class Reflection:
         score = rate_poignance(self.agent.name, self.agent.scratch.identity, event_type.value, description)
 
         return int(score) / 10
-    
+
     def _generate_memo_on_conversation(self, utterances: list[ConversationFilling]):
         return memo_on_conversation(agent=self.agent.name, conversation=self.__utterances_to_conversation(utterances))
 

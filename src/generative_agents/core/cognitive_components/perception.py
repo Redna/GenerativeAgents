@@ -1,12 +1,6 @@
-
-
-
-from copy import deepcopy
 from dataclasses import asdict
-from functools import lru_cache
 import math
 from operator import itemgetter
-from haystack import component
 
 from langgraph.graph import StateGraph
 from langgraph.constants import START, END, Send
@@ -17,18 +11,13 @@ from generative_agents.conversational.pipelines.poignance import rate_poignance
 from generative_agents.core.events import Event, EventType, PerceivedEvent
 from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Level, Maze
+from generative_agents.core.agent import Agent
 
 class PerceptionState(TypedDict):
     perceived_events: list[PerceivedEvent]
 
 class Perception:
-    def __init__(self, agent):
-        self.agent = agent   
-
-
-@component
-class Perception:
-    def __init__(self, agent):
+    def __init__(self, agent: Agent):
         self.agent = agent
 
         workflow = StateGraph(PerceptionState)
@@ -39,12 +28,13 @@ class Perception:
         workflow.add_edge("perceive_space", "perceive_events")
         workflow.add_conditional_edges("process_events", self.process_events, ["store_events"])
         workflow.add_edge("store_events", END)
-    
+        self.workflow = workflow
+
     def perceive_space(self, maze: Maze):
         nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
         for tile in nearby_tiles:
             self.agent.spatial_memory.add(tile)
-        
+
     def perceive_events(self, maze: Maze):
         current_arena = self.agent.scratch.tile.get_path(Level.ARENA)
         percept_events_dict = dict()
@@ -80,14 +70,14 @@ class Perception:
         if not isinstance(event, PerceivedEvent) or event.event_type != EventType.CHAT:
             event = self._perceive_event(event, type_=EventType.EVENT)
             event.description = f"{event.subject.split(':')[-1]} is {event.description}"
-        
+
 
         if event.subject == self.agent.name and event.predicate == "chat with":
             event = self._perceive_event(event, type_=EventType.CHAT)
         self.agent.scratch.reflection_trigger_max -= event.poignancy * 10
-        
+
         return {"perceived_events": [event]}
-    
+
     def _perceive_event(self, event: Event, type_: EventType = EventType.EVENT):
         if type(event) != PerceivedEvent:
             event_poignancy = self._rate_perception_poignancy(type_, event.description)
@@ -96,10 +86,10 @@ class Perception:
             event = PerceivedEvent(**asdict(event), event_type=type_, poignancy=event_poignancy)
             event = self.agent.associative_memory.add(event)
         return event
-    
+
     def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:
             return 0.1
-        
+
         score = rate_poignance(self.agent.name, self.agent.scratch.identity, event_type.value, description)
         return int(score) / 10

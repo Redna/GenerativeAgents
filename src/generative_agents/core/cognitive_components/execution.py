@@ -1,31 +1,35 @@
-import datetime
-from functools import lru_cache
 import random
 
-from haystack import component
+from typing import TypedDict
 
-from generative_agents.conversational.pipelines.poignance import rate_poignance
-from generative_agents.core.events import Event, EventType, PerceivedEvent
-from generative_agents.core.whisper.whisper import whisper
-from generative_agents.persistence.database import ConversationFilling
+from langgraph.graph import StateGraph
+from langgraph.constants import START, END
 
-from generative_agents.conversational.pipelines.reflection_points import reflection_points
-from generative_agents.conversational.pipelines.evidence_and_insights import evidence_and_insights
-from generative_agents.conversational.pipelines.action_event_tripple import action_event_triple
-from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
-from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
 from generative_agents.simulation.maze import Maze, Tile
-from generative_agents.utils import timeit
+from generative_agents.core.agent import Agent
 
 
-@component
+class ExecutionState(TypedDict):
+    address: str
+    next_tile: Tile
+
+
 class Execution:
-    def __init__(self, agent: 'Agent'):
+    def __init__(self, agent: Agent, maze: Maze, agents: dict[str, 'Agent']):
         self.agent = agent
+        self.maze = maze
+        self.agents = agents
 
-    @timeit
-    @component.output_types(next_tile=Tile)
-    def run(self, maze: Maze, agents: dict[str, 'Agent'], plan: str) -> Tile:
+        workflow = StateGraph(ExecutionState)
+        workflow.add_node("execute", self.run)
+
+        workflow.add_edge(START, "execute")
+        workflow.add_edge("execute", END)
+        self.workflow = workflow
+
+    def run(self, state: ExecutionState) -> ExecutionState:
+        plan = state.get("address")
+
         if "<random>" in plan or self.agent.scratch.planned_path == []:
             self.agent.scratch.action_path_set = False
 
@@ -38,18 +42,18 @@ class Execution:
 
             if "<persona>" in plan:
                 # Executing persona-persona interaction.
-                target_persona_tile = agents[plan.split(
+                target_persona_tile = self.agents[plan.split(
                     "<persona>")[-1].strip()].scratch.tile
-                potential_path = maze.find_path(self.agent.scratch.tile,
-                                                target_persona_tile)
+                potential_path = self.maze.find_path(self.agent.scratch.tile,
+                                                     target_persona_tile)
 
                 if len(potential_path) <= 2:
                     target_tiles = [potential_path[0]]
                 else:
-                    potential_1 = maze.find_path(self.agent.scratch.tile,
-                                                 potential_path[int(len(potential_path)/2)])
-                    potential_2 = maze.find_path(self.agent.scratch.tile,
-                                                 potential_path[int(len(potential_path)/2)+1])
+                    potential_1 = self.maze.find_path(self.agent.scratch.tile,
+                                                      potential_path[int(len(potential_path)/2)])
+                    potential_2 = self.maze.find_path(self.agent.scratch.tile,
+                                                      potential_path[int(len(potential_path)/2)+1])
                     if len(potential_1) <= len(potential_2):
                         target_tiles = [
                             potential_path[int(len(potential_path)/2)]]
@@ -66,23 +70,24 @@ class Execution:
 
             elif "<random>" in plan:
                 # Executing a random location action.
-                target_tiles = [maze.get_random_tile(self.agent.scratch.tile)]
+                target_tiles = [self.maze.get_random_tile(
+                    self.agent.scratch.tile)]
             else:
                 # This is our default execution. We simply take the persona to the
                 # location where the current action is taking place.
                 # Retrieve the target addresses. Again, plan is an action address in its
                 # string form. <maze.address_tiles> takes this and returns candidate
                 # coordinates.
-                if plan not in maze.address_tiles:
+                if plan not in self.maze.address_tiles:
                     fallback_plan = ":".join(plan.split(":")[0:-1])
 
-                    if fallback_plan not in maze.address_tiles:
+                    if fallback_plan not in self.maze.address_tiles:
                         fallback_plan = random.choice(
-                            list(maze.address_tiles.keys()))
+                            list(self.maze.address_tiles.keys()))
 
-                    target_tiles = maze.address_tiles[fallback_plan]
+                    target_tiles = self.maze.address_tiles[fallback_plan]
                 else:
-                    target_tiles = maze.address_tiles[plan]
+                    target_tiles = self.maze.address_tiles[plan]
 
             # There are sometimes more than one tile returned from this (e.g., a tabe
             # may stretch many coordinates). So, we sample a few here. And from that
@@ -97,7 +102,7 @@ class Execution:
             # headed to the same location on the maze. It is ok if they end up on the
             # same time, but we try to lower that probability.
             # We take care of that overlap here.
-            persona_name_set = set(agents)
+            persona_name_set = set(self.agents)
             new_target_tiles = []
             for tile in target_tiles:
                 curr_event_set = tile.events
@@ -120,7 +125,7 @@ class Execution:
                 # an input, and returns a list of coordinate tuples that becomes the
                 # path.
                 # e.g., [(0, 1), (1, 1), (1, 2), (1, 3), (1, 4)...]
-                curr_path = maze.find_path(curr_tile, i)
+                curr_path = self.maze.find_path(curr_tile, i)
 
                 if not closest_target_tile:
                     closest_target_tile = i

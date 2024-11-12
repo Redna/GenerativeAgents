@@ -1,10 +1,11 @@
 
 import datetime
 from enum import Enum
-from functools import lru_cache
 import random
-from generative_agents.utils import get_time_string, timeit
-from haystack import component
+from generative_agents.utils import get_time_string
+from langgraph.graph import StateGraph
+from langgraph.constants import START, END
+
 
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 
@@ -15,7 +16,7 @@ from generative_agents.simulation.maze import Level
 from generative_agents.simulation.time import DayType
 from generative_agents.persistence import database
 
-
+from generative_agents.core.agent import Agent
 from generative_agents.conversational.pipelines.wake_up_hour import estimate_wake_up_hour
 from generative_agents.conversational.pipelines.daily_plan import create_daily_plan_and_status
 from generative_agents.conversational.pipelines.hourly_breakdown import create_hourly_schedule
@@ -42,58 +43,39 @@ class ReactionMode(Enum):
     CHAT = "chat"
     WAIT = "wait"
     DO_OTHER_THINGS = "do other things"
-    
-@component
+
+class PlanState(Enum):
+    daytype: DayType
+    retrieved: dict[str, dict[str, list[PerceivedEvent]]]
+    address: dict[str, str]
+    focused_event: dict[str, list[PerceivedEvent]]
+
 class Plan:
-    def __init__(self, agent):
+    def __init__(self, agent: Agent, agents: dict[str, Agent]):
         self.agent = agent
+        self.agents = agents
+        workflow = StateGraph(PlanState)
 
-    @timeit
-    @component.output_types(address=str)
-    def run(self, agents: dict[str, 'Agent'], daytype: DayType, retrieved: dict[str, dict[str, list[PerceivedEvent]]]) -> str:
-        if daytype == DayType.NEW_DAY or daytype == DayType.FIRST_DAY:
-            whisper(self.agent.name, f"planning first daily plan")
-            self._long_term_planning(daytype)
+        workflow.add_node("long_term_planning", self._long_term_planning)
+        workflow.add_node("determine_action", self._determine_action)
+        workflow.add_node("choose_retrieved", self._choose_retrieved)
+        workflow.add_node("react", self._react)
+        workflow.add_node("wrap_up", self._wrap_up)
 
-        if self.agent.scratch.is_action_finished():
-            self._determine_action()
-            whisper(
-                self.agent.name, f"planning to {self.agent.scratch.action.event.description}")
+        workflow.add_edge(START, "long_term_planning")
+        workflow.add_edge("long_term_planning", "determine_action")
+        workflow.add_edge("determine_action", "choose_retrieved")
+        workflow.add_edge("choose_retrieved", "plan_focused_event")
+        workflow.add_edge("plan_focused_event", "react")
+        workflow.add_edge("react", "wrap_up")
+        workflow.add_edge("wrap_up", END)
+        self.workflow = workflow
 
-         # PART 3: If you perceived an event that needs to be responded to (saw
-        # another persona), and retrieved relevant information.
-        # Step 1: Retrieved may have multiple events represented in it. The first
-        #         job here is to determine which of the events we want to focus
-        #         on for the persona.
-        #         <focused_event> takes the form of a dictionary like this:
-        #         dictionary {["curr_event"] = <ConceptNode>,
-        #                     ["events"] = [<ConceptNode>, ...],
-        #                     ["thoughts"] = [<ConceptNode>, ...]}
-
-        focused_event = False
-        if retrieved.keys():
-            focused_event = self._choose_retrieved(retrieved)
-            if focused_event:
-                whisper(
-                    self.agent.name, f"focusing on {focused_event['curr_event'].description}")
-            else:
-                whisper(self.agent.name, f"not focusing on any persona event")
-
-        # Step 2: Once we choose an event, we need to determine whether the
-        #         persona will take any actions for the perceived event. There are
-        #         three possible modes of reaction returned by _should_react.
-        #         a) "chat with {target_persona.name}"
-        #         b) "react"
-        #         c) False
-
-        if self.agent.scratch.action.event.predicate == "chat with":
-            last_utterance = self.agent.scratch.action.event.filling[-1]
-            if not last_utterance.end and last_utterance.name != self.agent.name:
-                self._chat_react(agent_with=agents[last_utterance.name])
-                focused_event = None
+    def _react(self, state: PlanState) -> PlanState:
+        focused_event = state["focused_event"]
 
         if focused_event:
-            reaction_mode, payload = self._should_react(focused_event, agents)
+            reaction_mode, payload = self._should_react(focused_event, self.agents)
             whisper(
                 self.agent.name, f"reaction mode is {reaction_mode} with payload {payload}")
             if reaction_mode and reaction_mode != ReactionMode.DO_OTHER_THINGS:
@@ -104,11 +86,15 @@ class Plan:
                     self._wait_react(payload)
                 # elif reaction_mode == "do other things":
                 #   _chat_react(persona, focused_event, reaction_mode, personas)
+        else:
+            if self.agent.scratch.action.event.predicate == "chat with":
+                last_utterance = self.agent.scratch.action.event.filling[-1]
+                if not last_utterance.end and last_utterance.name != self.agent.name:
+                    self._chat_react(agent_with=self.agents[last_utterance.name])
 
-        # Step 3: Chat-related state clean up.
-        # If the persona is not chatting with anyone, we clean up any of the
-        # chat-related states here.
+        return {}
 
+    def _wrap_up(self, state: PlanState) -> PlanState:
         if self.agent.scratch.action.event.predicate != "chat with":
             self.agent.scratch.chatting_with = None
             self.agent.scratch.chat = None
@@ -125,7 +111,7 @@ class Plan:
 
         return {"address": self.agent.scratch.action.address}
 
-    def _long_term_planning(self, daytype: DayType):
+    def _long_term_planning(self, state: PlanState) -> PlanState:
         """
         Formulates the persona's daily long-term plan if it is the start of a new 
         day. This basically has two components: first, we create the wake-up hour, 
@@ -135,11 +121,17 @@ class Plan:
                     "New day", or False (for neither). This is important because we
                     create the personas' long term planning on the new day. 
         """
-        # We start by creating the wake up hour for the persona.
-        wake_up_hour = estimate_wake_up_hour(
-            self.agent.name, self.agent.scratch.identity, self.agent.scratch.lifestyle)
+        daytype = state["daytype"]
 
-        whisper(self.agent.name, f"wake up hour is at {wake_up_hour}")
+        if daytype != DayType.NEW_DAY and daytype != DayType.FIRST_DAY:
+            return {}
+
+        if daytype == DayType.NEW_DAY or daytype == DayType.FIRST_DAY:
+            # We start by creating the wake up hour for the persona.
+            wake_up_hour = estimate_wake_up_hour(
+                self.agent.name, self.agent.scratch.identity, self.agent.scratch.lifestyle)
+
+            whisper(self.agent.name, f"wake up hour is at {wake_up_hour}")
 
         # When it is a new day, we start by creating the daily_req of the persona.
         # Note that the daily_req is a list of strings that describe the persona's
@@ -190,6 +182,8 @@ class Plan:
 
         self.agent.associative_memory.add(perceived_plan)
 
+        return {}
+
     def _generate_daily_plan_and_current_status(self):
         retrieved_events = self._get_related_to_text(
             f"{self.agent.name}'s plan for {self.agent.scratch.time.as_string()}.", EventType.PLAN)
@@ -200,7 +194,7 @@ class Plan:
 
         for retrieved_event in retrieved_events:
             statements += f"{retrieved_event.created.strftime('%A %B %d -- %H:%M %p')}: {retrieved_event.description}\n"
-        
+
         return create_daily_plan_and_status(self.agent.name,
                                         self.agent.scratch.identity,
                                         self.agent.scratch.time.today,
@@ -218,8 +212,10 @@ class Plan:
 
     def _get_related_events(self, event: PerceivedEvent, event_type: EventType = None):
         return self._get_related_to_text(event.description, event_type)
-    
-    def _determine_action(self):
+
+    def _determine_action(self, state: PlanState) -> PlanState:
+        if not self.agent.scratch.is_action_finished():
+            return {}
 
         def needs_decomposition(action_description: str, action_duration: int):
             # TODO reformulate this logic
@@ -372,6 +368,8 @@ class Plan:
             self.agent.scratch.finished_action.append(
                 self.agent.scratch.action)
         self.agent.scratch.action = next_action
+
+        return {}
 
     def _should_react(self, focused_event: dict[str, list[PerceivedEvent]], agents: dict[str, 'Agent']):
         """
@@ -656,11 +654,11 @@ class Plan:
 
     def _generate_action_pronunciatio(self, action_description):
         return action_pronunciatio(action_description)
-    
+
     def _generate_action_event_triple(self, action_description):
         return action_event_triple(self.agent.name, action_description)
-    
-    def _choose_retrieved(self, retrieved: dict[str, dict[str, list[PerceivedEvent]]]):
+
+    def _choose_retrieved(self, state: PlanState) -> PlanState:
         """
         Retrieved elements have multiple core "curr_events". We need to choose one
         event to which we are going to react to. We pick that event here. 
@@ -674,21 +672,31 @@ class Plan:
                         ["events"] = [<ConceptNode>, ...], 
                         ["thoughts"] = [<ConceptNode>, ...] }
         """
+        retrieved = state["retrieved"]
+
+        if not retrieved:
+            return {"focused_event": None}
+
+        if self.agent.scratch.action.event.predicate == "chat with":
+            last_utterance = self.agent.scratch.action.event.filling[-1]
+            if not last_utterance.end and last_utterance.name != self.agent.name:
+                return {"focused_event": None}
+
         no_self_event_retrieved = {description: context for description, context in retrieved.items(
         ) if context["curr_event"].subject != self.agent.name}
 
         persona_context = [context for _, context in no_self_event_retrieved.items(
         ) if ":" not in context["curr_event"].subject]
         if persona_context:
-            return random.choice(persona_context)
+            return {"focused_event": random.choice(persona_context)}
 
         non_idle_context = [context for _, context in no_self_event_retrieved.items(
         ) if "idle" not in context["curr_event"].description]
         if non_idle_context:
-            return random.choice(non_idle_context)
+            return {"focused_event": random.choice(non_idle_context)}
 
-        return None
-    
+        return {"focused_event": None}
+
     def _generate_conversation(self, agent_with: 'Agent'):
         retrieved = self.agent.associative_memory.retrieve_relevant_entries(
             [agent_with.name], 50)
@@ -730,7 +738,7 @@ class Plan:
                                 conversation=active_conversation_string,
                                 memory=memory,
                                 past_context=past_context)
-    
+
 
     def _generate_summarize_agent_relationship(self, agent_with: 'Agent', retrieved: list[PerceivedEvent]):
         """
@@ -741,20 +749,20 @@ class Plan:
         return summarize_chat_relationship(agent=self.agent.name,
                                            agent_with=agent_with.name,
                                            statements=statements)
-    
+
 
     def _generate_conversation_summary(self, conversation_filling: list[ConversationFilling]):
         conversation_history = "\n".join(
             [f"{filling.name}: {filling.utterance}" for filling in conversation_filling])
         return conversation_summary(conversation=conversation_history)
-    
+
 
     def _create_react_action(self, inserted_action, inserted_action_duration,
                              action_address, action_event, chatting_with, chat, chatting_with_buffer,
                              chatting_end_time, action_pronunciatio, filling=[], action_start_time=None):
 
         event_poignancy = self._rate_perception_poignancy(EventType.CHAT, inserted_action)
-        
+
         event = PerceivedEvent(depth=0,
                       subject=self.agent.name,
                       predicate=action_event[1],
@@ -764,7 +772,7 @@ class Plan:
                       poignancy=event_poignancy,
                       event_type=EventType.CHAT,
                       tile=self.agent.scratch.tile)
-        
+
         next_action = Action(address=action_address,
                              start_time=action_start_time,
                              duration=inserted_action_duration,
@@ -788,7 +796,7 @@ class Plan:
 
         # TODO properly check the output here
         return int(score) / 10
-    
+
     def _update_schedule(self, inserted_action, inserted_action_duration):
         start_hour, end_hour = self.__calculate_start_end_hours()
         start_index, end_index = self.__get_start_and_end_index(start_hour, end_hour)
@@ -875,4 +883,3 @@ class Plan:
                                             task_start_time=start_time,
                                             task_end_time=end_time)
 
-    
