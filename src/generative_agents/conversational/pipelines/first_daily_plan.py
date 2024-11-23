@@ -1,13 +1,15 @@
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
+llm = ChatGroq(model="llama3-8b-8192", name="daily_plan")
 
-template = """You are {{name}}. Your identity is:
-{{identity}}
+template = """You are {name}. Your identity is:
+{identity}
 
-Today is {{today}}. What is {{name}}'s plan today in broad-strokes?
-{{name}} will wake up and complete the morning routine at {{wake_up_hour}}"""
+Today is {today}. What is {name}'s plan today in broad-strokes?
+{name} will wake up and complete the morning routine at {wake_up_hour}"""
 
 
 class PlanOutline(BaseModel):
@@ -22,14 +24,10 @@ class DailyPlan(BaseModel):
 
 
 def create_daily_plan(name: str, identity: str, today: str, wake_up_hour: str) -> list[dict[str, str]]:
-    plan = grammar_pipeline.run(model=DailyPlan, prompt_template=template, template_variables={
-        "name": name,
-        "identity": identity,
-        "today": today,
-        "wake_up_hour": wake_up_hour
-    })
+    structured_llm = llm.with_structured_output(DailyPlan)
 
-    # convert 24-hour (int) clock to 12-hour clock
+    content = template.format(name=name, identity=identity, today=today, wake_up_hour=wake_up_hour)
+    plan = structured_llm.with_retry(stop_after_attempt=3).invoke([HumanMessage(content=content)])
 
     converted_plan = {}
 

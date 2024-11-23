@@ -1,13 +1,15 @@
-from enum import Enum
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-template = """You are {{agent}}. You will write in the first person.
+llm = ChatGroq(model="llama3-8b-8192", name="memo_on_conversation")
+
+template = """You are {agent}. You will write in the first person.
 Conversation:
-{{conversation}}
+{conversation}
 
-What did you ({{agent}}) find interesting from the conversation? In a full sentence."""
+What did you ({agent}) find interesting from the conversation? In a full sentence."""
 
 class MemoOnConversation(BaseModel):
     memo: str = Field(
@@ -15,10 +17,10 @@ class MemoOnConversation(BaseModel):
 
 
 def memo_on_conversation(agent: str, conversation: str) -> str:
-    memo_on_conversation = grammar_pipeline.run(model=MemoOnConversation, prompt_template=template, template_variables={
-        "agent": agent,
-        "conversation": conversation
-    })
+    structured_llm = llm.with_structured_output(MemoOnConversation)
+
+    content = template.format(agent=agent, conversation=conversation)
+    memo_on_conversation = structured_llm.invoke([HumanMessage(content=content)])
 
     return memo_on_conversation.memo
 

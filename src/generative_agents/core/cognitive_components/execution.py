@@ -7,7 +7,7 @@ from langgraph.constants import START, END
 
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.core.agent import Agent
-
+from generative_agents.utils import logger
 
 class ExecutionState(TypedDict):
     address: str
@@ -150,5 +150,6 @@ class Execution:
         description += f" @ {self.agent.scratch.action.address}"
 
         self.agent.emoji = self.agent.scratch.action.emoji
-        self.agent.description = description
+        self.agent.scratch.description = description
+        logger.log(self.agent.name, f"{self.agent.emoji}, {self.agent.scratch.description} at {ret}")
         return {"next_tile": ret}

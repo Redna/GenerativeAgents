@@ -1,36 +1,45 @@
 import asyncio
-import os
+
 import json
-from time import sleep, time
-from typing import Annotated, List, TypedDict
+import os
+import uuid
+
+from langgraph.constants import END, START, Send
+from langchain_core.globals import set_llm_cache
+from langchain_community.cache import SQLiteCache
 
 from langgraph.graph import StateGraph
-from langgraph.constants import START, END, Send
-
+from langfuse import callback
+from dotenv import load_dotenv
+from tqdm import tqdm
+from datetime import datetime
 from generative_agents import global_state
-
-from generative_agents.communication import api
 from generative_agents.communication.models import AgentDTO, RoundUpdateDTO
 from generative_agents.core.agent import Agent
 from generative_agents.core.agent_runner import AgentRunner, AgentRunnerState
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.persistence.database import initialize_database
-from generative_agents.simulation.maze import Maze, BASE_PATH
+from generative_agents.simulation.maze import BASE_PATH, Maze
+from generative_agents.simulation.state import SimulationState
+from generative_agents.utils import logger, add_log_level_for_agent
 
 ROUND_UPDATE = "round_update"
-FAN_IN = "fan_in"
 REFLECT_CHANGES = "reflect_changes"
 
-class RoundUpdateSnapshots():
+set_llm_cache(SQLiteCache(database_path=".langchain.db"))
+
+
+class RoundUpdateSnapshots:
     def __init__(self):
         self.rounds = []
 
-    def add(self, time, agents: List[Agent]):
+    def add(self, time, agents: list[Agent]):
         agents_dto = [agent_runner.agent.to_dto() for agent_runner in agents.values()]
 
         converted_date_time = time.as_string()
         round_update = RoundUpdateDTO(
-            round=len(self.rounds), time=converted_date_time, agents=agents_dto)
+            round=len(self.rounds), time=converted_date_time, agents=agents_dto
+        )
         self.rounds += [round_update]
 
     def get(self, round: int):
@@ -47,20 +56,8 @@ class RoundUpdateSnapshots():
     def current_round(self):
         return len(self.rounds)
 
-def upsert(left: dict, right: dict):
-    if left is None:
-        left = {}
-    if right is None:
-        right = {}
-    
-    left.update(right)
-    return left
 
-class SimulationState(TypedDict):
-    simulation_round: int
-    agent_states: Annotated[dict[str, AgentRunnerState], upsert]
-
-class Simulation():
+class Simulation:
     def __init__(self, round_updates: RoundUpdateSnapshots):
         self.maze = Maze()
         self.agents: dict[str, AgentRunner] = dict()
@@ -69,45 +66,55 @@ class Simulation():
 
         # load the agents file
         with open(os.path.join(BASE_PATH, "agents/agent_backstory.json"), "r") as f:
-            agents = json.load(f)['agents']
-
+            agents = json.load(f)["agents"]
 
         workflow = StateGraph(SimulationState)
         workflow.add_node(ROUND_UPDATE, self._round_update)
         workflow.add_node(REFLECT_CHANGES, self._reflect_changes)
-        workflow.add_node(FAN_IN, self._fan_in)
+
 
         workflow.add_edge(START, ROUND_UPDATE)
+
 
         destinations = []
         self.initial_agent_states = {}
         for agent in agents:
-            agent_runner = self.initialize_agent(name=agent['name'],
-                                                               age=agent['age'],
-                                                                innate_traits=agent['innate_traits'],
-                                                                location=agent['location'],
-                                                                emoji=agent['emoji'],
-                                                                activity="idle",
-                                                                description=agent['description'])
-
-            self.agents[agent['name']] = agent_runner
-            
-            workflow.add_node(agent['name'], agent_runner.workflow.compile())
-            workflow.add_edge(agent['name'], FAN_IN)
-            destinations.append(agent['name'])
-            self.initial_agent_states[agent['name']] = AgentRunnerState(
-                agent_name=agent['name'],
-                next_tile=agent['location'],
-                perceived_events=[],
-                retrieved=[],
-                address=agent['location'],
-                focused_event={},
-                last_conversation=None
+            add_log_level_for_agent(agent["name"])
+            agent_runner = self.initialize_agent(
+                name=agent["name"],
+                age=agent["age"],
+                innate_traits=agent["innate_traits"],
+                location=agent["location"],
+                emoji=agent["emoji"],
+                activity="idle",
+                description=agent["description"],
             )
 
-        workflow.add_conditional_edges(ROUND_UPDATE, self._distribute_state, destinations) 
-        workflow.add_edge(FAN_IN, REFLECT_CHANGES)
-        workflow.add_conditional_edges(REFLECT_CHANGES, self._should_end, {True: END, False: ROUND_UPDATE})
+            self.agents[agent["name"]] = agent_runner
+
+            workflow.add_node(agent["name"], agent_runner.workflow.compile())
+            destinations.append(agent["name"])
+            self.initial_agent_states[agent["name"]] = AgentRunnerState(
+                daytype=None,
+                agent_name=agent["name"],
+                next_tile=agent["location"],
+                perceived_events=[],
+                retrieved=[],
+                address=agent["location"],
+                focused_event={},
+                last_conversation=None,
+            )
+
+            workflow.add_edge(agent["name"], REFLECT_CHANGES)
+
+            logger.log(agent["name"], f"Initialized {agent['name']}")
+
+
+        workflow.add_conditional_edges(
+            ROUND_UPDATE, self._distribute_state, destinations
+        )
+
+        workflow.add_edge(REFLECT_CHANGES, END)
         self.workflow = workflow
 
         self.round_updates = round_updates
@@ -116,19 +123,57 @@ class Simulation():
         self.stopped = True
 
     async def run(self):
+        
+        load_dotenv()
         self.stopped = False
 
         compiled_graph = self.workflow.compile()
 
-        with open("graph.png", "wb") as f:
-            f.write(compiled_graph.get_graph(xray=2).draw_mermaid_png())
+        langfuse_handler = callback.CallbackHandler(
+            secret_key=os.getenv("LANGFUSE_SK", ""),
+            public_key=os.getenv("LANGFUSE_PK", ""),
+            max_retries=3,
+            host=os.getenv("LANGFUSE_HOST", "http://localhost:3000"),
+        )
+
+        print(compiled_graph.get_graph(xray=3).draw_mermaid())
 
         state = SimulationState(agent_states=self.initial_agent_states)
 
-        compiled_graph.invoke(state)
+        langfuse_session_id = "run " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def initialize_agent(self, name, age, innate_traits, location, emoji, activity, description) -> AgentRunner: 
-        agent = Agent(name=name, age=age, time=global_state.time, innate_traits=innate_traits, location=location, emoji=emoji, activity=activity, tile=self.maze.address_tiles[location][-1], tree=self.initialize_visible_memory_tree(), description=description)
+        while not self.stopped:
+            state = await compiled_graph.ainvoke(state,
+                                                  subgraphs=False,
+                                                  config={
+                                                      "run_id": f"Round: {global_state.tick}, {global_state.time.as_string()}",
+                                                      "callbacks": [langfuse_handler],
+                                                      "metadata": {
+                                                          "langfuse_session_id": langfuse_session_id
+                                                      }
+                                                    })
+
+
+            if global_state.tick + 1 % 30 == 0:
+                logger.info(f"tick: {global_state.tick}: Flushing langfuse queue")
+                langfuse_handler.flush()
+
+
+    def initialize_agent(
+        self, name, age, innate_traits, location, emoji, activity, description
+    ) -> AgentRunner:
+        agent = Agent(
+            name=name,
+            age=age,
+            time=global_state.time,
+            innate_traits=innate_traits,
+            location=location,
+            emoji=emoji,
+            activity=activity,
+            tile=self.maze.address_tiles[location][-1],
+            tree=self.initialize_visible_memory_tree(),
+            description=description,
+        )
         return AgentRunner(agent, self.maze, self.agents, global_state.time)
 
     def initialize_visible_memory_tree(self):
@@ -138,25 +183,27 @@ class Simulation():
         return tree
 
     def spawn_agent(self, data: AgentDTO):
-        print(
-            f"spawning agent {data.name}, at {data.movement.col}, {data.movement.row}")
+        logger.log(data.name,
+            f"spawning agent {data.name}, at {data.movement.col}, {data.movement.row}"
+        )
         self.agents[data.name] = Agent.from_dto(data, self.maze, self.simulated_time)
 
-    
     def _round_update(self, state: SimulationState) -> SimulationState:
-        print(f"round: {self.round_updates.current_round} time: {global_state.time.as_string()}")
-        return SimulationState(simulation_round=global_state.tick)
-    
+        logger.info(
+            f"round: {self.round_updates.current_round} time: {global_state.time.as_string()}"
+        )
+        return SimulationState(simulation_round=self.round_updates.current_round)
+
     def _distribute_state(self, state: SimulationState) -> SimulationState:
         agent_states = state.get("agent_states", {})
         return [Send(name, agent_state) for name, agent_state in agent_states.items()]
-    
-    def _fan_in(self, state: AgentRunnerState) -> SimulationState:
-        return SimulationState(agent_states={state.agent_name: state})
+
 
     def _reflect_changes(self, state: SimulationState) -> SimulationState:
-        
+
         agent_states = state.get("agent_states", {})
+
+        positions = []
 
         for name, agent_state in agent_states.items():
             next_tile = agent_state.get("next_tile", None)
@@ -168,41 +215,74 @@ class Simulation():
             while agent.scratch.finished_action:
                 action = agent.scratch.finished_action.pop(0)
                 if action.event.subject in old_tile.events:
-                    del old_tile.events[action.event.subject]
+                    del old_tile.events[str(action.event.spo_summary)]
 
-            event = agent.scratch.action.event
-            next_tile.events[event.subject] = agent.scratch.action.event
-            
-            object_action = agent.scratch.action.object_action
-            if object_action and object_action.event:
-                object_event = object_action.event
-                if object_action.address in self.maze.address_tiles:
-                    self.maze.address_tiles[object_action.address][0].events[object_event.subject] = object_event
-                else:
-                    print(f"WARNING: {object_action.address} not in maze")
+            action = agent.scratch.action
+            event = action.event
+
+            if action:
+                if old_tile.get_unique_name != event.tile.get_unique_name:
+                    next_tile.events[str(event.spo_summary)] = event
+                    if str(event.spo_summary) in old_tile.events:
+                        del old_tile.events[str(action.event.spo_summary)]
+
+                if action.address in self.maze.address_tiles:
+                    address_tiles = self.maze.address_tiles[action.address]
+
+                    if any([tile for tile in address_tiles if tile == agent.scratch.tile]):
+                        logger.log(agent.name, f"WARNING: {action.address} in the area of current tile")
+                        next_tile.events[str(event.spo_summary)] = event
+
+                object_action = action.object_action
+                if object_action and object_action.event:
+                    object_event = object_action.event
+                    if object_action.address in self.maze.address_tiles:
+                        address_tiles = self.maze.address_tiles[object_action.address]
+
+                        if any([tile for tile in address_tiles if tile == agent.scratch.tile]):
+                            logger.log(agent.name, f"WARNING: {object_action.address} in the area of current tile")
+                            self.maze.address_tiles[object_action.address][0].events[
+                                str(object_event.spo_summary)
+                            ] = object_event
+                    else:
+                        logger.log(agent.name, f"WARNING: {object_action.address} not in maze")
+            else:
+                next_tile = agent.scratch.tile
 
             agent.scratch.tile = next_tile
-            
-            print(agent.name.center(80, "-"))
+
             if old_tile != next_tile:
-                print(f"{agent.scratch.name} moved from {old_tile} to {next_tile}")
+                logger.log(agent.name, f"{agent.scratch.name} moved from {old_tile} to {next_tile}")
             else:
-                print(f"{agent.scratch.name} is still at {next_tile}")
-            print(f"{agent.scratch.name} is {agent.emoji}")
-            print(f"{agent.scratch.name} is {agent.description}")
-            self.round_updates.add(global_state.time, self.agents)
+                logger.log(agent.name, f"{agent.scratch.name} is still at {next_tile}")
+            logger.log(agent.name, f"{agent.scratch.name} is {agent.emoji}")
+            logger.log(agent.name, f"{agent.scratch.name} is {agent.scratch.description}")
 
-            return state
+            positions.append((name, agent.scratch.tile))
 
-    def _should_end(self, state: SimulationState) -> bool:
-        return self.stop if self.stop else False
+        print("\n\n")
+        print("-" * 80)
+        self.maze.print_grid(positions=positions)
+        print(f"round: {self.round_updates.current_round} time: {global_state.time.as_string()}")
+
+        for name, agent_runner in self.agents.items():
+            agent = agent_runner.agent
+            initials = "".join([word[0] for word in name.split(" ")]).strip()
+            print(f"{initials:<2}{agent.emoji:<2}: {agent.scratch.description:<50}")
+
+
+        self.round_updates.add(global_state.time, self.agents)
+        global_state.time.tick()
+        return None
+
 
 async def main():
     round_updates = RoundUpdateSnapshots()
     simulation = Simulation(round_updates)
-    #api.start(simulation.run_loop, simulation.spawn_agent)
-    
+    # api.start(simulation.run_loop, simulation.spawn_agent)
+
     await simulation.run()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())

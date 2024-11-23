@@ -20,7 +20,7 @@ class Scratch():
 
     description: str = ""
     time: SimulationTime = None
-    action: Action = None  
+    action: Action = None
     learned_traits: list[str] = field(default_factory=list)
     vision_radius: int = 6
     attention_bandwith: int = 4
@@ -39,21 +39,20 @@ class Scratch():
     daily_schedule: list[Tuple[str, int]] = None
     daily_schedule_hourly_organzied: list[Tuple[str, int]] = None
     hourly_activity_history: list[str] = field(default_factory=list)
-    
+
     chatting_with: str = ""
     chatting_end_time: datetime.datetime = None
     chat: any = None
     # e.g., ["Dolores Murphy"] = self.vision_r
     chatting_with_buffer = dict()
 
-    _identity: Tuple[str, str] = ("", "")
-    _last_tick: int = -1
+    _identity: Tuple[str, str, str] = ("", "", "")
 
     def should_reflect(self):
-        if (self.reflection_trigger_counter <= 0): 
-            return True 
+        if (self.reflection_trigger_counter <= 0):
+            return True
         return False
-    
+
     def reset_reflection_counter(self):
         self.reflection_trigger_counter = self.reflection_trigger_max
         self.importance_ele_n = 0
@@ -69,19 +68,19 @@ class Scratch():
         Boolean [True]: Action has finished.
         Boolean [False]: Action has not finished and is still ongoing.
         """
-        if not self.action: 
+        if not self.action:
             return True
-        
-        if self.chatting_with: 
+
+        if self.chatting_with:
             end_time = self.chatting_end_time
-        else: 
+        else:
             start = self.action.start_time
-            if start.second != 0: 
+            if start.second != 0:
                 start = start.replace(second=0)
                 start = (start + datetime.timedelta(minutes=1))
             end_time = (start + datetime.timedelta(minutes=self.action.duration))
 
-        if end_time and self.time.time.strftime("%H:%M:%S") >= end_time.strftime("%H:%M:%S"): 
+        if end_time and self.time.time.strftime("%H:%M:%S") >= end_time.strftime("%H:%M:%S"):
               return True
         return False
 
@@ -102,7 +101,7 @@ class Scratch():
         OUTPUT 
         an integer value for the current index of f_daily_schedule.
         """
-        # We first calculate teh number of minutes elapsed today. 
+        # We first calculate teh number of minutes elapsed today.
         today_min_elapsed = 0
         today_min_elapsed += self.time.time.hour * 60
         today_min_elapsed += self.time.time.minute
@@ -110,24 +109,24 @@ class Scratch():
 
         x = 0
         try:
-            for _, duration in self.daily_schedule_hourly_organzied: 
+            for _, duration in self.daily_schedule_hourly_organzied:
                 x += duration
         except:
             print("ERROR")
 
 
-        # We then calculate the current index based on that. 
+        # We then calculate the current index based on that.
         curr_index = 0
         elapsed = 0
-        
-        for _, duration in self.daily_schedule_hourly_organzied: 
+
+        for _, duration in self.daily_schedule_hourly_organzied:
             elapsed += duration
-            if elapsed > today_min_elapsed: 
+            if elapsed > today_min_elapsed:
                 return curr_index
             curr_index += 1
 
         return curr_index
-    
+
     def random_path(self, maze):
         while not self.scratch.planned_path:
             print("Searching for a suitable path for the agent")
@@ -146,24 +145,24 @@ class Scratch():
         commonset += f"Name: {self.name}\n"
         commonset += f"Age: {self.age}\n"
         commonset += f"{self.description}"
+        commonset += f"Identiy: {self._identity[1]}\n"
         commonset += f"Innate traits: {self.innate_traits}\n"
         commonset += f"Learned traits: {self.learned_traits}\n"
 
         commonset += f"Lifestyle: {self.lifestyle}\n"
         commonset += f"Daily plan requirement: {self.daily_requirements}\n"
 
-        key, cached_identity = self._identity
-        
-        if key != hash_string(commonset) and global_state.tick != self._last_tick:
+        key, cached_identity, last_tick_updated = self._identity
+
+        if key != hash_string(commonset) and last_tick_updated != global_state.tick and global_state.tick % 1200 == 0: # 10 seconds increment / 1200 | 2 hours
             new_hash = hash_string(commonset)
-            
+
             if self.action:
                 commonset += f"Currently: {self.action.event.description}\n"
             commonset += f"Current Date: {self.time.today}\n"
 
             cached_identity = formulate_identity(self.name, commonset)
             self.description = cached_identity
-            self._identity = (new_hash, cached_identity)
-            self._last_tick = global_state.tick
+            self._identity = (new_hash, cached_identity, last_tick_updated)
 
         return cached_identity

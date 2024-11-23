@@ -1,12 +1,14 @@
-from enum import Enum
-from pydantic import BaseModel, Field, create_model
+from pydantic import create_model
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
+
+llm = ChatGroq(model="llama3-8b-8192", name="reflection_points")
 
 template = """You are reflecting on the subjects in the statements. You need to determine the most salient high-level questions we can answer about the subjects in the statements.
-{memory}}
+{memory}
 
-Given only the information above, what are {{count}} most salient high-level questions we can answer about the subjects in the statements?"""
+Given only the information above, what are {count} most salient high-level questions we can answer about the subjects in the statements?"""
 
 
 def reflection_points(memory: str, count: int) -> list[str]:
@@ -14,11 +16,10 @@ def reflection_points(memory: str, count: int) -> list[str]:
 
     ReflectionPoints = create_model("ReflectionPoints", **questions)
 
-    reflection_points = grammar_pipeline.run(model=ReflectionPoints, prompt_template=template, template_variables={
-        "memory": memory,
-        "count": count
-    })
+    structured_llm = llm.with_structured_output(ReflectionPoints)
+    content = template.format(memory=memory, count=count)
 
+    reflection_points = structured_llm.invoke([HumanMessage(content=content)])
     return [question for question in reflection_points.values()]
 
 if __name__ == "__main__":

@@ -6,11 +6,12 @@ from generative_agents.utils import get_time_string
 from langgraph.graph import StateGraph
 from langgraph.constants import START, END
 
+from typing import TypedDict
+
 
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 
 from generative_agents.core.events import Action, Event, EventType, ObjectAction, PerceivedEvent
-from generative_agents.core.whisper.whisper import whisper
 from generative_agents.persistence.database import ConversationFilling
 from generative_agents.simulation.maze import Level
 from generative_agents.simulation.time import DayType
@@ -33,11 +34,11 @@ from generative_agents.conversational.pipelines.summarize_chat_relationship impo
 from generative_agents.conversational.pipelines.conversation import run_conversation
 from generative_agents.conversational.pipelines.conversation_summary import conversation_summary
 
-from generative_agents.conversational.pipelines.poignance import rate_poignance
 from generative_agents.conversational.pipelines.new_decomposition_schedule import create_new_decomposition_schedule
 from generative_agents.conversational.pipelines.task_decomposition import create_decomposition_schedule
 from generative_agents.conversational.pipelines.first_daily_plan import create_daily_plan
 
+from generative_agents.utils import logger
 
 LONG_TERM_PLANNING = "long_term_planning"
 DETERMINE_ACTION = "determine_action"
@@ -51,7 +52,7 @@ class ReactionMode(Enum):
     WAIT = "wait"
     DO_OTHER_THINGS = "do other things"
 
-class PlanState(Enum):
+class PlanState(TypedDict):
     daytype: DayType
     retrieved: dict[str, dict[str, list[PerceivedEvent]]]
     address: dict[str, str]
@@ -63,11 +64,11 @@ class Plan:
         self.agents = agents
         workflow = StateGraph(PlanState)
 
-        workflow.add_node(LONG_TERM_PLANNING, self._long_term_planning)
-        workflow.add_node(DETERMINE_ACTION, self._determine_action)
-        workflow.add_node(CHOOSE_RETRIEVED, self._choose_retrieved)
-        workflow.add_node(REACT, self._react)
-        workflow.add_node(WRAP_UP, self._wrap_up)
+        workflow.add_node(LONG_TERM_PLANNING, self.long_term_planning)
+        workflow.add_node(DETERMINE_ACTION, self.determine_action)
+        workflow.add_node(CHOOSE_RETRIEVED, self.choose_retrieved)
+        workflow.add_node(REACT, self.react)
+        workflow.add_node(WRAP_UP, self.wrap_up)
 
         workflow.add_edge(START, LONG_TERM_PLANNING)
         workflow.add_edge(LONG_TERM_PLANNING, DETERMINE_ACTION)
@@ -77,47 +78,8 @@ class Plan:
         workflow.add_edge(WRAP_UP, END)
         self.workflow = workflow
 
-    def _react(self, state: PlanState) -> PlanState:
-        focused_event = state["focused_event"]
 
-        if focused_event:
-            reaction_mode, payload = self._should_react(focused_event, self.agents)
-            whisper(
-                self.agent.name, f"reaction mode is {reaction_mode} with payload {payload}")
-            if reaction_mode and reaction_mode != ReactionMode.DO_OTHER_THINGS:
-                # If we do want to chat, then we generate conversation
-                if reaction_mode == ReactionMode.CHAT:
-                    self._chat_react(agent_with=payload)
-                elif reaction_mode == ReactionMode.WAIT:
-                    self._wait_react(payload)
-                # elif reaction_mode == "do other things":
-                #   _chat_react(persona, focused_event, reaction_mode, personas)
-        else:
-            if self.agent.scratch.action.event.predicate == "chat with":
-                last_utterance = self.agent.scratch.action.event.filling[-1]
-                if not last_utterance.end and last_utterance.name != self.agent.name:
-                    self._chat_react(agent_with=self.agents[last_utterance.name])
-
-        return {}
-
-    def _wrap_up(self, state: PlanState) -> PlanState:
-        if self.agent.scratch.action.event.predicate != "chat with":
-            self.agent.scratch.chatting_with = None
-            self.agent.scratch.chat = None
-            self.agent.scratch.chatting_end_time = None
-
-        # We want to make sure that the persona does not keep conversing with each
-        # other in an infinite loop. So, chatting_with_buffer maintains a form of
-        # buffer that makes the persona wait from talking to the same target
-        # immediately after chatting once. We keep track of the buffer value here.
-        curr_persona_chat_buffer = self.agent.scratch.chatting_with_buffer
-        for persona_name, _ in curr_persona_chat_buffer.items():
-            if persona_name != self.agent.scratch.chatting_with:
-                self.agent.scratch.chatting_with_buffer[persona_name] -= 1
-
-        return {"address": self.agent.scratch.action.address}
-
-    def _long_term_planning(self, state: PlanState) -> PlanState:
+    def long_term_planning(self, state: PlanState) -> PlanState:
         """
         Formulates the persona's daily long-term plan if it is the start of a new 
         day. This basically has two components: first, we create the wake-up hour, 
@@ -127,17 +89,17 @@ class Plan:
                     "New day", or False (for neither). This is important because we
                     create the personas' long term planning on the new day. 
         """
-        daytype = state["daytype"]
+        daytype = state.get("daytype", DayType.SAME_DAY)
 
         if daytype != DayType.NEW_DAY and daytype != DayType.FIRST_DAY:
-            return {}
+            return None
 
         if daytype == DayType.NEW_DAY or daytype == DayType.FIRST_DAY:
             # We start by creating the wake up hour for the persona.
             wake_up_hour = estimate_wake_up_hour(
                 self.agent.name, self.agent.scratch.identity, self.agent.scratch.lifestyle)
 
-            whisper(self.agent.name, f"wake up hour is at {wake_up_hour}")
+            logger.log(self.agent.name, f"wake up hour is at {wake_up_hour}")
 
         # When it is a new day, we start by creating the daily_req of the persona.
         # Note that the daily_req is a list of strings that describe the persona's
@@ -152,8 +114,8 @@ class Plan:
         if daytype == DayType.NEW_DAY:
             daily_plan, current_status = self._generate_daily_plan_and_current_status()
 
-            whisper(self.agent.name, f"new daily plan is {daily_plan}")
-            whisper(self.agent.name, f"new current status is {current_status}")
+            logger.log(self.agent.name, f"new daily plan is {daily_plan}")
+            logger.log(self.agent.name, f"new current status is {current_status}")
 
             self.agent.scratch.daily_requirements = daily_plan
             self.agent.scratch.current_status = current_status
@@ -172,7 +134,7 @@ class Plan:
         self.agent.scratch.daily_schedule_hourly_organzied = self.agent.scratch.daily_schedule = [
             (entry['activity'], 60) for entry in self.agent.scratch.daily_schedule]
 
-        whisper(self.agent.name, f"new daily plan is {description}")
+        logger.log(self.agent.name, f"new daily plan is {description}")
 
         perceived_plan = PerceivedEvent(event_type=EventType.PLAN,
                                         poignancy=0.5,
@@ -188,7 +150,212 @@ class Plan:
 
         self.agent.associative_memory.add(perceived_plan)
 
-        return {}
+        return None
+
+    def determine_action(self, state: PlanState) -> PlanState:
+        if not self.agent.scratch.is_action_finished():
+            return None
+
+        def is_sleeping(action_description: str) -> bool:
+            sleep_indicators = ["sleep", "bed", "asleep"]
+            return any(indicator in action_description for indicator in sleep_indicators)
+
+
+        def needs_decomposition(action_description: str, action_duration: int):
+            # TODO reformulate this logic
+
+            if action_duration < 60:
+                return False
+
+            desc = action_description.lower()
+
+            if is_sleeping(desc):
+                return False
+            return True
+
+        current_index = self.agent.scratch.get_daily_schedule_index()
+        next_hour_index = self.agent.scratch.get_daily_schedule_index(
+            advance=60)
+
+        # decompose next hour first
+        if next_hour_index < len(self.agent.scratch.daily_schedule):
+            if self.agent.scratch.time.time.hour < 23:
+                # And we don't want to decompose after 11 pm.
+                action_description, action_duration = self.agent.scratch.daily_schedule[
+                    next_hour_index]
+                if needs_decomposition(action_description, action_duration):
+                    # current_index:next_hour_index
+                    decomposition = self._decompose_action(next_hour_index, action_description, action_duration)
+                    self.agent.scratch.daily_schedule[next_hour_index:next_hour_index+1] = (decomposition)
+
+        # decompose current hour if needed
+        action_description, action_duration = self.agent.scratch.daily_schedule[current_index]
+
+        if needs_decomposition(action_description, action_duration):
+            self.agent.scratch.daily_schedule[current_index:current_index +1] = self._decompose_action(current_index, action_description, action_duration)
+
+        if next_hour_index + 1 < len(self.agent.scratch.daily_schedule):
+            action_description, action_duration = self.agent.scratch.daily_schedule[next_hour_index]
+
+            if needs_decomposition(action_description, action_duration):
+                self.agent.scratch.daily_schedule[next_hour_index:next_hour_index + 1] = self._decompose_action(next_hour_index, action_description, action_duration)
+
+        action_description, action_duration = self.agent.scratch.daily_schedule[current_index]
+
+        action_game_object = None
+        next_address = ""
+        logger.log(
+            self.agent.name, f"determined next action: {action_description}")
+        action_sector = self._generate_next_action_sector(action_description)
+
+        logger.log(self.agent.name,
+                f"determined next sector: {action_sector}")
+        action_arena = self._generate_next_action_arena(
+            action_description, action_sector)
+        logger.log(self.agent.name, f"determined next arena: {action_arena}")
+        next_address = self._generate_next_action_game_object(
+            action_description, action_arena)
+
+        address_parts = next_address.split(":")
+        tile = self.agent.spatial_memory[address_parts[0]][address_parts[1]
+                                                            ][address_parts[2]].game_objects[address_parts[3]]
+
+        logger.log(self.agent.name,
+                f"determined next game object: {action_game_object}")
+
+        action_pronouncio = self._generate_action_pronunciatio(
+            action_description)
+        logger.log(self.agent.name,
+                f"determined next pronouncio: {action_pronouncio}")
+
+        action_event = self._generate_action_event_triple(action_description)
+        logger.log(self.agent.name,
+                f"determined next event triple: {action_event}")
+
+        object_action = None
+
+
+
+        if next_address != "<random>":
+            action_object_desctiption, tripplet = self._generate_action_object_description(
+                next_address, action_description)
+            logger.log(
+                self.agent.name, f"determined next object description: {action_object_desctiption}")
+            action_object_pronunciatio = self._generate_action_pronunciatio(
+                action_object_desctiption)
+            logger.log(
+                self.agent.name, f"determined next object pronouncio: {action_object_pronunciatio}")
+            subject, predicate, object_ = tripplet
+            logger.log(
+                self.agent.name, f"determined next object event triple: {subject}, {predicate}, {object_}")
+
+            object_action = ObjectAction(address=next_address,
+                                         emoji=action_object_pronunciatio,
+                                         event=Event(subject=subject,
+                                                     predicate=predicate,
+                                                     object_=object_,
+                                                     description=action_object_desctiption,
+                                                     depth=0,
+                                                     tile=tile))
+
+        minutes_from_now = self.agent.scratch.time.time.hour * 60 + self.agent.scratch.time.time.minute
+
+        planned_end = 0
+        for _, duration in self.agent.scratch.daily_schedule[:current_index+1]:
+            planned_end += int(duration)
+
+        minutes_left = planned_end - minutes_from_now + 1
+
+        next_action = Action(address=next_address,
+                             start_time=self.agent.scratch.time.time,
+                             duration=minutes_left,
+                             emoji=action_pronouncio,
+                             event=Event(subject=self.agent.name,
+                                         predicate=action_event[1],
+                                         object_=action_event[2],
+                                         description=action_description,
+                                         depth=0,
+                                         tile=tile
+                                         ),
+                             object_action=object_action)
+
+        if self.agent.scratch.action:
+            self.agent.scratch.finished_action.append(
+                self.agent.scratch.action)
+        self.agent.scratch.action = next_action
+
+        return None
+
+    def choose_retrieved(self, state: PlanState) -> PlanState:
+        """
+        Retrieved elements have multiple core "curr_events". We need to choose one
+        event to which we are going to react to. We pick that event here.
+        """
+        retrieved = state["retrieved"]
+
+        if not retrieved:
+            return {"focused_event": None}
+
+        if self.agent.scratch.action.event.predicate == "chat with":
+            last_utterance = self.agent.scratch.action.event.filling[-1]
+            if not last_utterance.end and last_utterance.name != self.agent.name:
+                return {"focused_event": None}
+
+        no_self_event_retrieved = {description: context for description, context in retrieved.items(
+        ) if context["curr_event"].subject != self.agent.name}
+
+        persona_context = [context for _, context in no_self_event_retrieved.items(
+        ) if ":" not in context["curr_event"].subject]
+        if persona_context:
+            return {"focused_event": random.choice(persona_context)}
+
+        non_idle_context = [context for _, context in no_self_event_retrieved.items(
+        ) if "idle" not in context["curr_event"].description]
+        if non_idle_context:
+            return {"focused_event": random.choice(non_idle_context)}
+
+        return {"focused_event": None}
+
+    def react(self, state: PlanState) -> PlanState:
+        focused_event = state.get("focused_event", None)
+
+        if focused_event:
+            reaction_mode, payload = self._shouldreact(focused_event, self.agents)
+            logger.log(
+                self.agent.name, f"reaction mode is {reaction_mode} with payload {payload}")
+            if reaction_mode and reaction_mode != ReactionMode.DO_OTHER_THINGS:
+                # If we do want to chat, then we generate conversation
+                if reaction_mode == ReactionMode.CHAT:
+                    self._chat_react(agent_with=payload)
+                elif reaction_mode == ReactionMode.WAIT:
+                    self._wait_react(payload)
+                # elif reaction_mode == "do other things":
+                #   _chat_react(persona, focused_event, reaction_mode, personas)
+        else:
+            if self.agent.scratch.action and self.agent.scratch.action.event.predicate == "chat with":
+                last_utterance = self.agent.scratch.action.event.filling[-1]
+                if not last_utterance.end and last_utterance.name != self.agent.name:
+                    self._chat_react(agent_with=self.agents[last_utterance.name])
+
+        return None
+
+    def wrap_up(self, state: PlanState) -> PlanState:
+        if self.agent.scratch.action and self.agent.scratch.action.event.predicate != "chat with":
+            self.agent.scratch.chatting_with = None
+            self.agent.scratch.chat = None
+            self.agent.scratch.chatting_end_time = None
+
+        # We want to make sure that the persona does not keep conversing with each
+        # other in an infinite loop. So, chatting_with_buffer maintains a form of
+        # buffer that makes the persona wait from talking to the same target
+        # immediately after chatting once. We keep track of the buffer value here.
+        curr_persona_chat_buffer = self.agent.scratch.chatting_with_buffer
+        for persona_name, _ in curr_persona_chat_buffer.items():
+            if persona_name != self.agent.scratch.chatting_with:
+                self.agent.scratch.chatting_with_buffer[persona_name] -= 1
+
+        next_address = self.agent.scratch.action.address if self.agent.scratch.action else self.agent.scratch.tile.get_unique_name()
+        return {"address": next_address}
 
     def _generate_daily_plan_and_current_status(self):
         retrieved_events = self._get_related_to_text(
@@ -219,165 +386,7 @@ class Plan:
     def _get_related_events(self, event: PerceivedEvent, event_type: EventType = None):
         return self._get_related_to_text(event.description, event_type)
 
-    def _determine_action(self, state: PlanState) -> PlanState:
-        if not self.agent.scratch.is_action_finished():
-            return {}
-
-        def needs_decomposition(action_description: str, action_duration: int):
-            # TODO reformulate this logic
-
-            desc = action_description.lower()
-
-            if "sleep" not in desc and "bed" not in desc:
-                return True
-            elif "sleeping" in desc or "asleep" in desc or "in bed" in desc:
-                return False
-            elif "sleep" in desc or "bed" in desc:
-                if action_duration > 60:
-                    return False
-                return True
-
-        current_index = self.agent.scratch.get_daily_schedule_index()
-        next_hour_index = self.agent.scratch.get_daily_schedule_index(
-            advance=60)
-
-        # * Decompose *
-        # During the first hour of the day, we need to decompose two hours
-        # sequence. We do that here.
-        if current_index == 0:
-            # This portion is invoked if it is the first hour of the day.
-            action_description, action_duration = self.agent.scratch.daily_schedule[
-                current_index]
-
-            if action_duration >= 60:
-                # We decompose if the next action is longer than an hour, and fits the
-                # criteria described in determine_decomp.
-                if needs_decomposition(action_description, action_duration):
-                    self.agent.scratch.daily_schedule[current_index:current_index +
-                                                      1] = self._decompose_action(current_index, action_description, action_duration)
-
-            if next_hour_index + 1 < len(self.agent.scratch.daily_schedule):
-                action_description, action_duration = self.agent.scratch.daily_schedule[
-                    next_hour_index]
-
-                if action_duration >= 60:
-                    if needs_decomposition(action_description, action_duration):
-                        self.agent.scratch.daily_schedule[next_hour_index:next_hour_index + 1] = self._decompose_action(
-                            next_hour_index, action_description, action_duration)
-
-        if next_hour_index < len(self.agent.scratch.daily_schedule):
-            # If it is not the first hour of the day, this is always invoked (it is
-            # also invoked during the first hour of the day -- to double up so we can
-            # decompose two hours in one go). Of course, we need to have something to
-            # decompose as well, so we check for that too.
-            if self.agent.scratch.time.time.hour < 23:
-                # And we don't want to decompose after 11 pm.
-                action_description, action_duration = self.agent.scratch.daily_schedule[
-                    next_hour_index]
-                if action_duration >= 60:
-                    if needs_decomposition(action_description, action_duration):
-                        # current_index:next_hour_index
-                        decomposition = self._decompose_action(next_hour_index, action_description, action_duration)
-                        self.agent.scratch.daily_schedule[next_hour_index:next_hour_index+1] = (
-                            decomposition)
-
-        # * End of Decompose *
-
-        # TODO find out what this is for?!
-        # 1440
-        # x_emergency = 0
-        # for i in persona.scratch.f_daily_schedule:
-        #    x_emergency += i[1]
-        # print ("x_emergency", x_emergency)
-
-        # if 1440 - x_emergency > 0:
-        #    print ("x_emergency__AAA", x_emergency)
-        # persona.scratch.f_daily_schedule += [["sleeping", 1440 - x_emergency]]
-
-        action_description, action_duration = self.agent.scratch.daily_schedule[current_index]
-
-        action_game_object = None
-        next_address = ""
-        whisper(
-            self.agent.name, f"determined next action: {action_description}")
-        action_sector = self._generate_next_action_sector(action_description)
-
-        whisper(self.agent.name,
-                f"determined next sector: {action_sector}")
-        action_arena = self._generate_next_action_arena(
-            action_description, action_sector)
-        whisper(self.agent.name, f"determined next arena: {action_arena}")
-        next_address = self._generate_next_action_game_object(
-            action_description, action_arena)
-
-        address_parts = next_address.split(":")
-        tile = self.agent.spatial_memory[address_parts[0]][address_parts[1]
-                                                            ][address_parts[2]].game_objects[address_parts[3]]
-
-        whisper(self.agent.name,
-                f"determined next game object: {action_game_object}")
-
-        action_pronouncio = self._generate_action_pronunciatio(
-            action_description)
-        whisper(self.agent.name,
-                f"determined next pronouncio: {action_pronouncio}")
-
-        action_event = self._generate_action_event_triple(action_description)
-        whisper(self.agent.name,
-                f"determined next event triple: {action_event}")
-
-        object_action = None
-        if next_address != "<random>":
-            action_object_desctiption, tripplet = self._generate_action_object_description(
-                next_address, action_description)
-            whisper(
-                self.agent.name, f"determined next object description: {action_object_desctiption}")
-            action_object_pronunciatio = self._generate_action_pronunciatio(
-                action_object_desctiption)
-            whisper(
-                self.agent.name, f"determined next object pronouncio: {action_object_pronunciatio}")
-            subject, predicate, object_ = tripplet
-            whisper(
-                self.agent.name, f"determined next object event triple: {subject}, {predicate}, {object_}")
-
-            object_action = ObjectAction(address=next_address,
-                                         emoji=action_object_pronunciatio,
-                                         event=Event(subject=subject,
-                                                     predicate=predicate,
-                                                     object_=object_,
-                                                     description=action_object_desctiption,
-                                                     depth=0,
-                                                     tile=tile))
-
-        minutes_from_now = self.agent.time.time.hour * 60 + self.agent.time.time.minute
-
-        planned_end = 0
-        for _, duration in self.agent.scratch.daily_schedule[:current_index+1]:
-            planned_end += int(duration)
-
-        minutes_left = planned_end - minutes_from_now + 1
-
-        next_action = Action(address=next_address,
-                             start_time=self.agent.scratch.time.time,
-                             duration=minutes_left,
-                             emoji=action_pronouncio,
-                             event=Event(subject=self.agent.name,
-                                         predicate=action_event[1],
-                                         object_=action_event[2],
-                                         description=action_description,
-                                         depth=0,
-                                         tile=tile
-                                         ),
-                             object_action=object_action)
-
-        if self.agent.scratch.action:
-            self.agent.scratch.finished_action.append(
-                self.agent.scratch.action)
-        self.agent.scratch.action = next_action
-
-        return {}
-
-    def _should_react(self, focused_event: dict[str, list[PerceivedEvent]], agents: dict[str, 'Agent']):
+    def _shouldreact(self, focused_event: dict[str, list[PerceivedEvent]], agents: dict[str, 'Agent']):
         """
         Determines what form of reaction the persona should exihibit given the 
         retrieved values. 
@@ -421,7 +430,7 @@ class Plan:
 
             return False
 
-        def lets_react(init_agent: 'Agent', target_agent: 'Agent', retrieved):
+        def letsreact(init_agent: 'Agent', target_agent: 'Agent', retrieved):
             if (not target_agent.scratch.action.address
                 or not target_agent.scratch.action.event.description
                 or not init_agent.scratch.action.address
@@ -445,7 +454,7 @@ class Plan:
                     init_agent.scratch.tile.l2_distance(target_agent.scratch.tile) >= 4):
                 return ReactionMode.DO_OTHER_THINGS, None
 
-            react_mode = self.agent._generate_decide_to_react(
+            react_mode = self._generate_decide_to_react(
                 target_agent, retrieved)
 
             if react_mode == 1:
@@ -482,7 +491,7 @@ class Plan:
             if lets_talk(self.agent, agents[curr_event.subject], focused_event):
                 return ReactionMode.CHAT, target_agent
 
-            return lets_react(self.agent, agents[curr_event.subject], focused_event)
+            return letsreact(self.agent, agents[curr_event.subject], focused_event)
 
         return ReactionMode.DO_OTHER_THINGS, None
 
@@ -502,7 +511,7 @@ class Plan:
                                         utterance=utterance, end=end)]
         description = self._generate_conversation_summary(filling)
 
-        self._create_react_action(inserted_action=description,
+        self._createreact_action(inserted_action=description,
                                   inserted_action_duration=10,
                                   action_address=f"<persona> {agent_with.name}",
                                   action_event=(
@@ -516,7 +525,7 @@ class Plan:
                                   filling=filling,
                                   action_start_time=action_start_time)
 
-        Plan(agent_with)._create_react_action(inserted_action=description,
+        Plan(agent_with)._createreact_action(inserted_action=description,
                                         inserted_action_duration=10,
                                         action_address=f"<persona> {self.agent.name}",
                                         action_event=(
@@ -558,7 +567,7 @@ class Plan:
         action_pronunciatio = "⌛"
 
         self.agent._update_schedule(inserted_action, inserted_action_duration)
-        self.agent._create_react_action(inserted_action, inserted_action_duration,
+        self.agent._createreact_action(inserted_action, inserted_action_duration,
                                         action_address, action_event, chatting_with, chat, chatting_with_buffer, chatting_end_time,
                                         action_pronunciatio)
 
@@ -664,45 +673,6 @@ class Plan:
     def _generate_action_event_triple(self, action_description):
         return action_event_triple(self.agent.name, action_description)
 
-    def _choose_retrieved(self, state: PlanState) -> PlanState:
-        """
-        Retrieved elements have multiple core "curr_events". We need to choose one
-        event to which we are going to react to. We pick that event here. 
-        INPUT
-            persona: Current <Persona> instance whose action we are determining. 
-            retrieved: A dictionary of <ConceptNode> that were retrieved from the 
-                    the persona's associative memory. This dictionary takes the
-                    following form: 
-                    dictionary[event.description] = 
-                        {["curr_event"] = <ConceptNode>, 
-                        ["events"] = [<ConceptNode>, ...], 
-                        ["thoughts"] = [<ConceptNode>, ...] }
-        """
-        retrieved = state["retrieved"]
-
-        if not retrieved:
-            return {"focused_event": None}
-
-        if self.agent.scratch.action.event.predicate == "chat with":
-            last_utterance = self.agent.scratch.action.event.filling[-1]
-            if not last_utterance.end and last_utterance.name != self.agent.name:
-                return {"focused_event": None}
-
-        no_self_event_retrieved = {description: context for description, context in retrieved.items(
-        ) if context["curr_event"].subject != self.agent.name}
-
-        persona_context = [context for _, context in no_self_event_retrieved.items(
-        ) if ":" not in context["curr_event"].subject]
-        if persona_context:
-            return {"focused_event": random.choice(persona_context)}
-
-        non_idle_context = [context for _, context in no_self_event_retrieved.items(
-        ) if "idle" not in context["curr_event"].description]
-        if non_idle_context:
-            return {"focused_event": random.choice(non_idle_context)}
-
-        return {"focused_event": None}
-
     def _generate_conversation(self, agent_with: 'Agent'):
         retrieved = self.agent.associative_memory.retrieve_relevant_entries(
             [agent_with.name], 50)
@@ -763,7 +733,7 @@ class Plan:
         return conversation_summary(conversation=conversation_history)
 
 
-    def _create_react_action(self, inserted_action, inserted_action_duration,
+    def _createreact_action(self, inserted_action, inserted_action_duration,
                              action_address, action_event, chatting_with, chat, chatting_with_buffer,
                              chatting_end_time, action_pronunciatio, filling=[], action_start_time=None):
 

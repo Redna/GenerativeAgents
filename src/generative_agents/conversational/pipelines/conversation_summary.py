@@ -1,12 +1,14 @@
-from enum import Enum
-from typing import Type
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
+
+llm = ChatGroq(model="llama3-8b-8192",
+               name="conversation_summary")
 
 template = """Conversation:
 ---
-{{conversation}}
+{conversation}
 ---
 You summarize a conversation in one sentence.
 """
@@ -18,9 +20,9 @@ class ConversationSummary(BaseModel):
 def conversation_summary(conversation: str) -> str:
     model = ConversationSummary
 
-    summary = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
-        "conversation": conversation
-    })
+    structured_llm = llm.with_structured_output(model)
+    content = template.format(conversation=conversation)
+    summary = structured_llm.invoke([HumanMessage(content=content)])
 
     return summary.summary
 
@@ -30,4 +32,3 @@ if __name__ == "__main__":
 Frodo Reimsi: No, tell me more. You mean Jimmy Fraser?
 Joe Walther: Jim Knofi. He is giving a dinner party.
 Frodo Reimsi: I did not know that."""))
-    

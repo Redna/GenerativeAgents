@@ -1,12 +1,14 @@
 from pydantic import BaseModel, Field
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+llm = ChatGroq(model="llama3-8b-8192", name="chat_relationship")
 
-template = """You are {{agent}} and judge about your relationships.
+template = """You are {agent} and judge about your relationships.
 Statements:
-{{statements}}
+{statements}
 
-In summary, what do you feel or know about {{agent}} and {{agent_with}}'s relationship?
+In summary, what do you feel or know about {agent} and {agent_with}'s relationship?
 """
 
 class ChatRelationship(BaseModel):
@@ -14,12 +16,10 @@ class ChatRelationship(BaseModel):
         description="Contains a summary of the relationship between two agents.")
 
 def summarize_chat_relationship(statements: str, agent: str, agent_with: str) -> str:
-    chat_relationship = grammar_pipeline.run(model=ChatRelationship, prompt_template=template, template_variables={
-        "statements": statements,
-        "agent": agent,
-        "agent_with": agent_with
-    })
+    structured_llm = llm.with_structured_output(ChatRelationship)
 
+    content = template.format(statements=statements, agent=agent, agent_with=agent_with)
+    chat_relationship = structured_llm.invoke([HumanMessage(content=content)])
     return chat_relationship.relationship_summary
 
 if __name__ == "__main__":
@@ -38,4 +38,3 @@ if __name__ == "__main__":
                                             Ava thought inviting a coach for a workshop would be beneficial;
                                             They planned to gather the team on Thursday to discuss logistics;""",
                                             agent="Ava", agent_with="Jack"))
-     

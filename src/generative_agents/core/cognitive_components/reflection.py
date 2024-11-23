@@ -8,7 +8,6 @@ from langgraph.constants import START, END
 from generative_agents.core.agent import Agent
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 from generative_agents.core.events import EventType, PerceivedEvent
-from generative_agents.core.whisper.whisper import whisper
 from generative_agents.persistence.database import ConversationFilling
 
 from generative_agents.conversational.pipelines.reflection_points import reflection_points
@@ -16,7 +15,7 @@ from generative_agents.conversational.pipelines.evidence_and_insights import evi
 from generative_agents.conversational.pipelines.action_event_tripple import action_event_triple
 from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
 from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
-
+from generative_agents.utils import logger
 
 REFLECT = "reflect"
 RETRIEVE_LAST_CONVERSATION = "retrieve_last_conversation"
@@ -33,69 +32,38 @@ class Reflection:
         self.agent = agent
 
         workflow = StateGraph(ReflectionState)
-        workflow.add_node(REFLECT, self._run_reflect)
-        workflow.add_node(RETRIEVE_LAST_CONVERSATION, self._retrieve_last_conversation)
-        workflow.add_node(REFLECT_ON_CONVERSATION, self._reflect_on_conversation)
+        workflow.add_node(REFLECT, self.run_reflect)
+        workflow.add_node(RETRIEVE_LAST_CONVERSATION, self.retrieve_last_conversation)
+        workflow.add_node(REFLECT_ON_CONVERSATION, self.reflect_on_conversation)
 
-        workflow.add_conditional_edges(START, self.agent.scratch.should_reflect, {True: REFLECT, False: END})
+        workflow.add_conditional_edges(START, self.should_reflect, {True: REFLECT, False: END})
         workflow.add_edge(REFLECT, END)
         workflow.add_edge(START, RETRIEVE_LAST_CONVERSATION)
-        workflow.add_conditional_edges(RETRIEVE_LAST_CONVERSATION, 
-                                       self._should_reflect_on_conversation, 
+        workflow.add_conditional_edges(RETRIEVE_LAST_CONVERSATION,
+                                       self.should_reflect_on_conversation,
                                        {True: REFLECT_ON_CONVERSATION, False: END})
         workflow.add_edge(REFLECT_ON_CONVERSATION, END)
         self.workflow = workflow
 
-    def _retrieve_last_conversation(self, state: ReflectionState) -> ReflectionState:
-        last_conversation = self.agent.associative_memory.last_conversation_with(
-            self.agent.scratch.chatting_with)
-
-        return {"last_conversation": last_conversation}
-
-    def _should_reflect_on_conversation(self, state: ReflectionState) -> bool:
-        last_conversation = state.get("last_conversation")
-        return last_conversation and last_conversation.filling and last_conversation.filling[-1].end
-
-
-    def _reflect_on_conversation(self, state: ReflectionState) -> ReflectionState:
-        last_conversation = self.agent.associative_memory.last_conversation_with(
-            self.agent.scratch.chatting_with)
-
-        if last_conversation and last_conversation.filling and last_conversation.filling[-1].end:
-            evidence = [last_conversation.id]
-
-            planning_thought = self._generate_planning_thought_on_conversation(
-                last_conversation.filling)
-            whisper(self.agent.name, f"planning thought is {planning_thought}")
-            planning_thought = f"For {self.agent.scratch.name}'s planning: {planning_thought}"
-            self._add_reflection_thought(planning_thought, evidence)
-            whisper(self.agent.name, f"added reflection thought")
-
-            memo_thought = self._generate_memo_on_conversation(
-                last_conversation.filling)
-            memo_thought = f"{self.agent.name} {memo_thought}"
-            whisper(self.agent.name, f"memo thought is {memo_thought}")
-            self._add_reflection_thought(memo_thought, evidence)
-
-    def _run_reflect(self):
+    def run_reflect(self):
         """
-        Run the actual reflection. We generate the focal points, retrieve any 
-        relevant nodes, and generate thoughts and insights. 
+        Run the actual reflection. We generate the focal points, retrieve any
+        relevant nodes, and generate thoughts and insights.
 
-        INPUT: 
+        INPUT:
             persona: Current Persona object
-        Output: 
+        Output:
             None
         """
         # Reflection requires certain focal points. Generate that first.
         focal_points = self._generate_reflection_points(3)
-        whisper(self.agent.name, f"generated {focal_points} focal points")
+        logger.log(self.agent.name, f"generated {focal_points} focal points")
         # Retrieve the relevant Nodes object for each of the focal points.
         # <retrieved> has keys of focal points, and values of the associated Nodes.
         retrieved = self.agent.associative_memory.retrieve_relevant_entries(
             focal_points)
 
-        whisper(self.agent.name, f"retrieved {len(retrieved)} relevant nodes")
+        logger.log(self.agent.name, f"retrieved {len(retrieved)} relevant nodes")
 
         # For each of the focal points, generate thoughts and save it in the
         # agent's memory.
@@ -105,6 +73,41 @@ class Reflection:
                 self._add_reflection_thought(thought, evidence)
 
         self.agent.scratch.reset_reflection_counter()
+
+
+    def should_reflect(self, state: ReflectionState) -> bool:
+        return self.agent.scratch.should_reflect()
+
+    def retrieve_last_conversation(self, state: ReflectionState) -> ReflectionState:
+        last_conversation = self.agent.associative_memory.last_conversation_with(
+            self.agent.scratch.chatting_with)
+
+        return {"last_conversation": last_conversation}
+
+    def should_reflect_on_conversation(self, state: ReflectionState) -> bool:
+        last_conversation = state.get("last_conversation")
+        return (last_conversation and last_conversation.filling and last_conversation.filling[-1].end) is not None
+
+    def reflect_on_conversation(self, state: ReflectionState) -> ReflectionState:
+        last_conversation = self.agent.associative_memory.last_conversation_with(
+            self.agent.scratch.chatting_with)
+
+        if last_conversation and last_conversation.filling and last_conversation.filling[-1].end:
+            evidence = [last_conversation.id]
+
+            planning_thought = self._generate_planning_thought_on_conversation(
+                last_conversation.filling)
+            logger.log(self.agent.name, f"planning thought is {planning_thought}")
+            planning_thought = f"For {self.agent.scratch.name}'s planning: {planning_thought}"
+            self._add_reflection_thought(planning_thought, evidence)
+            logger.log(self.agent.name, "added reflection thought")
+
+            memo_thought = self._generate_memo_on_conversation(
+                last_conversation.filling)
+            memo_thought = f"{self.agent.name} {memo_thought}"
+            logger.log(self.agent.name, f"memo thought is {memo_thought}")
+            self._add_reflection_thought(memo_thought, evidence)
+
 
     def _generate_reflection_points(self, num_points: int):
             memories = self.agent.associative_memory.get_most_recent_memories(num_points)

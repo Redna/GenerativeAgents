@@ -1,25 +1,31 @@
-from enum import Enum
 from pydantic import BaseModel, Field
+from typing import TypedDict
+from typing import Annotated
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-template = """You are {{name}}. You are interacting with the environment. You need to determine the state of an object that is being used by someone.
+llm = ChatGroq(model="llama3-8b-8192", name="object_event")
 
-What is {{object_name}}'s state when {{name}} is using it for "{{action_description}}"?"""
+template = """You are {name}. You are interacting with the environment. You need to determine the state of an object that is being used by someone.
 
-class ObjectState(BaseModel):
-    state: str = Field(description="The new state of the object when it has been used. This is always filled in.")
+Determine "{object_name}" state when {name} is using it for "{action_description}"?"""
+
+class ObjectState(TypedDict):
+    """
+    State of an object after it has been used.
+    """
+    state: Annotated[str, ..., "The new state of the object when it has been used."]
 
 def describe_object_state(name: str, object_name: str, object_address: str, action_description: str) -> str:
-    object_state = grammar_pipeline.run(model=ObjectState, prompt_template=template, template_variables={
-        "name": name,
-        "object_name": object_name,
-        "action_description": action_description
-    })
+    structured_llm = llm.with_structured_output(ObjectState)
 
-    return f"{object_name} is {object_state.state}""", (object_address, "is", object_state.state)
+    content = template.format(name=name, object_name=object_name, action_description=action_description)
+    object_state = structured_llm.with_retry(stop_after_attempt=3).invoke([HumanMessage(content=content)])
 
-if __name__ == "__main__":            
+    return f"{object_name} is {object_state['state']}""", (object_address, "is", object_state['state'])
+
+if __name__ == "__main__":
     print(describe_object_state(name="John Doe",
                                 object_name="kitchen sink",
                                 object_address="John Doe's house:kitchen sink",

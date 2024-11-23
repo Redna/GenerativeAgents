@@ -1,17 +1,20 @@
 from enum import Enum
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-template = """You will act as {{agent}}.
+llm = ChatGroq(model="llama3-8b-8192", name="decide_to_react")
 
-Context: {{context}}
-Right now, it is {{current_time}}. 
-{{agent}} is {{agent_observation}} when {{agent}} saw {{agent_with}} in the middle of {{agent_with_observation}}.",
+template = """You will act as {agent}.
 
-Let's think step by step. Of the following two options, what should {{agent}} do?
-- Option 1: Wait on {{initial_action_description}} until {{agent_with}} is done {{agent_with_action}}
-- Option 2: Continue on to {{initial_action_description}} now
+Context: {context}
+Right now, it is {current_time}.
+{agent} is {agent_observation} when {agent} saw {agent_with} in the middle of {agent_with_observation}.",
+
+Let's think step by step. Of the following two options, what should {agent} do?
+- Option 1: Wait on {initial_action_description} until {agent_with} is done {agent_with_action}
+- Option 2: Continue on to {initial_action_description} now
 """
 
 class Options(Enum):
@@ -26,16 +29,11 @@ class DecideToReact(BaseModel):
 
 
 def decide_to_react(context: str, current_time: str, agent: str, agent_with: str, agent_with_action: str, agent_observation: str, agent_with_observation: str, initial_action_description: str) -> int:
-    decide_to_react = grammar_pipeline.run(model=DecideToReact, prompt_template=template, template_variables={
-        "context": context,
-        "current_time": current_time,
-        "agent": agent,
-        "agent_with": agent_with,
-        "agent_with_action": agent_with_action,
-        "agent_observation": agent_observation,
-        "agent_with_observation": agent_with_observation,
-        "initial_action_description": initial_action_description
-    })
+    structured_llm = llm.with_structured_output(DecideToReact)
+
+    content = template.format(context=context, current_time=current_time, agent=agent, agent_with=agent_with, agent_with_action=agent_with_action, agent_observation=agent_observation, agent_with_observation=agent_with_observation, initial_action_description=initial_action_description)
+
+    decide_to_react = structured_llm.invoke([HumanMessage(content=content)])
 
     return decide_to_react.option.value
 
@@ -48,4 +46,3 @@ if __name__ == "__main__":
                           agent_observation="walking through the park",
                           agent_with_observation="Jumping up and down in the park",
                           initial_action_description="walking through the park going to Johns Pub"))
-    

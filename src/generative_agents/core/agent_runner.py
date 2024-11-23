@@ -1,6 +1,3 @@
-from haystack import Pipeline
-
-from typing import TypedDict
 from langgraph.graph import StateGraph
 from langgraph.constants import START, END
 
@@ -11,22 +8,9 @@ from generative_agents.core.cognitive_components.plan import Plan
 from generative_agents.core.cognitive_components.reflection import Reflection
 from generative_agents.core.cognitive_components.retrieval import Retrieval
 from generative_agents.simulation.maze import Maze
+from generative_agents.simulation.state import AgentRunnerState, SimulationState
 from generative_agents.simulation.time import SimulationTime, DayType
-from generative_agents.utils import timeit
-from generative_agents.core.events import Event, PerceivedEvent
-from generative_agents.persistence.database import ConversationFilling
-from generative_agents.simulation.maze import Tile
-
-class AgentRunnerState(TypedDict):
-    agent_name: str
-    next_tile: str
-    perceived_events: list[PerceivedEvent]
-    retrieved: list[Event]
-    address: str
-    focused_event: dict[str, list[PerceivedEvent]]
-    next_tile: Tile
-    last_conversation: ConversationFilling
-
+from generative_agents.utils import logger
 
 class AgentRunner:
     def __init__(self, agent: Agent, maze: Maze, agents: dict[str, 'Agent'], time: SimulationTime):
@@ -35,63 +19,47 @@ class AgentRunner:
         self.agents = agents
         self.time = time
 
-        workflow = StateGraph(AgentRunnerState)
-        workflow.add_node("set_daytype", self.set_daytype)
-        workflow.add_node("perception", Perception(self.agent, maze).workflow.compile())
-        workflow.add_node("retrieval", Retrieval(self.agent).workflow.compile())
-        workflow.add_node("plan", Plan(self.agent, agents).workflow.compile())
-        workflow.add_node("execution", Execution(self.agent, maze, agents).workflow.compile())
-        workflow.add_node("reflection", Reflection(self.agent).workflow.compile())
-        workflow.add_edge(START, "set_daytype")
-        workflow.add_edge("set_daytype", "perception")
-        workflow.add_edge("perception", "retrieval")
-        workflow.add_edge("retrieval", "plan")
-        workflow.add_edge("plan", "execution")
-        workflow.add_edge("execution", "reflection")
-        workflow.add_edge("reflection", END)
+        DAYTYPE_NODE = f"set_daytype - {agent.name}"
+        PERCEPTION_NODE = f"perception - {agent.name}"
+        RETRIEVAL_NODE = f"retrieval - {agent.name}"
+        PLAN_NODE = f"plan - {agent.name}"
+        EXECUTION_NODE = f"execution - {agent.name}"
+        REFLECTION_NODE = f"reflection - {agent.name}"
+        WRAP_UP = f"wrap_up - {agent.name}"
+
+        workflow = StateGraph(AgentRunnerState, input=AgentRunnerState, output=SimulationState)
+
+        workflow.add_node(DAYTYPE_NODE, self.set_daytype)
+        workflow.add_node(PERCEPTION_NODE, Perception(self.agent, maze).workflow.compile())
+        workflow.add_node(RETRIEVAL_NODE, Retrieval(self.agent).workflow.compile())
+        workflow.add_node(PLAN_NODE, Plan(self.agent, agents).workflow.compile())
+        workflow.add_node(EXECUTION_NODE, Execution(self.agent, maze, agents).workflow.compile())
+        workflow.add_node(REFLECTION_NODE, Reflection(self.agent).workflow.compile())
+        workflow.add_node(WRAP_UP, self.wrap_up)
+
+        workflow.add_edge(START, DAYTYPE_NODE)
+        workflow.add_edge(DAYTYPE_NODE, PERCEPTION_NODE)
+        workflow.add_edge(PERCEPTION_NODE, RETRIEVAL_NODE)
+        workflow.add_edge(RETRIEVAL_NODE, PLAN_NODE)
+        workflow.add_edge(PLAN_NODE, EXECUTION_NODE)
+        workflow.add_edge(EXECUTION_NODE, REFLECTION_NODE)
+        workflow.add_edge(REFLECTION_NODE, WRAP_UP)
+        workflow.add_edge(WRAP_UP, END)
         self.workflow = workflow
 
-    def set_daytype(self, state: AgentRunnerState) -> AgentRunnerState:
-        
-        daytype: DayType = state.get("daytype", DayType.SAME_DAY)
+    def set_daytype(self, state: SimulationState) -> SimulationState:
 
-        if not self.agent.scratch.time:
-            daytype = daytype.FIRST_DAY
+        daytype: DayType = state.get("daytype")
+
+        if not daytype:
+            daytype = DayType.FIRST_DAY
         elif (self.agent.scratch.time.today != self.time.today):
-            daytype = daytype.NEW_DAY
-        
-        return {"daytype": daytype}
+            daytype = DayType.NEW_DAY
+        else:
+            daytype = DayType.SAME_DAY
 
+        return AgentRunnerState(daytype=daytype)
 
-    @timeit
-    def update(self, time: SimulationTime, maze: Maze, agents: dict[str, 'Agent']):
-        daytype: DayType = DayType.SAME_DAY
-
-        if not self.agent.scratch.time:
-            daytype = daytype.FIRST_DAY
-        elif (self.agent.scratch.time.today != time.today):
-            daytype = daytype.NEW_DAY
-
-        self.agent.scratch.time = time
-
-        perception = Perception(self.agent)
-        retrieval = Retrieval(self.agent)
-        plan = Plan(self.agent)
-        execution = Execution(self.agent)
-        reflection = Reflection(self.agent)
-
-
-        agent_list = {agent.name: agent for agent in agents}
-
-        perceived = perception.run(maze)["perceived_events"]
-        retrieved = retrieval.run(perceived)["retrieved"]
-        address = plan.run(agent_list, daytype, retrieved)["address"]
-        next_tile = execution.run(maze, agent_list, address)["next_tile"]
-        reflection.run()
-
-        #result = self.pipeline.run(
-        #            data={"perception": {"maze": maze},
-        #                    "plan": {"agents": agents, "daytype": daytype},
-        #                    "execution": {"maze": maze, "agents": agents}})
-
-        return next_tile
+    def wrap_up(self, state: AgentRunnerState) -> SimulationState:
+        logger.log(state["agent_name"], "completed workflow")
+        return SimulationState(agent_states={self.agent.name: state})

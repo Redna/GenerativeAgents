@@ -1,16 +1,20 @@
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-template = """You are {{agent}}. You will write about the personality and observations of {{agent}} based on a given event and related events.
+llm = ChatGroq(model="llama3-8b-8192",
+               name="contextualize_event")
+
+template = """You are {agent}. You will write about the personality and observations of {agent} based on a given event and related events.
 Context:
-{{identity}}
+{identity}
 
-{{agent}} perceived the following event: {{event_description}}
-He remembered the following related events: {{events}}
-He thought the following about the event: {{thoughts}}
+{agent} perceived the following event: {event_description}
+He remembered the following related events: {events}
+He thought the following about the event: {thoughts}
 
-What is {{agent}}'s personality and {{agent}}'s observations? Bring the event into context."""
+What is {agent}'s personality and {agent}'s observations? Bring the event into context."""
 
 
 class Context(BaseModel):
@@ -19,22 +23,19 @@ class Context(BaseModel):
 
 
 def contextualize_event(agent: str, identity: str, event_description: str, events: str, thoughts: str) -> str:
-    context = grammar_pipeline.run(model=Context, prompt_template=template, template_variables={
-        "agent": agent,
-        "identity": identity,
-        "event_description": event_description,
-        "events": events,
-        "thoughts": thoughts
-    })
+    structured_llm = llm.with_structured_output(Context)
+
+    content = template.format(agent=agent, identity=identity, event_description=event_description, events=events, thoughts=thoughts)
+    context = structured_llm.invoke([HumanMessage(content=content)])
 
     return context.event_context
 
 if __name__ == "__main__":
     from pprint import pprint
-    c = contextualize_event(agent="John", 
+    c = contextualize_event(agent="John",
                         identity="John is a 22 year old student, who is learning a lot. He likes discussing with his peers. He is a social person.",
                         event_description="John is going to the library to study for his exams.",
                         events="The library is full of students. John is studying for his exams. John is a social person. John is a student. John is learning a lot. John likes discussing with his peers.",
                         thoughts="John is a social person. The exam is important. He hopes to meet his friends at the library. He is excited to study.")
-    
+
     pprint(c)

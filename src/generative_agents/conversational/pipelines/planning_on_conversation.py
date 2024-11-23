@@ -1,11 +1,12 @@
-from enum import Enum
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-template = """You are {{agent}}.
+llm = ChatGroq(model="llama3-8b-8192", name="planning_on_conversation")
+template = """You are {agent}.
 Conversation:
-{{conversation}}
+{conversation}
 
 In one sentence, what do you need to remember from the conversation? (write it in the first person)"""
 
@@ -16,11 +17,10 @@ class PlanningOnConversation(BaseModel):
 
 
 def planning_on_conversation(agent: str, conversation: str) -> str:
-    planning_on_conversation = grammar_pipeline.run(model=PlanningOnConversation, prompt_template=template, template_variables={
-        "agent": agent,
-        "conversation": conversation
-    })
+    structured_llm = llm.with_structured_output(PlanningOnConversation)
 
+    content = template.format(agent=agent, conversation=conversation)
+    planning_on_conversation = structured_llm.invoke([HumanMessage(content=content)])
     return planning_on_conversation.to_remember
 
 

@@ -1,13 +1,17 @@
 from functools import lru_cache
 from pydantic import BaseModel, Field
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You are {{agent_name}}. You are rating the importance of an event.
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-Here is a brief description of {{agent_name}}:
-{{agent_identity}}
+llm = ChatGroq(model="llama3-8b-8192", name="poignance")
 
-How would you rate the {{type_}} "{{description}}"?
+template = """You are {agent_name}. You are rating the importance of an event.
+
+Here is a brief description of {agent_name}:
+{agent_identity}
+
+How would you rate the {type_} "{description}"?
 """
 
 class Poignance(BaseModel):
@@ -15,12 +19,10 @@ class Poignance(BaseModel):
 
 @lru_cache(maxsize=2048)
 def rate_poignance(agent_name: str, agent_identity: str, type_: str, description: str) -> int:
-    poignance = grammar_pipeline.run(model=Poignance, prompt_template=template, template_variables={
-        "agent_name": agent_name,
-        "agent_identity": agent_identity,
-        "type_": type_,
-        "description": description
-    })
+    structured_llm = llm.with_structured_output(Poignance)
+
+    content = template.format(agent_name=agent_name, agent_identity=agent_identity, type_=type_, description=description)
+    poignance = structured_llm.invoke([HumanMessage(content=content)])
 
     return poignance.rating
 

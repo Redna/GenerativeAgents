@@ -1,27 +1,31 @@
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
 
-template = """You are acting as {{agent}} in a role-playing game. You are in a conversation with another person.
+llm = ChatGroq(model="llama3-8b-8192",
+               name="conversation")
+
+template = """You are acting as {agent} in a role-playing game. You are in a conversation with another person.
 Your identity is:
-{{identity}}
+{identity}
 
-Here is the memory that is in {{agent}}'s head:
-{{memory}}
+Here is the memory that is in {agent}'s head:
+{memory}
 
 Past Context:
-{{past_context}}
+{past_context}
 
-Current Location: {{location}}
+Current Location: {location}
 
 Current Context:
-{{agent}} was {{agent_action}} when {{agent}} saw {{agent_with}} in the middle of {{agent_with_action}}.
-{{agent}} is initiating a conversation with {{agent_with}}.
+{agent} was {agent_action} when {agent} saw {agent_with} in the middle of {agent_with_action}.
+{agent} is initiating a conversation with {agent_with}.
 
-{{agent}} and {{agent_with}} are chatting. Here is their conversation so far:
-{{conversation}}
+{agent} and {agent_with} are chatting. Here is their conversation so far:
+{conversation}
 
-Given the context above, what does {{agent}} say to {{agent_with}} next in the conversation? And did it end the conversation?"""
+Given the context above, what does {agent} say to {agent_with} next in the conversation? And did it end the conversation?"""
 
 
 class ConversationRound(BaseModel):
@@ -32,18 +36,11 @@ class ConversationRound(BaseModel):
 
 
 def run_conversation(agent: str, identity: str, memory: str, past_context: str, location: str, agent_action: str, agent_with: str, agent_with_action: str, conversation: str) -> str:
-    conversation_round = grammar_pipeline.run(model=ConversationRound, prompt_template=template, template_variables={
-        "agent": agent,
-        "identity": identity,
-        "memory": memory,
-        "past_context": past_context,
-        "location": location,
-        "agent_action": agent_action,
-        "agent_with": agent_with,
-        "agent_with_action": agent_with_action,
-        "conversation": conversation
-    })
+    structured_llm = llm.with_structured_output(ConversationRound)
 
+    content = template.format(agent=agent, identity=identity, memory=memory, past_context=past_context, location=location,
+                                agent_action=agent_action, agent_with=agent_with, agent_with_action=agent_with_action, conversation=conversation)
+    conversation_round = structured_llm.invoke([HumanMessage(content=content)])
     return conversation_round.utterance, conversation_round.end_conversation
 
 if __name__ == "__main__":

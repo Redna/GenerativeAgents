@@ -9,13 +9,40 @@ authors = [
 ]
 description = "A simulation framework for generative agents."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 keywords = ["generative agents", "llm", "sim"]
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
+   "llama-cpp-python[server]",
+    "pathfinding==1.0.4",
+    "python-socketio==5.8.0",
+    "aiohttp",
+    "pydantic",
+    "qdrant-client",
+    "jupyterlab==4.0.7",
+    "ipykernel==6.25.2",
+    "instructor",
+    "openai",
+    "haystack-ai",
+    "qdrant-haystack",
+    "llama-cpp-haystack",
+    "langfuse-haystack",
+    "sentence-transformers",
+    "colorama",
+    "groq",
+    "langgraph",
+    "langfuse",
+    "gevent",
+    "loguru",
+    "langchain",
+    "langchain-groq",
+    "langchain-community",
+    "python-dotenv",
+    "tqdm",
+    "langchain-huggingface"
 ]
 dynamic = ["version"]
 

@@ -1,21 +1,27 @@
-
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import List, Optional, Tuple, Type, TypeVar
 import uuid
 from pydantic import BaseModel, Field
 
-from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient, models
 
 from datetime import datetime
 
 from generative_agents import global_state
-from generative_agents.persistence.cachable_sentence_transformer import CachableSentenceTransformer
+
+from langchain.embeddings import CacheBackedEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.storage import LocalFileStore
 
 
-_model = CachableSentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+_store = LocalFileStore("./cache/")
+_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+model = CacheBackedEmbeddings.from_bytes_store(_embeddings,
+                                               document_embedding_cache=_store,
+                                               namespace=_embeddings.model_name,
+                                               query_embedding_cache=True)
 
-DIMENSION = 768
+
+DIMENSION = 384
 
 class BaseSchema(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -57,19 +63,19 @@ class QdrantCollection:
                 self.collection_name, field_name="created", field_schema="integer")
 
     def _get_relevant_entries_with_scores(self, query, filter=None, limit=5) -> List[Tuple[T, float]]:
-        
+
         if type(query) == list:
             query = ", ".join(query)
 
-        query_vector = _model.encode(query)
+        query_vector = model.embed_query(query)
         try:
             points = self.client.search(collection_name=self.collection_name,
                                     query_filter=filter,
                                     limit=limit,
-                                    query_vector=query_vector, 
+                                    query_vector=query_vector,
                                     with_vectors=True)
         except Exception as e:
-            raise Exception(f"Error raised by Qdrant: {e}")              
+            raise Exception(f"Error raised by Qdrant: {e}")
 
         result = []
         for point in points:
@@ -100,7 +106,7 @@ class QdrantCollection:
         payloads = [entry.model_dump(exclude=["id"]) for entry in entries]
 
         if new_vectors or not all([entry.vector for entry in entries]):
-            vectors = _model.encode([entry.content for entry in entries])
+            vectors = ([model.embed_query(entry.content) for entry in entries])
         else:
             vectors = [entry.vector for entry in entries]
 

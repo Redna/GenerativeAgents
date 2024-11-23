@@ -1,4 +1,5 @@
 from abc import ABC
+from contextlib import contextmanager
 from enum import Enum
 from time import sleep
 from typing import Dict, List, Optional, Tuple
@@ -13,7 +14,6 @@ import sqlite3
 
 _collections: Dict[str, TimeAndImportanceWrapper] = {}
 _client = QdrantClient(":memory:")
-_connection = sqlite3.connect('conversation.db')
 
 
 class MemoryType(Enum):
@@ -41,45 +41,57 @@ class MemoryEntry(TimeAndImportanceBaseSchema):
 
     hash_key: str = None
 
+@contextmanager
+def get_connection():
+    _connection = sqlite3.connect('conversation.db')
+    yield _connection
+    _connection.close()
+
 
 def initialize_database(recreate: bool = False):
-    if recreate:
-        _connection.execute('DROP TABLE IF EXISTS active_conversations')
-        _connection.execute('DROP TABLE IF EXISTS last_conversations')
+    with get_connection() as _connection:
+        if recreate:
+            _connection.execute('DROP TABLE IF EXISTS active_conversations')
+            _connection.execute('DROP TABLE IF EXISTS last_conversations')
 
-    _connection.execute(
-        'CREATE TABLE IF NOT EXISTS active_conversations (agent TEXT, with_agent TEXT, conversation_id TEXT, PRIMARY KEY (agent, with_agent))')
-    _connection.execute(
-        'CREATE TABLE IF NOT EXISTS last_conversations (agent TEXT, with_agent TEXT, conversation_id TEXT, PRIMARY KEY (agent, with_agent))')
-    _connection.commit()
+        _connection.execute(
+            'CREATE TABLE IF NOT EXISTS active_conversations (agent TEXT, with_agent TEXT, conversation_id TEXT, PRIMARY KEY (agent, with_agent))')
+        _connection.execute(
+            'CREATE TABLE IF NOT EXISTS last_conversations (agent TEXT, with_agent TEXT, conversation_id TEXT, PRIMARY KEY (agent, with_agent))')
+        _connection.commit()
 
 
 def _get_active_conversation_id(agent_name: str, with_agent_name: str):
-    cursor = _connection.execute(
-        'SELECT conversation_id FROM active_conversations WHERE agent = ? AND with_agent = ?', (agent_name, with_agent_name))
-    result = cursor.fetchone()
-    return result[-1] if result else None
+    with get_connection() as _connection:
+        cursor = _connection.execute(
+            'SELECT conversation_id FROM active_conversations WHERE agent = ? AND with_agent = ?', (agent_name, with_agent_name))
+        result = cursor.fetchone()
+        return result[-1] if result else None
 
 def _get_last_conversation_id(agent_name: str, with_agent_name: str):
-    cursor = _connection.execute(
-        'SELECT conversation_id FROM last_conversations WHERE agent = ? AND with_agent = ?', (agent_name, with_agent_name))
-    result = cursor.fetchone()
-    return result[-1] if result else None
+    with get_connection() as _connection:
+        cursor = _connection.execute(
+            'SELECT conversation_id FROM last_conversations WHERE agent = ? AND with_agent = ?', (agent_name, with_agent_name))
+        result = cursor.fetchone()
+        return result[-1] if result else None
 
 def _set_active_conversation_id(agent_name: str, with_agent_name: str, conversation_id: str):
-    _connection.execute('INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
-                        (agent_name, with_agent_name, conversation_id))
-    _connection.commit()
+    with get_connection() as _connection:
+        _connection.execute('INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
+                            (agent_name, with_agent_name, conversation_id))
+        _connection.commit()
 
 def _set_last_conversation_id(agent_name: str, with_agent_name: str, conversation_id: str):
-    _connection.execute('INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
-                        (agent_name, with_agent_name, conversation_id))
-    _connection.commit()
+    with get_connection() as _connection:
+        _connection.execute('INSERT OR REPLACE INTO last_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)',
+                            (agent_name, with_agent_name, conversation_id))
+        _connection.commit()
 
 def _delete_active_conversation_id(agent_name: str, with_agent_name: str):
-    _connection.execute(
-        'DELETE FROM active_conversations WHERE agent = ? AND with_agent = ?', (agent_name, with_agent_name))
-    _connection.commit()
+    with get_connection() as _connection:
+        _connection.execute(
+            'DELETE FROM active_conversations WHERE agent = ? AND with_agent = ?', (agent_name, with_agent_name))
+        _connection.commit()
 
 def initialize_agent(agent_name: str):
     if agent_name in _collections:
@@ -99,7 +111,7 @@ def add(agent_name: str, memory_entry: MemoryEntry) -> MemoryEntry:
     if memory_entry.memory_type == MemoryType.CHAT.value:
         _set_active_conversation_id(
             agent_name, memory_entry.object_, memory_entry.id)
-        
+
         if memory_entry.filling[-1] and memory_entry.filling[-1].end:
             _set_last_conversation_id(
                 agent_name, memory_entry.object_, memory_entry.id)

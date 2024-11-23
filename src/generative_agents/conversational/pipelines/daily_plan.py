@@ -1,18 +1,22 @@
 
 from pydantic import BaseModel, Field
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
+
+llm = ChatGroq(model="llama3-8b-8192",
+               name="daily_plan")
 
 
-template = """You act as {{name}} in a role-play game. Your identity is:
-{{identity}}
+template = """You act as {name} in a role-play game. Your identity is:
+{identity}
 
 [Statements]
-{{statements}}
+{statements}
 
-Given the statements above, what is the most important thing that {{name}} should remember as they plan for {{today}}?
+Given the statements above, what is the most important thing that {name} should remember as they plan for {today}?
 If there is any scheduling information, be as specific as possible (include date, time, and location if stated in the statement)
-Write the response from {{name}}'s perspective and be as brief as possible."""
+Write the response from {name}'s perspective and be as brief as possible."""
 
 
 class Remember(BaseModel):
@@ -21,24 +25,23 @@ class Remember(BaseModel):
 
 
 def find_things_to_remember(name: str, identity: str, statements: str, today: str) -> str:
-    remember = grammar_pipeline.run(model=Remember, prompt_template=template, template_variables={
-        "name": name,
-        "identity": identity,
-        "statements": statements,
-        "today": today
-    })
+    structured_llm = llm.with_structured_output(Remember)
+
+    content = template.format(name=name, identity=identity,
+                                statements=statements, today=today)
+    remember = structured_llm.invoke([HumanMessage(content=content)])
 
     return remember.things_i_should_remember
 
 
-template = """You are {{name}}. Your identity is:
-{{identity}}
+template = """You are {name}. Your identity is:
+{identity}
 
 [Statements]
-{{statements}}
+{statements}
 
-Given the statements above, how might we summarize {{name}}'s feelings about their days up to now?
-Write the response from {{name}}'s perspective and be as brief as possible."""
+Given the statements above, how might we summarize {name}'s feelings about their days up to now?
+Write the response from {name}'s perspective and be as brief as possible."""
 
 
 class Feelings(BaseModel):
@@ -47,24 +50,23 @@ class Feelings(BaseModel):
 
 
 def find_feelings(name: str, identity: str, statements: str) -> str:
-    feelings = grammar_pipeline.run(model=Feelings, prompt_template=template, template_variables={
-        "name": name,
-        "identity": identity,
-        "statements": statements
-    })
+    structured_llm = llm.with_structured_output(Feelings)
+
+    content = template.format(name=name, identity=identity, statements=statements)
+    feelings = structured_llm.invoke([HumanMessage(content=content)])
 
     return feelings.feelings
 
 
-template = """You are {{name} acting in a role play game. Your identity is:
-{{identity}}
+template = """You are {name} acting in a role play game. Your identity is:
+{identity}
 
-{{name}}'s status from {{yesterday}}:
-{{current_activity}}
+{name}'s status from {yesterday}:
+{current_activity}
 
-{{name}}'s thoughts at the end of {{yesterday}}:
-{{thought_note}} {{plan_note}}
-It is now {{today}}. Given the above, what is {{name}}'s status for {{today}} that reflects {{name}}'s thoughts at the end of {{yesterday}}? Write this in third-person talking about {{name}}.
+{name}'s thoughts at the end of {yesterday}:
+{thought_note} {plan_note}
+It is now {today}. Given the above, what is {name}'s status for {today} that reflects {name}'s thoughts at the end of {yesterday}? Write this in third-person talking about {name}.
 If there is any scheduling information, be as specific as possible (include date, time, and location if stated in the statement). Be as brief as possible."""
 
 
@@ -74,26 +76,23 @@ class Reflections(BaseModel):
 
 
 def define_current_status(name: str, yesterday: str, today: str, current_activity: str, thought_note: str, plan_note: str, identity: str) -> str:
-    status = grammar_pipeline.run(model=Reflections, prompt_template=template, template_variables={
-        "name": name,
-        "yesterday": yesterday,
-        "today": today,
-        "current_activity": current_activity,
-        "thought_note": thought_note,
-        "plan_note": plan_note,
-        "identity": identity
-    })
+    structured_llm = llm.with_structured_output(Reflections)
+
+    content = template.format(name=name, identity=identity, yesterday=yesterday,
+                                today=today, current_activity=current_activity, thought_note=thought_note, plan_note=plan_note
+                                )
+    status = structured_llm.invoke([HumanMessage(content=content)])
 
     return status.status
 
 
-template = """You are {{name}}. Your identity is:
-{{identity}}
+template = """You are {name}. Your identity is:
+{identity}
 
-{{name}} has reflected and planned the following for today based on your feelings yesterday: 
-{{feelings_for_today}}
+{name} has reflected and planned the following for today based on your feelings yesterday:
+{feelings_for_today}
 
-Today is {{today}}. What is {{name}}'s plan today in broad-strokes? (Mention for each activity the time in 12-hour clock format.)"""
+Today is {today}. What is {name}'s plan today in broad-strokes? (Mention for each activity the time in 12-hour clock format.)"""
 
 
 class PlanOutline(BaseModel):
@@ -108,14 +107,12 @@ class DailyPlan(BaseModel):
 
 
 def create_daily_plan(name: str, identity: str, today: str, feelings_for_today: str) -> list[dict[str, str]]:
-    plan = grammar_pipeline.run(model=DailyPlan, prompt_template=template, template_variables={
-        "name": name,
-        "identity": identity,
-        "today": today,
-        "feelings_for_today": feelings_for_today
-    })
+    structured_llm = llm.with_structured_output(DailyPlan)
 
-    # convert 24-hour (int) clock to 12-hour clock
+    content = template.format(name=name, identity=identity,
+                                today=today, feelings_for_today=feelings_for_today)
+
+    plan = structured_llm.invoke([HumanMessage(content=content)])
 
     converted_plan = {}
 

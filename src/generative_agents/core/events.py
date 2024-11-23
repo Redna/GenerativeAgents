@@ -28,6 +28,7 @@ class Event:
     object_: str
     description: str
     filling: List[ConversationFilling | str] = field(default_factory=list)
+    event_type: EventType = EventType.EVENT
     hash_key: str = None
     tile: Tile = None
 
@@ -44,7 +45,6 @@ class Event:
 @dataclass
 class PerceivedEvent(Event):
     id: str = None
-    event_type: EventType = EventType.EVENT
     poignancy: float = .5
     created: datetime.datetime = global_state.time.time
     expiration: datetime.datetime = None

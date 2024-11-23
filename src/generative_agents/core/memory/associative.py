@@ -17,14 +17,14 @@ class LastEntryStore:
     def put(self, event: PerceivedEvent):
         if len(self.entries) == self.max_size:
            self._pop()
-        
+
         self._put(event)
-        
+
     def get(self, most_recent=0):
         if most_recent == 0:
             return self.entries
         else:
-            return self.entries[-most_recent:] 
+            return self.entries[-most_recent:]
 
     def _pop(self):
         entry = self.entries.pop(0)
@@ -67,10 +67,10 @@ class AssociativeMemory:
 
         for context_element in context:
             memories += database.get(self.agent_name, context_element, limit=limit // len(context))
-        
+
         memories = database.get(self.agent_name, context, limit=50)
         return [PerceivedEvent.from_db_entry(memory) for memory in memories]
-    
+
     def last_conversation_with(self, agent_name: str) -> PerceivedEvent:
         last_chat = database.get_last_chat(self.agent_name, agent_name)
         return PerceivedEvent.from_db_entry(last_chat) if last_chat else None
@@ -78,7 +78,7 @@ class AssociativeMemory:
     def active_conversation_with(self, agent_name: str) -> PerceivedEvent:
         active_chat = database.get_active_chat(self.agent_name, agent_name)
         return PerceivedEvent.from_db_entry(active_chat) if active_chat else None
-    
+
     def get_most_recent_memories(self, most_recent=0):
         memories = self.last_entries.get(most_recent=most_recent)
         return [PerceivedEvent.from_db_entry(memory) for memory in memories]

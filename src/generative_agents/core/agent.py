@@ -1,16 +1,11 @@
-from dataclasses import dataclass
-from enum import Enum
-from haystack import Pipeline
-
 from generative_agents.communication.models import AgentDTO, MovementDTO
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
-from generative_agents.core.whisper.whisper import whisper
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.persistence.database import initialize_agent
-from generative_agents.simulation.time import DayType, SimulationTime
-from generative_agents.utils import timeit
+from generative_agents.simulation.time import SimulationTime
+from generative_agents.utils import logger
 
 class Agent:
     def __init__(self, name: str, age: int, description: str, innate_traits: list[str], time: SimulationTime, location: str, emoji: str, activity: str, tile: Tile, tree: MemoryTree = None):
@@ -24,11 +19,12 @@ class Agent:
         self.spatial_memory = MemoryTree() if not tree else tree
         self.associative_memory = AssociativeMemory(
             self.name, self.scratch.retention)
-        self.time = time
+        self.scratch.time = time
         self.scratch.tile = tile
-        self.scratch.description = description
+        self.scratch._identity = ("", description, "")
+        self.scratch.description = ""
 
-        whisper(self.name, f"Initialized {self.name} at {self.scratch.tile}")
+        logger.log(self.name, f"Initialized {self.name} at {self.scratch.tile}")
 
     def to_dto(self):
         return AgentDTO(

@@ -1,12 +1,16 @@
 from enum import Enum
 from typing import Type
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
+from langchain_groq.chat_models import ChatGroq
+from langchain_core.messages import HumanMessage
+
+llm = ChatGroq(model="llama3-8b-8192",
+               name="action_location_game_object")
 
 template = """Your task is to identify the next object for an action. You need to output valid JSON.
-Current activity: {{action_description}}
-Objects available: [{{available_objects}}]
+Current activity: {action_description}
+Objects available: [{available_objects}]
 Which object is the most relevant one, you MUST pick one?
 """
 
@@ -20,10 +24,10 @@ def action_location_game_object(action_description: str, available_objects: str)
     objects = Enum("Objects", {obj: obj for obj in available_objects.split(", ")})
     model = model_from_enum(objects)
 
-    action_object_location = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
-        "action_description": action_description,
-        "available_objects": available_objects
-    })
+    structured_llm = llm.with_structured_output(model)
+
+    content = template.format(action_description=action_description, available_objects=available_objects)
+    action_object_location = structured_llm.invoke([HumanMessage(content=content)])
 
     return action_object_location.next_object.value
 

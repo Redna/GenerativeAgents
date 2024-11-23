@@ -1,10 +1,10 @@
 
 import datetime
-from enum import Enum
+import enum
 
 from generative_agents import global_state
 
-class DayType(Enum):
+class DayType(enum.Enum):
     FIRST_DAY = 1
     NEW_DAY = 2
     SAME_DAY = 3
@@ -33,7 +33,7 @@ class SimulationTime():
         date_string = datetime.datetime.today().strftime('%Y-%m-%d')
         datetime_string = f"{date_string} {time_string}"
         return datetime.datetime.strptime(datetime_string, '%Y-%m-%d %H:%M')
-    
+
     def tick(self):
         self.time += datetime.timedelta(seconds=self.increment)
         global_state.tick += 1
@@ -45,14 +45,14 @@ class SimulationTime():
     @property
     def today(self):
         return self.time.strftime("%A %B %d")
-    
+
     @property
     def hour(self):
         """
         return the hour in format 01:00 AM
         """
         return self.time.strftime("%I:%M %p")
-    
+
     @property
     def yesterday(self):
         return (self.time - datetime.timedelta(days=1)).strftime("%A %B %d")

@@ -1,5 +1,5 @@
-from generative_agents.simulation.time import SimulationTime
 
+from generative_agents.simulation.time import SimulationTime
 
 tick = 0
 verbose = False

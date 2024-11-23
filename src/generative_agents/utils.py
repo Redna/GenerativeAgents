@@ -5,12 +5,30 @@ import hashlib
 import json
 
 from pathlib import Path
-from time import perf_counter, time
+import sys
+from time import perf_counter
 
-from functools import wraps, lru_cache
+from functools import wraps
 from colorama import Fore, Style, Back
 
 from generative_agents import global_state
+from loguru import logger
+
+logger.remove(0)
+logger.add("general.log", format="{level} | {message}")
+logger.opt(colors=True)
+logger.opt(ansi=True)
+
+color_icons = [
+    ("blue", "🐍"),
+    ("green", "🐢"),
+    ("yellow", "🐇"),
+    ("red", "🐻"),
+    ("magenta",  "🦊"),
+    ("cyan", "🐴"),
+    ("light-blue", "🦄"),
+    ("black", "🐉"),
+]
 
 @contextmanager
 def colored(style, fore, back):
@@ -66,3 +84,8 @@ def hash_string(s: str) -> int:
 
 def hour_string_to_time(hour: str):
     return datetime.strptime(str(hour), "%H")
+
+def add_log_level_for_agent(agent_name: str):
+    color, icon = color_icons.pop(-1)
+    logger.level(agent_name, no=42, color=f"<{color}>", icon=icon)
+    logger.add(f"{agent_name}.log", filter=lambda record: record["level"].name == agent_name)
