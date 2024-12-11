@@ -1,11 +1,12 @@
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import datetime
+import json
 from typing import Tuple
 
 from generative_agents.conversational.pipelines.identity import formulate_identity
 from generative_agents.simulation.time import SimulationTime
-from generative_agents.core.events import Action
+from generative_agents.core.events import Action, Event
 from generative_agents.simulation.maze import Tile
 from generative_agents.utils import hash_string
 from generative_agents import global_state
@@ -40,6 +41,7 @@ class Scratch():
     daily_schedule_hourly_organzied: list[Tuple[str, int]] = None
     hourly_activity_history: list[str] = field(default_factory=list)
 
+    active_conversation: Event = None
     chatting_with: str = ""
     chatting_end_time: datetime.datetime = None
     chat: any = None
@@ -163,6 +165,35 @@ class Scratch():
 
             cached_identity = formulate_identity(self.name, commonset)
             self.description = cached_identity
-            self._identity = (new_hash, cached_identity, last_tick_updated)
+            self._identity = (new_hash, cached_identity, global_state.tick)
 
         return cached_identity
+
+    def save(self, path: str = None):
+        filename = str(global_state.tick).zfill(10)
+        if not path:
+            path = "storage/{self.name}/memory/{filename}"
+
+        with open(path, "wb") as fh:
+            fh.write(json.dumps(asdict(self)))
+
+
+    def upsert_scratch(self, left: 'Scratch', right: 'Scratch') -> 'Scratch':
+        if not left:
+            return right
+
+        if not right:
+            return left
+
+        return self.__class__(**(asdict(left) | asdict(right)))
+
+
+    @classmethod
+    def load(cls, path: str = None):
+        filename = str(global_state.tick).zfill(10)
+
+        if not path:
+            path = "storage/{self.name}/memory/{filename}"
+
+        with open(path, "rb") as fh:
+            cls(**json.load(fh))

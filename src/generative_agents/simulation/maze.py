@@ -200,7 +200,6 @@ class SimplePathFinder():
             path.append(current)
         return path[::-1]
 
-
 class Maze:
     def __init__(self):
         maze_info = _load_maze_meta_info()
@@ -528,7 +527,13 @@ class Maze:
     def get_tile(self, x, y) -> Tile:
         return self.tiles[y][x]
 
+    def __str__(self) -> str:
+        return f"Maze(name={self.maze_name}, width={self.maze_width}, height={self.maze_height}, tile_size={self.tile_size})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 if __name__ == "__main__":
     maze = Maze()
     print("maze created")
+    print(maze)

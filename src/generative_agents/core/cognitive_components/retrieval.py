@@ -4,7 +4,6 @@ from typing import Annotated
 from langgraph.graph import StateGraph, START, END
 
 from generative_agents.core.events import EventType, PerceivedEvent
-from generative_agents.persistence import database
 from generative_agents.utils import logger
 
 ADD_CURRENT_EVENT = "add_current_event"
@@ -63,11 +62,11 @@ class Retrieval:
     @lru_cache(maxsize=2048)
     def _get_related_to_text(self, text: str,  event_type: EventType = None):
         if event_type:
-            memories = database.get_by_type(self.agent.name, text, event_type)
+            memories = self.agent.associative_memory.retrieve_relevant_entries_by_type(text, event_type)
         else:
-            memories = database.get(self.agent.name, text)
+            memories = self.agent.associative_memory.retrieve_relevant_entries(text)
 
-        return [PerceivedEvent.from_db_entry(memory) for memory in memories]
+        return memories
 
     def _get_related_events(self, event: PerceivedEvent, event_type: EventType = None):
         return self._get_related_to_text(event.description, event_type)

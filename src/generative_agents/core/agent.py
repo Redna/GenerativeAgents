@@ -3,13 +3,11 @@ from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
 from generative_agents.simulation.maze import Maze, Tile
-from generative_agents.persistence.database import initialize_agent
 from generative_agents.simulation.time import SimulationTime
 from generative_agents.utils import logger
 
 class Agent:
     def __init__(self, name: str, age: int, description: str, innate_traits: list[str], time: SimulationTime, location: str, emoji: str, activity: str, tile: Tile, tree: MemoryTree = None):
-        initialize_agent(name)
         self.name = name
         self.location = location
         self.emoji = emoji

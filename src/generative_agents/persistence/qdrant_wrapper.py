@@ -95,7 +95,17 @@ class QdrantCollection:
     def get_by_id(self, id: str) -> Optional[T]:
         points = self.client.retrieve(collection_name=self.collection_name,
                                         ids=[id])
-        return points[0] if points else None
+        return self.add(points) if points else None
+
+    def get_last_points(self, filter=None, limit=1) -> List[T]:
+       points = self.client.query_points(
+            collection_name=self.collection_name,
+            filter=filter,
+            query=models.OrderByQuery(models.OrderBy(key="last_accessed_at",
+                                                     direction=models.Direction.DESC)),
+            limit=limit)
+       return self.add(points)
+
 
     def add(self, entries: List[T], new_vectors=True) -> List[T]:
         if any([not isinstance(entry, self.data_schema) for entry in entries]):
@@ -123,7 +133,7 @@ class QdrantCollection:
 
 
 class TimeAndImportanceWrapper(QdrantCollection):
-    rerank_limit = 200
+    rerank_limit = 250
 
     def __init__(self, client: QdrantClient, collection_name: str, data_schema: Type[K], decay_rate: float = 0.01):
         self.collection = super().__init__(client, collection_name, data_schema, decay_rate=decay_rate)

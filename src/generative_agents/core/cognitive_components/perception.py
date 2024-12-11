@@ -52,7 +52,8 @@ class Perception:
         self.workflow = workflow
 
     def perceive_space(self, state: PerceptionState) -> PerceptionState:
-        nearby_tiles = self.maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
+        maze = self.maze
+        nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
         for tile in nearby_tiles:
             self.agent.spatial_memory.add(tile)
 
@@ -60,11 +61,12 @@ class Perception:
         return PerceptionState(perceived_events=[])
 
     def perceive_events(self, state: PerceptionState) -> PerceptionState:
+        maze = self.maze
         current_arena = self.agent.scratch.tile.get_path(Level.ARENA)
         percept_events_dict = dict()
         percept_events_list = []
 
-        nearby_tiles = self.maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
+        nearby_tiles = maze.get_nearby_tiles(self.agent.scratch.tile, self.agent.scratch.vision_radius)
         for tile in nearby_tiles:
             if not tile.events or tile.get_path(Level.ARENA) != current_arena:
                 continue

@@ -15,7 +15,6 @@ from generative_agents.core.events import Action, Event, EventType, ObjectAction
 from generative_agents.persistence.database import ConversationFilling
 from generative_agents.simulation.maze import Level
 from generative_agents.simulation.time import DayType
-from generative_agents.persistence import database
 
 from generative_agents.core.agent import Agent
 from generative_agents.conversational.pipelines.wake_up_hour import estimate_wake_up_hour
@@ -344,6 +343,7 @@ class Plan:
             self.agent.scratch.chatting_with = None
             self.agent.scratch.chat = None
             self.agent.scratch.chatting_end_time = None
+            self.agent.scratch.active_conversation = None
 
         # We want to make sure that the persona does not keep conversing with each
         # other in an infinite loop. So, chatting_with_buffer maintains a form of
@@ -377,11 +377,11 @@ class Plan:
 
     def _get_related_to_text(self, text: str,  event_type: EventType = None):
         if event_type:
-            memories = database.get_by_type(self.agent.name, text, event_type.value)
+            memories = self.agent.associative_memory.retrieve_relevant_entries_by_type(
+                text, event_type)
         else:
-            memories = database.get(self.agent.name, text)
-
-        return [PerceivedEvent.from_db_entry(memory.text, memory.metadata) for memory in memories]
+            memories = self.agent.associative_memory.retrieve_relevant_entries(text)
+        return memories
 
     def _get_related_events(self, event: PerceivedEvent, event_type: EventType = None):
         return self._get_related_to_text(event.description, event_type)
@@ -497,8 +497,7 @@ class Plan:
 
     def _chat_react(self, agent_with: 'Agent'):
         utterance, end = self._generate_conversation(agent_with)
-        conversation = self.agent.associative_memory.active_conversation_with(
-            agent_with.name)
+        conversation = self.agent.scratch.active_conversation
 
         action_start_time = agent_with.scratch.time.time
         filling = []
@@ -511,7 +510,7 @@ class Plan:
                                         utterance=utterance, end=end)]
         description = self._generate_conversation_summary(filling)
 
-        self._createreact_action(inserted_action=description,
+        self._create_react_action(inserted_action=description,
                                   inserted_action_duration=10,
                                   action_address=f"<persona> {agent_with.name}",
                                   action_event=(
@@ -525,7 +524,7 @@ class Plan:
                                   filling=filling,
                                   action_start_time=action_start_time)
 
-        Plan(agent_with)._createreact_action(inserted_action=description,
+        Plan(agent_with)._create_react_action(inserted_action=description,
                                         inserted_action_duration=10,
                                         action_address=f"<persona> {self.agent.name}",
                                         action_event=(
@@ -546,6 +545,7 @@ class Plan:
             self.agent.scratch.chatting_with = None
             self.agent.scratch.chat = None
             self.agent.scratch.chatting_end_time = self.agent.scratch.time
+            self.agent.scratch.active_conversation = None
 
     def _wait_react(self, wait_time):
         event_short_description = self.agent.scratch.action.event.description.split(
@@ -567,7 +567,7 @@ class Plan:
         action_pronunciatio = "⌛"
 
         self.agent._update_schedule(inserted_action, inserted_action_duration)
-        self.agent._createreact_action(inserted_action, inserted_action_duration,
+        self.agent._create_react_action(inserted_action, inserted_action_duration,
                                         action_address, action_event, chatting_with, chat, chatting_with_buffer, chatting_end_time,
                                         action_pronunciatio)
 
@@ -680,8 +680,7 @@ class Plan:
 
         focal_points = [
             f"{relationship}", f"{agent_with.name} is {agent_with.scratch.action.event.description}"]
-        active_conversation = self.agent.associative_memory.active_conversation_with(
-            agent_with.name)
+        active_conversation = self.agent.scratch.active_conversation
 
         active_conversation_string = ""
         if active_conversation:
@@ -733,7 +732,7 @@ class Plan:
         return conversation_summary(conversation=conversation_history)
 
 
-    def _createreact_action(self, inserted_action, inserted_action_duration,
+    def _create_react_action(self, inserted_action, inserted_action_duration,
                              action_address, action_event, chatting_with, chat, chatting_with_buffer,
                              chatting_end_time, action_pronunciatio, filling=[], action_start_time=None):
 
@@ -762,7 +761,8 @@ class Plan:
         if chatting_with_buffer:
             self.agent.scratch.chatting_with_buffer = {**self.agent.scratch.chatting_with_buffer, **chatting_with_buffer}
         self.agent.scratch.chatting_end_time = chatting_end_time
-        self.agent.associative_memory.add(event)
+        event = self.agent.associative_memory.add(event)
+        self.agent.scratch.active_conversation = event
 
     def _rate_perception_poignancy(self, event_type: EventType, description: str) -> float:
         if "idle" in description:

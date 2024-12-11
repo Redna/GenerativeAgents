@@ -15,10 +15,10 @@ class ExecutionState(TypedDict):
 
 
 class Execution:
-    def __init__(self, agent: Agent, maze: Maze, agents: dict[str, 'Agent']):
+    def __init__(self, agent: Agent, agents: dict[str, 'Agent'], maze: Maze):
         self.agent = agent
-        self.maze = maze
         self.agents = agents
+        self.maze = maze
 
         workflow = StateGraph(ExecutionState)
         workflow.add_node("execute", self.run)
@@ -29,6 +29,7 @@ class Execution:
 
     def run(self, state: ExecutionState) -> ExecutionState:
         plan = state.get("address")
+        maze = self.maze
 
         if "<random>" in plan or self.agent.scratch.planned_path == []:
             self.agent.scratch.action_path_set = False
@@ -44,15 +45,15 @@ class Execution:
                 # Executing persona-persona interaction.
                 target_persona_tile = self.agents[plan.split(
                     "<persona>")[-1].strip()].scratch.tile
-                potential_path = self.maze.find_path(self.agent.scratch.tile,
+                potential_path = maze.find_path(self.agent.scratch.tile,
                                                      target_persona_tile)
 
                 if len(potential_path) <= 2:
                     target_tiles = [potential_path[0]]
                 else:
-                    potential_1 = self.maze.find_path(self.agent.scratch.tile,
+                    potential_1 = maze.find_path(self.agent.scratch.tile,
                                                       potential_path[int(len(potential_path)/2)])
-                    potential_2 = self.maze.find_path(self.agent.scratch.tile,
+                    potential_2 = maze.find_path(self.agent.scratch.tile,
                                                       potential_path[int(len(potential_path)/2)+1])
                     if len(potential_1) <= len(potential_2):
                         target_tiles = [
@@ -70,7 +71,7 @@ class Execution:
 
             elif "<random>" in plan:
                 # Executing a random location action.
-                target_tiles = [self.maze.get_random_tile(
+                target_tiles = [maze.get_random_tile(
                     self.agent.scratch.tile)]
             else:
                 # This is our default execution. We simply take the persona to the
@@ -78,16 +79,16 @@ class Execution:
                 # Retrieve the target addresses. Again, plan is an action address in its
                 # string form. <maze.address_tiles> takes this and returns candidate
                 # coordinates.
-                if plan not in self.maze.address_tiles:
+                if plan not in maze.address_tiles:
                     fallback_plan = ":".join(plan.split(":")[0:-1])
 
-                    if fallback_plan not in self.maze.address_tiles:
+                    if fallback_plan not in maze.address_tiles:
                         fallback_plan = random.choice(
-                            list(self.maze.address_tiles.keys()))
+                            list(maze.address_tiles.keys()))
 
-                    target_tiles = self.maze.address_tiles[fallback_plan]
+                    target_tiles = maze.address_tiles[fallback_plan]
                 else:
-                    target_tiles = self.maze.address_tiles[plan]
+                    target_tiles = maze.address_tiles[plan]
 
             # There are sometimes more than one tile returned from this (e.g., a tabe
             # may stretch many coordinates). So, we sample a few here. And from that
@@ -125,7 +126,7 @@ class Execution:
                 # an input, and returns a list of coordinate tuples that becomes the
                 # path.
                 # e.g., [(0, 1), (1, 1), (1, 2), (1, 3), (1, 4)...]
-                curr_path = self.maze.find_path(curr_tile, i)
+                curr_path = maze.find_path(curr_tile, i)
 
                 if not closest_target_tile:
                     closest_target_tile = i

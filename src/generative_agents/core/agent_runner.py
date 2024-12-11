@@ -13,9 +13,8 @@ from generative_agents.simulation.time import SimulationTime, DayType
 from generative_agents.utils import logger
 
 class AgentRunner:
-    def __init__(self, agent: Agent, maze: Maze, agents: dict[str, 'Agent'], time: SimulationTime):
+    def __init__(self, agent: Agent, agents: dict[str, 'Agent'], time: SimulationTime, maze: Maze):
         self.agent = agent
-        self.maze = maze
         self.agents = agents
         self.time = time
 
@@ -30,10 +29,10 @@ class AgentRunner:
         workflow = StateGraph(AgentRunnerState, input=AgentRunnerState, output=SimulationState)
 
         workflow.add_node(DAYTYPE_NODE, self.set_daytype)
-        workflow.add_node(PERCEPTION_NODE, Perception(self.agent, maze).workflow.compile())
+        workflow.add_node(PERCEPTION_NODE, Perception(self.agent, maze=maze).workflow.compile())
         workflow.add_node(RETRIEVAL_NODE, Retrieval(self.agent).workflow.compile())
         workflow.add_node(PLAN_NODE, Plan(self.agent, agents).workflow.compile())
-        workflow.add_node(EXECUTION_NODE, Execution(self.agent, maze, agents).workflow.compile())
+        workflow.add_node(EXECUTION_NODE, Execution(self.agent, agents, maze=maze).workflow.compile())
         workflow.add_node(REFLECTION_NODE, Reflection(self.agent).workflow.compile())
         workflow.add_node(WRAP_UP, self.wrap_up)
 
