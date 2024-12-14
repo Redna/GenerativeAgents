@@ -52,7 +52,10 @@ class QdrantCollection:
         self.data_schema = data_schema
         self.decay_rate = decay_rate
 
-        if collection_name not in self.client.get_collections():
+
+        already_exists = any(collection_name == collection.name for collection in self.client.get_collections().collections)
+
+        if not already_exists:
             vectors_config = models.VectorParams(size=DIMENSION,
                                                  distance=models.Distance.COSINE)
             self.client.create_collection(

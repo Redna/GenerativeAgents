@@ -9,7 +9,7 @@ from qdrant_client import models
 from generative_agents import global_state
 from generative_agents.persistence.qdrant_wrapper import TimeAndImportanceWrapper, TimeAndImportanceBaseSchema
 
-_client = QdrantClient(":memory:")
+_client = QdrantClient(url="http://localhost:6333", timeout=60)
 
 
 class MemoryType(Enum):
@@ -108,7 +108,7 @@ class AgentCollection:
         return self._create_or_restore_snapshot(current_tick)
 
     def _create_or_restore_snapshot(self, snapshopt_tick: int):
-        snapshot_folder = "./storage/{self._collection.collection_name}/snapshots"
+        snapshot_folder = f"./storage/{self._collection.collection_name}/snapshots"
         snapshot_path = f"{snapshot_folder}/{snapshopt_tick}"
         os.makedirs(snapshot_folder, exist_ok=True)
 
@@ -117,9 +117,8 @@ class AgentCollection:
                                      location=f"file://{snapshot_path}",
                                      wait=True)
         else:
-            snapshot_info = _client.create_snapshot(collection_name=self.agent_name,
-                                                           location=f"file://{snapshot_path}")
-            with open(snapshot_info, "wb") as fh:
+            snapshot_info = _client.create_snapshot(collection_name=self.agent_name)
+            with open(snapshot_path, "wb") as fh:
                 fh.write(snapshot_info)
 
         return self._collection
