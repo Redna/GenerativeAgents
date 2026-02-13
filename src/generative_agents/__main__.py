@@ -115,7 +115,15 @@ class Simulation():
     def stop(self):
         self.stopped = True
 
-    async def run(self):
+    def start(self):
+        self.stopped = False
+
+    def get_latest_round_update(self):
+        if self.round_updates.current_round > 0:
+            return self.round_updates.last
+        return None
+
+    def run(self):
         self.stopped = False
 
         compiled_graph = self.workflow.compile()
@@ -200,9 +208,24 @@ class Simulation():
 async def main():
     round_updates = RoundUpdateSnapshots()
     simulation = Simulation(round_updates)
-    #api.start(simulation.run_loop, simulation.spawn_agent)
     
-    await simulation.run()
+    # Initialize the API app
+    app = api.get_app(simulation.get_latest_round_update, simulation.spawn_agent)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, 'localhost', 8000)
+    await site.start()
+    
+    print("Server started at http://localhost:8000")
+    
+    import concurrent.futures
+    loop = asyncio.get_running_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        await loop.run_in_executor(pool, simulation.run)
+    
+    # Cleanup
+    await runner.cleanup()
 
 if __name__ == '__main__':
     asyncio.run(main())

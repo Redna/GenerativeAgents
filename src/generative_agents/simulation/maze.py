@@ -79,17 +79,17 @@ class Tile:
     def get_path(self, level: Level):
         path = f"{self.world}"
 
-        if level == level.WORLD: 
+        if level == Level.WORLD: 
             return path
         else: 
             path += f":{self.sector}"
         
-        if level == level.SECTOR: 
+        if level == Level.SECTOR: 
             return path
         else: 
             path += f":{self.arena}"
 
-        if level == level.ARENA: 
+        if level == Level.ARENA: 
             return path
         else: 
             path += f":{self.game_object}"
@@ -130,7 +130,7 @@ class Tile:
         return (self.x, self.y) == (other.x, other.y)
     
     def __hash__(self) -> int:
-        return hash((self.get_unique_name, self.x, self.y))
+        return hash((self.get_unique_name(), self.x, self.y))
 
 class SimplePathFinder():
     def __init__(self, grid: List[List[Tile]]):
@@ -172,7 +172,7 @@ class SimplePathFinder():
 
     @staticmethod
     def _heuristic(start, end):
-        return abs(start.x - end.x) + abs(start.y - start.y)
+        return abs(start.x - end.x) + abs(start.y - end.y)
 
     def _get_neighbors(self, pos):
         neighbors = []
