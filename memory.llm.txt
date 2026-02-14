@@ -1,0 +1,79 @@
+# GENERATIVE AGENTS SANDBOX - HANDOVER MEMORY
+
+This file contains critical context, architectural decisions, and operational knowledge for any agent picking up development on the Generative Agents Sandbox.
+
+## 1. Project Overview & Current State
+**Goal**: Create a standalone sandbox environment to visualize generative agents in a 2D world (Phaser.js) driven by a Python backend.
+**Current Status**: 
+-   **Frontend**: Fully functional Phaser 3 UI with split-pane layout (Map Left, Sidebar Right).
+-   **Backend**: Mock Python server (`mock_server.py`) simulating agent data via Socket.IO.
+-   **Environment**: Uses `.venv` virtual environment for Python dependencies.
+-   **Integration**: Successful end-to-end communication via local Socket.IO (Port 8000).
+
+## 2. Key Architecture & Files
+
+### Frontend (`frontend/`)
+-   **Framework**: Phaser 3 + TypeScript + Vite.
+-   **Entry Point**: `src/scenes/game.ts` (Main Game Loop & Rendering).
+-   **UI Logic**: `src/ui.ts` (Sidebar management, DOM manipulation).
+-   **Communication**: `src/connector/simulationConnector.ts` (Socket.IO client wrapper).
+-   **Data Types**: `src/connector/dtos.ts` (Shared DTOs between FE/BE).
+
+### Backend (`src/generative_agents/`)
+-   **Mock Server**: `mock_server.py`
+    -   Uses `python-socketio` and `aiohttp`.
+    -   Simulates game loop and broadcasts state updates (`update` event).
+    -   **Port**: 8000 (Hardcoded). Note: User sometimes refers to 8080, but process runs on 8000.
+
+### Scripts
+-   **`run_sandbox.sh`**: Main entry point. Usage: `./run_sandbox.sh mock` (or `real`).
+    -   Handles process management (starts BE & FE).
+    -   **Auto-detects `.venv`**: Prefers `.venv/bin/python` if available.
+
+## 3. Implemented Features (Verified)
+
+### A. Visuals & Map
+-   **Map**: 'The Ville' (`the_ville_jan7.json`).
+-   **Zoom/Pan**: Mouse wheel zooms, drag pans the camera.
+-   **Highlighting**: 
+    -   "FIFA-style" red pulsing circle under selected agent's feet.
+    -   Graphic Logic: `game.ts -> updateHighlight()`. Uses alpha sine wave for pulsing.
+    -   Z-Index: Layered correctly (Ground < Highlight < Agent).
+
+### B. Agent Interaction
+-   **Selection**: Clicking agent in sidebar OR map selects them.
+-   **Camera Follow**: 
+    -   Camera smoothly tracks selected agent (`camera.startFollow`).
+    -   **Break Follow**: Manual pan (drag) breaks the lock.
+-   **Deselection**:
+    -   "Unfocus Camera" button in sidebar.
+    -   Clears highlight, stops camera follow, hides details panel.
+    -   Event: `deselect-agent`.
+
+## 4. Operational Knowledge & Gotchas
+
+### Running the Sandbox
+```bash
+./run_sandbox.sh mock
+```
+*Note: Ensure `.venv` is active or configured. The script handles this, but manual pip installs need `.venv/bin/pip`.*
+
+### Python Dependencies
+-   Requires: `python-socketio`, `aiohttp`.
+-   Install: `.venv/bin/pip install python-socketio aiohttp`.
+
+### Common Issues
+-   **Port Conflicts**: If the server fails to start, check port **8000**.
+    -   Command: `lsof -i :8000` (or sometimes 8080 mixed up by user).
+    -   Kill: `kill -9 <PID>`.
+-   **Asset Loading**: If sprites are missing, ensure `frontend/public/assets` matches the `game.ts` loader paths.
+-   **Socket Disconnects**: If frontend loops connecting, backend is likely crashed or port blocked.
+
+## 5. Next Steps / Roadmap
+-   **Real Backend**: Connect `generative_agents/__main__.py` to the frontend (currently only `mock_server.py` is fully integrated).
+-   **Chat & Interaction**: Add ability to "talk" to agents via UI.
+-   **Pathfinding Visualization**: Show agent destination/path on map.
+
+---
+**Last Updated**: 2026-02-14
+**Author**: Antigravity (Agent)
