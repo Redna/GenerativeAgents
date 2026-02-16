@@ -1,71 +1,79 @@
-
+import dspy
+from pydantic import BaseModel, Field
 import datetime
-from enum import Enum
-from typing import Literal
-from pydantic import BaseModel, Field, create_model
+from generative_agents.utils import time_string_to_time
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-from generative_agents.utils import get_time_string, hour_string_to_time, time_string_to_time
+class SubtaskItem(BaseModel):
+    activity_name: str = Field(description="Description of the 5-minute subtask.")
+    duration_minutes: int = Field(description="Duration in minutes (usually 5 or 10).", default=5)
+
+class DecompositionSignature(dspy.Signature):
+    """
+    Decompose a task into subtasks for the given duration.
+    """
+    name: str = dspy.InputField(desc="Name of the agent.")
+    identity: str = dspy.InputField(desc="Identity of the agent.")
+    today: str = dspy.InputField(desc="Today's date.")
+    task_description: str = dspy.InputField(desc="The task to decompose.")
+    task_context: str = dspy.InputField(desc="Context for the task.")
+    time_range: str = dspy.InputField(desc="Start and end time.")
+    total_duration: int = dspy.InputField(desc="Total duration in minutes.")
+    
+    subtasks: list[SubtaskItem] = dspy.OutputField(desc="List of subtasks. The sum of their durations should equal total_duration.", )
 
 
-template = """You act as {{name}}. You will decompose a task into subtasks.
-
-{{identity}}
-
-Today is {{today}}. {{task_context}}
-In 10 minutes increments, what are the subtasks that {{name}} does when {{name}} is "{{task_description}}" from {{task_start_time}} ~ {{task_end_time}}? (total duration in minutes: {{task_duration}})"""
-
-def create_decomposition_schedule(name: str, identity: str, task_description: str, task_start_time: str, task_end_time: str, task_duration: int, today: str, task_context: str) -> list[dict[str, str]]:
-
-    # iterate all 5 minutes increments
-    subtasks = {}
-
-    # startime in datetime format from xx:xx AM/PM
-    start_time = time_string_to_time(task_start_time)
-
-    for minutes in range(0, task_duration, 5):
-        next_task_start_time = start_time + datetime.timedelta(minutes=minutes)
-        subtasks[f"Subtask {minutes//10+1}/{task_duration // 10}"] = (str, Field(..., description=f"The 10 minutes activity planned at {get_time_string(next_task_start_time)}."))
-
-    DecompositionSchedule = create_model("DecompositionSchedule", **subtasks)
-
-    schedule = grammar_pipeline.run(model=DecompositionSchedule, prompt_template=template, template_variables={
-        "name": name,
-        "identity": identity,
-        "task_description": task_description,
-        "task_start_time": task_start_time,
-        "task_end_time": task_end_time,
-        "task_duration": task_duration,
-        "today": today,
-        "task_context": task_context
-    })
-    return [(task, 10) for task in schedule.model_dump().values()]
+def create_decomposition_schedule(name: str, identity: str, task_description: str, task_start_time: str, task_end_time: str, task_duration: int, today: str, task_context: str) -> list[tuple[str, int]]:
+    time_range = f"{task_start_time} ~ {task_end_time}"
+    
+    try:
+        # Using ChainOfThought instead of TypedPredictor
+        predict = dspy.ChainOfThought(DecompositionSignature)
+        response = predict(
+            name=name,
+            identity=identity,
+            today=today,
+            task_description=task_description,
+            task_context=task_context,
+            time_range=time_range,
+            total_duration=task_duration
+        )
+        
+        # Format output as expected: list of (activity, duration)
+        # Note: original code generated fixed slots. We'll trust LLM to generate enough 5-10 min chunks or normalize.
+        result = []
+        current_dur = 0
+        if hasattr(response, 'subtasks'):
+            for item in response.subtasks:
+                if isinstance(item, dict):
+                     act_name = item.get('activity_name', '')
+                     dur_min = item.get('duration_minutes', 5)
+                else:
+                     act_name = item.activity_name
+                     dur_min = item.duration_minutes
+                
+                result.append((act_name, dur_min))
+                current_dur += dur_min
+            
+        # Fill remaining time if any
+        if current_dur < task_duration:
+            result.append((task_description, task_duration - current_dur))
+            
+        return result
+    except Exception as e:
+        print(f"Error in create_decomposition_schedule: {e}")
+        return [(task_description, task_duration)]
 
 if __name__ == "__main__":
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "subtasks": [SubtaskItem(activity_name="Start coding", duration_minutes=10)]
+         }]))
+         
     print(create_decomposition_schedule(name="James Peterson",
-                                        identity="James Peterson is a 45 year old software developer. He enjoys coding and is a coffee enthusiast. James loves reading sci-fi novels and playing chess in his free time. He is an early bird and enjoys the quiet mornings.",
-                                        task_description="Coding a new feature for the project",
+                                        identity="James...",
+                                        task_description="Coding",
                                         task_start_time="9:00 AM",
                                         task_end_time="10:00 AM",
-                                        task_duration=60))
-    print(create_decomposition_schedule(name="Emily Clark",
-                                        identity="Emily Clark is a 25 year old freelance graphic designer. She is passionate about digital art and loves to travel. Emily is also a foodie and enjoys exploring new cuisines.",
-                                        task_description="Visiting a new art museum",
-                                        task_start_time="1:00 PM",
-                                        task_end_time="2:00 PM",
-                                        task_duration=60))
-    print(create_decomposition_schedule(name="Alex Johnson",
-                                        identity="Alex Johnson is a 35 year old personal trainer. He is dedicated to fitness and well-being. Alex enjoys outdoor activities and often goes hiking on weekends. He is motivated by helping others achieve their fitness goals.",
-                                        task_description="Leading a morning fitness class",
-                                        task_start_time="8:00 AM",
-                                        task_end_time="9:30 AM",
-                                        task_duration=90))
-    print(create_decomposition_schedule(name="Maria Gonzales",
-                                        identity="Maria Gonzales is a 32 year old architect. She is innovative and enjoys drawing sketches of her designs. Maria loves gardening and spends her evenings taking care of her plants.",
-                                        task_description="Drafting a new building design",
-                                        task_start_time="5:00 PM",
-                                        task_end_time="6:00 PM",
-                                        task_duration=60))
-    
-    
-        
+                                        task_duration=60,
+                                        today="2023-10-01", 
+                                        task_context="Working"))

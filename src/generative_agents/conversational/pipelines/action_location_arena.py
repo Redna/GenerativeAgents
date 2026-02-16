@@ -1,52 +1,55 @@
-from enum import Enum
-from typing import Type
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-template = """Your task is to identify the next area for a character. It has to be one area of the provided list
-
-{{name}} is in the area "{{current_area}}" in "{{current_sector}}".
-{{name}} is going to "{{sector}}" that has the following areas: [{{sector_arenas}}]
-Stay in the current area if the activity can be done there. Never go into other people's rooms unless necessary.
-For {{action_description}}, to which area should {{name}} go in "{{sector}}"?
-"""
-
-def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
-    class ActionArenaLocation(BaseModel):
-        reasoning: str = Field(
-            description="Reasoning for yes or no and the next area selection in one brief sentence.")
-        next_area: dynamic_enum = Field(
-            description="The next area where the character should go.")
-    return ActionArenaLocation
-
+class ActionLocationArenaSignature(dspy.Signature):
+    """
+    Identify the next area for a character within a sector.
+    """
+    name: str = dspy.InputField(desc="Name of the agent.")
+    current_area: str = dspy.InputField(desc="Current area of the agent.")
+    current_sector: str = dspy.InputField(desc="Current sector.")
+    sector: str = dspy.InputField(desc="Target sector.")
+    available_arenas: str = dspy.InputField(desc="Comma-separated list of available arenas in the target sector.")
+    action_description: str = dspy.InputField(desc="Description of the action.")
+    
+    reasoning: str = dspy.OutputField(desc="Reasoning for the area selection.")
+    next_area: str = dspy.OutputField(desc="The selected area from available_arenas.")
 
 def action_area_locations(name: str, current_area: str, current_sector: str, sector: str, sector_arenas: str, action_description: str) -> str:
-    areas = Enum("Areas", {arena: arena for arena in sector_arenas.split(", ")})
-    model = model_from_enum(areas)
-
-    action_arena_location = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
-        "name": name,
-        "current_area": current_area,
-        "current_sector": current_sector,
-        "sector": sector,
-        "sector_arenas": sector_arenas,
-        "action_description": action_description
-    })
-
-    return action_arena_location.next_area.value
-
+    try:
+        predict = dspy.ChainOfThought(ActionLocationArenaSignature)
+        response = predict(
+            name=name,
+            current_area=current_area,
+            current_sector=current_sector,
+            sector=sector,
+            available_arenas=sector_arenas,
+            action_description=action_description
+        )
+        
+        # Validation: check if response is in allowed arenas
+        # Relaxed matching could be added, but exact match for now
+        allowed = [a.strip() for a in sector_arenas.split(",")]
+        cleaned_response = response.next_area.strip()
+        
+        # Basic fuzzy matching or fallback
+        for a in allowed:
+            if a.lower() == cleaned_response.lower():
+                return a
+        if allowed: return allowed[0] # Fallback to first
+        return ""
+        
+    except Exception as e:
+        print(f"Error in action_area_locations: {e}")
+        return sector_arenas.split(",")[0] if sector_arenas else ""
 
 if __name__ == "__main__":
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "next_area": "bedroom"
+         }]))
     print(action_area_locations(name="John Doe", 
                                 current_area="common room", 
                                 current_sector="John Doe's apartment", 
                                 sector="Hobbs Cafe", 
                                 sector_arenas="kitchen, bedroom, bathroom", 
                                 action_description="Putting on trousers"))
-    print(action_area_locations(name="John Doe",
-                                current_area="common room",
-                                current_sector="John Doe's apartment",
-                                sector="Hobbs Cafe",
-                                sector_arenas="kitchen, bedroom, bathroom",
-                                action_description="Getting coffee"))

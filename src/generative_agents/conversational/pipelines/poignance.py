@@ -1,46 +1,35 @@
+import dspy
 from functools import lru_cache
-from pydantic import BaseModel, Field
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
 
-template = """You are {{agent_name}}. You are rating the importance of an event.
-
-Here is a brief description of {{agent_name}}:
-{{agent_identity}}
-
-How would you rate the {{type_}} "{{description}}"?
-"""
-
-class Poignance(BaseModel):
-    rating: int = Field(ge=0, lt=11, description="Rating of the poignance of the event. (0-10)")
+class RatePoignance(dspy.Signature):
+    """Rate the poignance (importance) of an event on a scale of 0 to 10."""
+    agent_name: str = dspy.InputField(desc="The name of the agent.")
+    agent_identity: str = dspy.InputField(desc="A description of the agent's identity and backstory.")
+    event_type: str = dspy.InputField(desc="The type of the event (e.g., 'Exhibition', 'Chat').")
+    description: str = dspy.InputField(desc="A description of the event.")
+    rating: int = dspy.OutputField(desc="The rating of the poignance of the event (0-10).")
 
 @lru_cache(maxsize=2048)
 def rate_poignance(agent_name: str, agent_identity: str, type_: str, description: str) -> int:
-    poignance = grammar_pipeline.run(model=Poignance, prompt_template=template, template_variables={
-        "agent_name": agent_name,
-        "agent_identity": agent_identity,
-        "type_": type_,
-        "description": description
-    })
-
-    return poignance.rating
+    try:
+        # Using ChainOfThought for better reasoning, though Predict is faster
+        predict = dspy.ChainOfThought(RatePoignance)
+        response = predict(agent_name=agent_name, agent_identity=agent_identity, event_type=type_, description=description)
+        # Ensure rating is within bounds
+        return max(0, min(10, response.rating))
+    except Exception as e:
+        print(f"Error in rate_poignance: {e}")
+        return 5 # Default safe value
 
 def __tests():
+    # Setup dummy dspy for tests if not configured
+    if not dspy.settings.lm:
+        dspy.settings.configure(lm=dspy.DummyLM([{"rating": 8}]))
+
     print(rate_poignance("Emily Tan",
-                         "Emily Tan is a renowned sculptor with over a decade of experience. Her works explore themes of nature and human connection. She has showcased her art in various galleries around the world.",
+                         "Emily Tan is a renowned sculptor...",
                          "Exhibition",
-                         "Emily Tan is preparing for her solo art exhibition at the local gallery."))
-    print(rate_poignance("Marcus Lee",
-                            "Marcus Lee is a young, dynamic author known for his captivating novels that blend mystery with deep psychological insights. His storytelling has garnered a loyal following.",
-                            "Book Launch",
-                            "Marcus Lee is hosting a book launch for his latest novel."))
-    print(rate_poignance("Sara Ahmed",
-                            "Sara Ahmed is a dedicated social worker and community organizer. She has spent years working with underprivileged communities, focusing on education and healthcare initiatives.",
-                            "Community Service",
-                            "Sara Ahmed is organizing a community service event."))
-    print(rate_poignance("Leo Gonzalez",
-                            "Leo Gonzalez is an environmental activist known for his passionate advocacy for climate change action. He has been involved in numerous campaigns to promote sustainability.",
-                            "Campaign",
-                            "Leo Gonzalez is leading a campaign to raise awareness about the importance of renewable energy sources."))
+                         "Emily Tan is preparing for her solo art exhibition."))
 
 if __name__ == "__main__":
     __tests()

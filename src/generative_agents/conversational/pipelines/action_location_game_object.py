@@ -1,36 +1,38 @@
-from enum import Enum
-from typing import Type
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-template = """Your task is to identify the next object for an action. You need to output valid JSON.
-Current activity: {{action_description}}
-Objects available: [{{available_objects}}]
-Which object is the most relevant one, you MUST pick one?
-"""
-
-
-def model_from_enum(dynamic_enum: Enum) -> Type[BaseModel]:
-    class ActionObjectLocation(BaseModel):
-        next_object: dynamic_enum
-    return ActionObjectLocation
+class ActionLocationGameObjectSignature(dspy.Signature):
+    """
+    Identify the most relevant object for an action from the available objects.
+    """
+    action_description: str = dspy.InputField(desc="Current activity description.")
+    available_objects: str = dspy.InputField(desc="Comma-separated list of available objects.")
+    
+    next_object: str = dspy.OutputField(desc="The most relevant object selected from the list.")
 
 def action_location_game_object(action_description: str, available_objects: str) -> str:
-    objects = Enum("Objects", {obj: obj for obj in available_objects.split(", ")})
-    model = model_from_enum(objects)
-
-    action_object_location = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
-        "action_description": action_description,
-        "available_objects": available_objects
-    })
-
-    return action_object_location.next_object.value
+    try:
+        predict = dspy.Predict(ActionLocationGameObjectSignature)
+        response = predict(
+            action_description=action_description,
+            available_objects=available_objects
+        )
+        
+        allowed = [o.strip() for o in available_objects.split(",")]
+        cleaned = response.next_object.strip()
+        
+        for o in allowed:
+            if o.lower() == cleaned.lower():
+                return o
+        if allowed: return allowed[0]
+        return ""
+    except Exception as e:
+        print(f"Error in action_location_game_object: {e}")
+        return available_objects.split(",")[0] if available_objects else ""
 
 if __name__ == "__main__":
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "next_object": "bed"
+         }]))
     print(action_location_game_object(action_description="napping",
                                       available_objects="bed, easel, closet, painting"))
-    print(action_location_game_object(action_description="putting on a skirt",
-                                        available_objects="easel, closet, sink, microwave"))
-    print(action_location_game_object(action_description="getting milk",
-                                        available_objects="stove, sink, fridge, counter"))

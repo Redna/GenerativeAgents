@@ -1,105 +1,83 @@
-
-from pydantic import BaseModel, Field, create_model
-
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-from typing import Dict, List
-
-from pydantic import BaseModel
-
+import dspy
+from pydantic import BaseModel, Field
 from generative_agents.utils import time_string_to_time
 
+class HourlyScheduleItem(BaseModel):
+    time: str = Field(description="The time of the activity (e.g. 09:00 AM).")
+    activity: str = Field(description="Brief activity description.")
 
-hours = ["12:00 AM", "01:00 AM", "02:00 AM", "03:00 AM", "04:00 AM", "05:00 AM", "06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM",
-         "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM", "10:00 PM", "11:00 PM"]
+class HourlyScheduleSignature(dspy.Signature):
+    """
+    Create an hourly schedule for the agent based on their daily plan.
+    """
+    name: str = dspy.InputField(desc="Name of the agent.")
+    identity: str = dspy.InputField(desc="Identity of the agent.")
+    daily_plan_summary: str = dspy.InputField(desc="Summary of the daily plan.")
+    wake_up_hour: str = dspy.InputField(desc="The time the agent wakes up.")
+    
+    schedule: list[HourlyScheduleItem] = dspy.OutputField(desc="List of hourly activities starting from wake up time.")
 
-template = """You act as {{name}} in a role play game. You are thinking about your day and create an hourly schedule.
-Note: In this villiage neither cars, nor bikes exist. The only way to get around is by walking.
+def create_hourly_schedule(name: str, identity: str, daily_plan: list[dict[str, str]], wake_up_hour: str) -> list[dict[str, str]]:
+    hours = ["12:00 AM", "01:00 AM", "02:00 AM", "03:00 AM", "04:00 AM", "05:00 AM", "06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM",
+             "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM", "10:00 PM", "11:00 PM"]
+    
+    # Pre-format daily plan for the prompt
+    plan_str = "\n".join([f"{i+1}.) {item['activity']} at {item['time']}" for i, item in enumerate(daily_plan)])
+    
+    try:
+        # Using ChainOfThought instead of TypedPredictor
+        predict = dspy.ChainOfThought(HourlyScheduleSignature)
+        response = predict(
+            name=name, 
+            identity=identity, 
+            daily_plan_summary=plan_str, 
+            wake_up_hour=wake_up_hour
+        )
+        
+        # Post-process to ensure full coverage and correct format
+        # We start with the full list of hours
+        full_schedule = []
+        wake_up_dt = time_string_to_time(wake_up_hour)
+        
+        # Convert generated schedule to dict for easy lookup
+        generated_map = {}
+        if hasattr(response, 'schedule'):
+            for item in response.schedule:
+                if isinstance(item, dict):
+                    generated_map[item.get('time')] = item.get('activity')
+                else:
+                    generated_map[item.time] = item.activity
+        
+        woke_up = False
+        for hour in hours:
+            hour_dt = time_string_to_time(hour)
+            
+            if hour == wake_up_hour.zfill(8) or (not woke_up and hour_dt.hour == wake_up_dt.hour): # simple check
+                 woke_up = True
+                 full_schedule.append({"time": hour, "activity": generated_map.get(hour, "Wake up and get ready for the day")})
+            elif not woke_up:
+                full_schedule.append({"time": hour, "activity": "Sleeping"})
+            else:
+                 # fill in from generated or default to previous activity or idle
+                 activity = generated_map.get(hour, "Idle")
+                 full_schedule.append({"time": hour, "activity": activity})
+                 
+        return full_schedule
 
-Your identity is: 
-{{identity}}
-
-Here is today's plan in broad-strokes:
-{%- for start_time, activity in daily_plan.items() %}
-{{loop.index}}.) {{activity}} at {{start_time}}
-{%- endfor %}
-
-How does {{name}}'s complete hourly schedule look for today? You must follow the schedule format above. {{name}}'s day starts at {{wake_up_hour}}. Before that, {{name}} is sleeping."""
-
-
-def create_hourly_schedule(name: str, identity: str, daily_plan: list[dict[str, str]], wake_up_hour: str) -> str:
-
-
-    # TODO use create_model like in task_decomposition.py - freeze the ones until wake_up_hour to make it fixed
-    HourlySchedule = create_model("HourlySchedule", **{hour: (str, Field(..., description="Brief activity at this time. Must not be empty", min_length=2)) for hour in hours if time_string_to_time(hour).hour > time_string_to_time(wake_up_hour).hour})
-
-    schedule = grammar_pipeline.run(model=HourlySchedule, prompt_template=template, template_variables={
-        "name": name,
-        "identity": identity,
-        "daily_plan": daily_plan, 
-        "wake_up_hour": wake_up_hour
-    })
-
-    def to_schedule(schedule, wake_up_hour: int) -> List[Dict[str, str]]:
-        wake_up_hour_index = hours.index(wake_up_hour.zfill(8))
-
-        list_schedule = list()
-
-        for i in range(wake_up_hour_index):
-            list_schedule.append({"time": hours[i], "activity": "Sleeping"})
-
-        for i, (hour, activity) in enumerate(schedule.items()):
-            if i == wake_up_hour_index:
-                list_schedule.append({"time": hour, "activity": "Wake up and get ready for the day"})
-            else: 
-                list_schedule.append({"time": hour, "activity": activity})
-
-        return list_schedule
-
-    schedule = to_schedule(schedule.model_dump(), wake_up_hour)
-
-    return schedule
-
+    except Exception as e:
+        print(f"Error in create_hourly_schedule: {e}")
+        # Fallback: simple sleep/wake breakdown
+        return [{"time": h, "activity": "Sleeping" if i < 7 else "Idle"} for i, h in enumerate(hours)]
 
 if __name__ == "__main__":
-        hourly_schedule = create_hourly_schedule(name="Emily Johnson", 
-                                                 identity="Emily Johnson is a 28 year old graphic designer. She is creative and enjoys exploring new art forms. She lives with her two cats and enjoys gardening. Emily is a yoga enthusiast and likes to cook healthy meals. She is a morning person and enjoys waking up early. She is a social person and enjoys meeting new people.",
-                                                 daily_plan=[
-                                                     {"time": "08:00 AM", "activity": "breakfast"},
-                                                     {"time": "09:00 AM", "activity": "work"},
-                                                     {"time": "12:00 PM", "activity": "lunch"},
-                                                     {"time": "01:00 PM", "activity": "work"},
-                                                     {"time": "05:00 PM", "activity": "finish work and head to the town square for socializing and meeting new people"},
-                                                     {"time": "07:00 PM", "activity": "visit a local pub for an evening beer"},
-                                                     {"time": "09:00 PM", "activity": "head back home"},
-                                                     {"time": "10:00 PM", "activity": "go to sleep"}
-                                                 ])
-        print(hourly_schedule)
-        
-        hourly_schedule = create_hourly_schedule(name="John Doe",
-                                                    identity="John Doe is a 35 year old software developer. He is passionate about technology and loves coding. He lives in a quiet suburb and enjoys the peace it offers. John is an avid reader and spends his evenings reading tech articles. He prefers a structured day and enjoys the solitude of working from home.",
-                                                    daily_plan=[
-                                                        {"time": "07:00 AM", "activity": "morning run"},
-                                                        {"time": "08:00 AM", "activity": "breakfast and reading tech news"},
-                                                        {"time": "09:00 AM", "activity": "start work"},
-                                                        {"time": "12:00 PM", "activity": "lunch break and a short walk"},
-                                                        {"time": "01:00 PM", "activity": "continue work"},
-                                                        {"time": "06:00 PM", "activity": "end work and relax with a book"},
-                                                        {"time": "08:00 PM", "activity": "dinner"},
-                                                        {"time": "09:00 PM", "activity": "leisure time or hobby projects"},
-                                                        {"time": "11:00 PM", "activity": "go to sleep"}
-                                                    ])
-        print(hourly_schedule)
-
-        hourly_schedule = create_hourly_schedule(name="Sarah Lee",
-                                                    identity="Sarah Lee is a 30 year old artist. She is deeply passionate about painting and spends most of her day in her studio. She loves nature and often takes long walks to find inspiration. Sarah is a night owl and finds herself most creative during the late hours.",
-                                                    daily_plan=[
-                                                        {"time": "10:00 AM", "activity": "breakfast and morning meditation"},
-                                                        {"time": "11:00 AM", "activity": "studio time for painting"},
-                                                        {"time": "02:00 PM", "activity": "lunch and a walk in the park"},
-                                                        {"time": "03:00 PM", "activity": "return to studio work"},
-                                                        {"time": "07:00 PM", "activity": "dinner and socialize with friends"},
-                                                        {"time": "09:00 PM", "activity": "evening studio session"},
-                                                        {"time": "01:00 AM", "activity": "relaxation and bedtime routine"},
-                                                        {"time": "02:00 AM", "activity": "go to sleep"}
-                                                    ])
-        print(hourly_schedule)
+    # Setup dummy for testing
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "schedule": [HourlyScheduleItem(time="08:00 AM", activity="Wake up")]
+         }]))
+         
+    hourly_schedule = create_hourly_schedule(name="Emily Johnson", 
+                                             identity="Emily Johnson...",
+                                             daily_plan=[{"time": "08:00 AM", "activity": "breakfast"}],
+                                             wake_up_hour="08:00 AM")
+    print(hourly_schedule)

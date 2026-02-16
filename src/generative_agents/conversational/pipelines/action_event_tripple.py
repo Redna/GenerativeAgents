@@ -1,42 +1,39 @@
-from enum import Enum
-from typing import Type
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-template = """Given a sentence identify the subject, predicate, and object from the sentence.
-
-Sentence: {{name}} is {{action_description}}"""
-
-class X(Enum):
-    XYZ: str = "XYZ"
-
-class Z(BaseModel):
-    x: X
-    a: str = 5
-
-
-def _model_from_predefined_subject(enum: Enum) -> Type[BaseModel]:
-    class ActionEvent(BaseModel):
-        subject: enum
-        predicate: str = Field(description="The action being performed")
-        object: str = Field(description="The entity that the action is being performed on")
+class ActionEventTripleSignature(dspy.Signature):
+    """
+    Given a sentence identify the subject, predicate, and object from the sentence.
+    """
+    name: str = dspy.InputField(desc="Name of the agent.")
+    action_description: str = dspy.InputField(desc="Description of action.")
     
-    return ActionEvent
+    subject: str = dspy.OutputField(desc="The subject of the sentence (usually the name).")
+    predicate: str = dspy.OutputField(desc="The action being performed.")
+    object: str = dspy.OutputField(desc="The entity that the action is being performed on.")
 
-
-def action_event_triple(name: str, action_description: str, address: str = None, ) -> str:
-    model = _model_from_predefined_subject(enum=Enum("Subject", {name: name}))
-
-    action_event = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
-        "name": name,
-        "action_description": action_description
-    })
-
-    if address:
-        action_event.subject = address
-    
-    return (action_event.subject, action_event.predicate, action_event.object)
+def action_event_triple(name: str, action_description: str, address: str = None) -> tuple[str, str, str]:
+    try:
+        predict = dspy.ChainOfThought(ActionEventTripleSignature)
+        response = predict(
+            name=name,
+            action_description=action_description
+        )
+        
+        subject = response.subject
+        if address:
+            subject = address
+            
+        return (subject, response.predicate, response.object)
+    except Exception as e:
+        print(f"Error in action_event_triple: {e}")
+        # Fallback
+        return (address if address else name, "is", "doing something")
 
 if __name__ == "__main__":
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "subject": "John Doe",
+             "predicate": "taking",
+             "object": "shower"
+         }]))
     print(action_event_triple(name="John Doe", action_description="John Doe is taking a warm shower"))

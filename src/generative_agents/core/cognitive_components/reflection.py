@@ -1,63 +1,27 @@
 import datetime
 
-from typing import TypedDict
-
-from langgraph.graph import StateGraph
-from langgraph.constants import START, END
-
-from generative_agents.core.agent import Agent
-from generative_agents.conversational.pipelines.poignance import rate_poignance
-from generative_agents.core.events import EventType, PerceivedEvent
-from generative_agents.core.whisper.whisper import whisper
-from generative_agents.persistence.database import ConversationFilling
-
-from generative_agents.conversational.pipelines.reflection_points import reflection_points
-from generative_agents.conversational.pipelines.evidence_and_insights import evidence_and_insights
-from generative_agents.conversational.pipelines.action_event_tripple import action_event_triple
-from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
-from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
-
-
-REFLECT = "reflect"
-RETRIEVE_LAST_CONVERSATION = "retrieve_last_conversation"
-REFLECT_ON_CONVERSATION = "reflect_on_conversation"
-
-
-
-class ReflectionState(TypedDict):
-    last_conversation: ConversationFilling
 
 
 class Reflection:
     def __init__(self, agent: Agent):
         self.agent = agent
 
-        workflow = StateGraph(ReflectionState)
-        workflow.add_node(REFLECT, self._run_reflect)
-        workflow.add_node(RETRIEVE_LAST_CONVERSATION, self._retrieve_last_conversation)
-        workflow.add_node(REFLECT_ON_CONVERSATION, self._reflect_on_conversation)
+    def run(self):
+        # 1. Reflect on conversation
+        if self._should_reflect_on_conversation():
+            self._reflect_on_conversation()
 
-        workflow.add_conditional_edges(START, self.agent.scratch.should_reflect, {True: REFLECT, False: END})
-        workflow.add_edge(REFLECT, END)
-        workflow.add_edge(START, RETRIEVE_LAST_CONVERSATION)
-        workflow.add_conditional_edges(RETRIEVE_LAST_CONVERSATION, 
-                                       self._should_reflect_on_conversation, 
-                                       {True: REFLECT_ON_CONVERSATION, False: END})
-        workflow.add_edge(REFLECT_ON_CONVERSATION, END)
-        self.workflow = workflow
+        # 2. General Reflection
+        if self.agent.scratch.should_reflect():
+             self._run_reflect()
 
-    def _retrieve_last_conversation(self, state: ReflectionState) -> ReflectionState:
+    def _should_reflect_on_conversation(self) -> bool:
         last_conversation = self.agent.associative_memory.last_conversation_with(
             self.agent.scratch.chatting_with)
-
-        return {"last_conversation": last_conversation}
-
-    def _should_reflect_on_conversation(self, state: ReflectionState) -> bool:
-        last_conversation = state.get("last_conversation")
         return last_conversation and last_conversation.filling and last_conversation.filling[-1].end
 
 
-    def _reflect_on_conversation(self, state: ReflectionState) -> ReflectionState:
+    def _reflect_on_conversation(self):
         last_conversation = self.agent.associative_memory.last_conversation_with(
             self.agent.scratch.chatting_with)
 

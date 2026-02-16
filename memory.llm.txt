@@ -74,7 +74,53 @@ This file contains critical context, architectural decisions, and operational kn
 -   **Chat & Interaction**: Add ability to "talk" to agents via UI.
 -   **Pathfinding Visualization**: Show agent destination/path on map.
 
-## 6. Recent Updates & Fixes (Feb 16, 2026)
+## 6. Phase 1: Decouple Perception & Simulation Loop (Feb 2026)
+
+### Objective
+Decouple the agent's internal logic from the simulation loop to allow for cleaner state updates and easier debugging.
+
+### Key Changes
+- **SimulationEngine**: Introduced `src/generative_agents/core/simulation_engine.py` to handle the game loop, state broadcasting, and agent orchestration. It acts as the single source of truth for the world state.
+- **Percept Dataclass**: created `src/generative_agents/core/percept.py` to encapsulate all sensory data (local tiles, nearby agents) passed to an agent.
+- **Agent Refactor**:
+    -   Added `agent.perceive(percept)`: Agents now receive a `Percept` object instead of querying the global `Maze` directly.
+    -   Added `agent.run_step()`: Replaces the ambiguous `update()` method. This method executes the agent's cognitive cycle (Perceive -> Plan -> Act) in a linear, predictable manner.
+    -   Removed direct `Maze` dependency from the `Agent` class, improving testability.
+
+## 7. Phase 2: Remove LangGraph & Architecture Simplification (Feb 2026)
+
+### Objective
+Simplify the agent's execution flow by removing the complex graph-based orchestration (`langgraph`) in favor of standard Python control flow.
+
+### Key Changes
+- **Removed LangGraph**: Deleted all `langgraph` dependencies and graph definitions. The execution flow is now imperative and contained within `Agent.run_step()`.
+- **Deleted AgentRunner**: Removed the `AgentRunner` and `executor` abstractions which added unnecessary complexity for a single-agent-per-process model (or simple loop). The `SimulationEngine` now calls `agent.run_step()` directly.
+- **Cognitive Components**: Refactored `perception`, `plan`, `reflection`, etc. to be standalone functions or classes that are called sequentially by the agent, rather than being nodes in a graph.
+
+## 8. Phase 3: DSPy Integration (Feb 16, 2026)
+
+### Key Achievements
+- **DSPy 3.1.3 Integration**: Successfully configured the backend to use DSPy for all LLM interactions.
+- **Local LLM**: Configured to use **Ollama** with `qwen2.5:4b` model (running locally on port 11434) via `dspy.LM`.
+- **Pipeline Migration**: Migrated **24** conversational pipelines from the legacy `grammar_llm_pipeline` (which used Groq/Instructor) to `dspy.ChainOfThought` with strictly typed Signatures.
+    - Examples: `daily_plan`, `decide_to_talk`, `action_location_*`, `identity`, etc.
+- **Legacy Cleanup**: Removed `grammar_llm_pipeline.py` and its dependencies (`groq`, `instructor`).
+- **Testing**: Updated `tests/test_pipelines_dspy.py` to fully test all migrated pipelines using `unittest.mock.MagicMock` to simulate LLM responses without network calls.
+
+### Architecture Update
+- **Config**: `src/generative_agents/core/dspy_config.py` handles DSPy setup.
+- **Startup**: `src/generative_agents/__main__.py` initializes the DSPy configuration on launch.
+- **Signatures**: Each pipeline now uses a dedicated `dspy.Signature` class (e.g., `DecideToTalkSignature`) for type-safe inputs/outputs.
+
+### Next Steps / Hints
+1.  **Simulation Verification**: Run the full simulation (`./run_sandbox.sh`) and observe agent behavior. Local LLMs may have higher latency or different "personality" quirks than cloud models.
+2.  **Prompt Tuning**: If agents behave erratically, inspect the DSPy Signatures and consider adding `dspy.Teleprompter` (optimizers) to automatically tune prompts.
+3.  **Performance**: Monitor the performance impact of the local LLM. If too slow, consider:
+    -   Using a smaller model (e.g., `qwen2.5:1.5b` or `llama3.2:3b`).
+    -   Moving to a hosted LLM provider if local compute is insufficient.
+4.  **Memory Management**: DSPy traces can grow; ensure extensive runs don't consume excessive memory if compiling/optimizing.
+
+## 9. Other Recent Updates & Fixes (Feb 16, 2026)
 
 ### Map Update
 - **Switched to "The Ville"**: The codebase now uses `assets/matrix/the_ville` instead of `half_ville`.

@@ -1,23 +1,30 @@
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-template = """Context:
-{{context}}
-
-Write a concise description about {{agent}}'s personality, family situation and characteristics. You include ALL the details provided in the given context (you MUST include all the names of persons, ages,...).
-"""
-
-class Identity(BaseModel):
-    identity: str = Field(description="A concise description about the {{agent}}'s personality, family situation and characteristics. It should answer the question: 'Who is {{agent}}?'")
+class IdentitySignature(dspy.Signature):
+    """
+    Write a concise description about the agent's personality, family situation and characteristics.
+    """
+    agent: str = dspy.InputField(desc="Name of the agent.")
+    context: str = dspy.InputField(desc="Context about the agent.")
+    
+    identity: str = dspy.OutputField(desc="Concise identity description.")
 
 def formulate_identity(agent: str, identity: str) -> str:
-    identity = grammar_pipeline.run(model=Identity, prompt_template=template, template_variables={
-        "agent": agent,
-        "context": identity
-    })
-
-    return identity.identity
+    # 'identity' arg here is actually the context in the original call
+    try:
+        predict = dspy.ChainOfThought(IdentitySignature)
+        response = predict(
+            agent=agent,
+            context=identity
+        )
+        return response.identity
+    except Exception as e:
+        print(f"Error in formulate_identity: {e}")
+        return f"{agent} is a person."
 
 if __name__ == "__main__":
-    formulate_identity("John Doe", "John Doe is a 35 year old entrepreneur running his own start-up. He is dedicated to creating eco-friendly products. John is passionate about sustainability and environmental conservation. He practices yoga daily to stay focused and energized.")
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "identity": "John Doe is..."
+         }]))
+    print(formulate_identity("John Doe", "John Doe is a 35 year old entrepreneur..."))

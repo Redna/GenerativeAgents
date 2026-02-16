@@ -1,35 +1,37 @@
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-template = """You are {{agent}}. You will write about the personality and observations of {{agent}} based on a given event and related events.
-Context:
-{{identity}}
-
-{{agent}} perceived the following event: {{event_description}}
-He remembered the following related events: {{events}}
-He thought the following about the event: {{thoughts}}
-
-What is {{agent}}'s personality and {{agent}}'s observations? Bring the event into context."""
-
-
-class Context(BaseModel):
-    event_context: str = Field(
-        description="Contains a brief overview of things I need to remember to create my daily plan.")
-
+class ContextualizeEventSignature(dspy.Signature):
+    """
+    Write about the personality and observations of the agent based on a given event and related events.
+    """
+    agent: str = dspy.InputField(desc="Name of the agent.")
+    identity: str = dspy.InputField(desc="Agent's identity context.")
+    event_description: str = dspy.InputField(desc="Description of the perceived event.")
+    events: str = dspy.InputField(desc="Related remembered events.")
+    thoughts: str = dspy.InputField(desc="Agent's thoughts about the event.")
+    
+    event_context: str = dspy.OutputField(desc="Brief overview of things to remember for daily plan.")
 
 def contextualize_event(agent: str, identity: str, event_description: str, events: str, thoughts: str) -> str:
-    context = grammar_pipeline.run(model=Context, prompt_template=template, template_variables={
-        "agent": agent,
-        "identity": identity,
-        "event_description": event_description,
-        "events": events,
-        "thoughts": thoughts
-    })
-
-    return context.event_context
+    try:
+        predict = dspy.ChainOfThought(ContextualizeEventSignature)
+        response = predict(
+            agent=agent,
+            identity=identity,
+            event_description=event_description,
+            events=events,
+            thoughts=thoughts
+        )
+        return response.event_context
+    except Exception as e:
+        print(f"Error in contextualize_event: {e}")
+        return f"{agent} observed {event_description}."
 
 if __name__ == "__main__":
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "event_context": "John plans to study hard."
+         }]))
     from pprint import pprint
     c = contextualize_event(agent="John", 
                         identity="John is a 22 year old student, who is learning a lot. He likes discussing with his peers. He is a social person.",

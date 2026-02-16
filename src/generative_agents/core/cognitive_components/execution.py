@@ -1,34 +1,13 @@
 import random
 
-from typing import TypedDict
-
-from langgraph.graph import StateGraph
-from langgraph.constants import START, END
-
-from generative_agents.simulation.maze import Maze, Tile
-from generative_agents.core.agent import Agent
-
-
-class ExecutionState(TypedDict):
-    address: str
-    next_tile: Tile
-
-
 class Execution:
     def __init__(self, agent: Agent, maze: Maze, agents: dict[str, 'Agent']):
         self.agent = agent
         self.maze = maze
         self.agents = agents
 
-        workflow = StateGraph(ExecutionState)
-        workflow.add_node("execute", self.run)
-
-        workflow.add_edge(START, "execute")
-        workflow.add_edge("execute", END)
-        self.workflow = workflow
-
-    def run(self, state: ExecutionState) -> ExecutionState:
-        plan = state.get("address")
+    def run(self, address: str) -> dict:
+        plan = address
 
         if "<random>" in plan or self.agent.scratch.planned_path == []:
             self.agent.scratch.action_path_set = False

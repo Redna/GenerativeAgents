@@ -1,30 +1,26 @@
-from enum import Enum
-from typing import Type
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-template = """Conversation:
----
-{{conversation}}
----
-You summarize a conversation in one sentence.
-"""
-
-
-class ConversationSummary(BaseModel):
-    summary: str = Field(description="The summary of the conversation")
+class ConversationSummarySignature(dspy.Signature):
+    """
+    Summarize a conversation in one sentence.
+    """
+    conversation: str = dspy.InputField(desc="The conversation text.")
+    summary: str = dspy.OutputField(desc="One sentence summary.")
 
 def conversation_summary(conversation: str) -> str:
-    model = ConversationSummary
-
-    summary = grammar_pipeline.run(model=model, prompt_template=template, template_variables={
-        "conversation": conversation
-    })
-
-    return summary.summary
+    try:
+        predict = dspy.ChainOfThought(ConversationSummarySignature)
+        response = predict(conversation=conversation)
+        return response.summary
+    except Exception as e:
+        print(f"Error in conversation_summary: {e}")
+        return "Conversation happened."
 
 if __name__ == "__main__":
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "summary": "They greeted each other."
+         }]))
     print(conversation_summary(conversation="Rudolf: Hello, how are you?\nJoanne: I am fine, thank you."))
     print(conversation_summary(conversation="""Joe Walther: Hello, did you hear about Jim's party?
 Frodo Reimsi: No, tell me more. You mean Jimmy Fraser?

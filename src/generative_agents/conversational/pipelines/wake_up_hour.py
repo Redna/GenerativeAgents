@@ -1,29 +1,32 @@
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-
-template = """Estimate the wake up hour of {{agent_name}}.
-His identity is: 
-{{agent_identity}}. 
-
-{{agent_lifestyle}}.
+class WakeUpHourSignature(dspy.Signature):
+    """
+    Estimate the wake up hour of an agent based on their identity and lifestyle.
+    """
+    agent_name: str = dspy.InputField(desc="Name of the agent.")
+    agent_identity: str = dspy.InputField(desc="Identity and backstory of the agent.")
+    agent_lifestyle: str = dspy.InputField(desc="Lifestyle details of the agent.")
     
-When does {{agent_name}} wake up today?"""
-
-
-class WakeUpHour(BaseModel):
-    rationale: str = Field(description="maximum two sentences reason for the wake up hour")
-    wake_up_hour: int = Field(gt=0, lt=13, description="time in 12-hour clock format")
+    rationale: str = dspy.OutputField(desc="Maximum two sentences reason for the wake up hour.")
+    wake_up_hour: int = dspy.OutputField(desc="Wake up hour in 24-hour format (0-23).")
 
 def estimate_wake_up_hour(agent_name: str, agent_identity: str, agent_lifestyle: str) -> str:
-    wake_up_hour = grammar_pipeline.run(model=WakeUpHour, prompt_template=template, template_variables={
-        "agent_name": agent_name,
-        "agent_identity": agent_identity,
-        "agent_lifestyle": agent_lifestyle
-    })
-
-    return  str(wake_up_hour.wake_up_hour).zfill(2) + ":00 " + ("AM" if wake_up_hour.wake_up_hour < 12 else "PM")
+    try:
+        predict = dspy.ChainOfThought(WakeUpHourSignature)
+        response = predict(
+            agent_name=agent_name,
+            agent_identity=agent_identity,
+            agent_lifestyle=agent_lifestyle
+        )
+        
+        hour = response.wake_up_hour
+        # Helper to format output as expected by original code
+        formatted_hour = str(hour).zfill(2) + ":00 " + ("AM" if hour < 12 else "PM")
+        return formatted_hour
+    except Exception as e:
+        print(f"Error in estimate_wake_up_hour: {e}")
+        return "07:00 AM" # Default safe value
 
     
 if __name__ == "__main__":

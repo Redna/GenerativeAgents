@@ -61,21 +61,25 @@ class Plan:
     def __init__(self, agent: Agent, agents: dict[str, Agent]):
         self.agent = agent
         self.agents = agents
-        workflow = StateGraph(PlanState)
 
-        workflow.add_node(LONG_TERM_PLANNING, self._long_term_planning)
-        workflow.add_node(DETERMINE_ACTION, self._determine_action)
-        workflow.add_node(CHOOSE_RETRIEVED, self._choose_retrieved)
-        workflow.add_node(REACT, self._react)
-        workflow.add_node(WRAP_UP, self._wrap_up)
+    def run(self, daytype: DayType, retrieved: dict[str, dict[str, list[PerceivedEvent]]], focused_event: dict[str, list[PerceivedEvent]] = None) -> dict:
+        state = {
+            "daytype": daytype,
+            "retrieved": retrieved,
+            "focused_event": focused_event,
+            "address": None
+        }
 
-        workflow.add_edge(START, LONG_TERM_PLANNING)
-        workflow.add_edge(LONG_TERM_PLANNING, DETERMINE_ACTION)
-        workflow.add_edge(DETERMINE_ACTION, CHOOSE_RETRIEVED)
-        workflow.add_edge(CHOOSE_RETRIEVED, REACT)
-        workflow.add_edge(REACT, WRAP_UP)
-        workflow.add_edge(WRAP_UP, END)
-        self.workflow = workflow
+        self._long_term_planning(state)
+        self._determine_action(state)
+        
+        # Choose retrieved might update focused_event
+        updates = self._choose_retrieved(state)
+        if updates:
+            state.update(updates)
+
+        self._react(state)
+        return self._wrap_up(state)
 
     def _react(self, state: PlanState) -> PlanState:
         focused_event = state["focused_event"]

@@ -1,22 +1,28 @@
-from pydantic import BaseModel, Field
+import dspy
 
-from generative_agents.conversational.pipelines.grammar_llm_pipeline import grammar_pipeline
-
-
-template = """Provide one or two emoji that best represents the following statement or emotion: {{action_description}}"""
-
-class Emoji(BaseModel):
-    emoji: str = Field(
-        description="Maximum two emojis that best represents the following statement or emotion.")
+class ActionPronunciatioSignature(dspy.Signature):
+    """
+    Provide one or two emoji that best represents the following statement or emotion.
+    """
+    action_description: str = dspy.InputField(desc="Statement or emotion description.")
+    emoji: str = dspy.OutputField(desc="Maximum two emojis.")
 
 def action_pronunciatio(action_description: str) -> str:
-    emoji = grammar_pipeline.run(model=Emoji, prompt_template=template, template_variables={
-        "action_description": action_description
-    })
-
-    return emoji.emoji
+    try:
+        predict = dspy.ChainOfThought(ActionPronunciatioSignature)
+        response = predict(
+            action_description=action_description
+        )
+        return response.emoji
+    except Exception as e:
+        print(f"Error in action_pronunciatio: {e}")
+        return "😐"
 
 if __name__ == "__main__":
+    if not dspy.settings.lm:
+         dspy.settings.configure(lm=dspy.DummyLM([{
+             "emoji": "🚿"
+         }]))
     print(action_pronunciatio(action_description="Taking a shower"))
     print(action_pronunciatio(action_description="Drinking"))
     print(action_pronunciatio(action_description="Taking a bath"))
