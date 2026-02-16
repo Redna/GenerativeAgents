@@ -7,6 +7,7 @@ from datetime import datetime
 # Import models from the project to ensure compatibility
 # Make sure PYTHONPATH includes src/
 from generative_agents.communication.models import AgentDTO, RoundUpdateDTO, MovementDTO
+from generative_agents.simulation.maze import Maze
 
 # Create Async SocketIO Server
 sio = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
@@ -22,7 +23,8 @@ AGENTS = [
         "location": "the Ville:Moreno family's house:common room",
         "emoji": "📚",
         "activity": "reading",
-        "movement": {"col": 127, "row": 46}
+        "movement": {"col": 127, "row": 46},
+        "path": []
     },
     {
         "name": "Maria_Lopez",
@@ -31,7 +33,8 @@ AGENTS = [
         "location": "the Ville:artist's co-living space:Abigail Chen's room",
         "emoji": "🎨",
         "activity": "painting",
-        "movement": {"col": 127, "row": 54}
+        "movement": {"col": 127, "row": 54},
+        "path": []
     }
 ]
 
@@ -57,16 +60,24 @@ async def mock_simulation_loop():
     global SIMULATION_ROUND
     print("Mock simulation loop started.")
     
+    # Initialize Pathfinding
+    try:
+        maze = Maze()
+        print(f"Maze '{maze.maze_name}' loaded for mock server pathfinding.")
+    except Exception as e:
+        print(f"Failed to load Maze: {e}")
+        return
+
     # Define targets for agents
     targets = {
         "Klaus_Mueller": {
-            "target_loc": (100, 80), # Library (mock coords)
+            "target_loc": (120, 20), # Library (Oak Hill College:library)
             "target_activity": "reading at the library",
             "target_emoji": "📖",
             "reached": False
         },
         "Maria_Lopez": {
-            "target_loc": (40, 60), # Park (mock coords)
+            "target_loc": (24, 41), # Park (Johnson Park:park)
             "target_activity": "painting in the park",
             "target_emoji": "🖌️",
             "reached": False
@@ -87,31 +98,52 @@ async def mock_simulation_loop():
                 curr_row = agent_data["movement"]["row"]
                 dest_col, dest_row = target["target_loc"]
 
-                # Simple movement logic
-                if curr_col < dest_col:
-                    agent_data["movement"]["col"] += 1
-                elif curr_col > dest_col:
-                    agent_data["movement"]["col"] -= 1
-                
-                if curr_row < dest_row:
-                    agent_data["movement"]["row"] += 1
-                elif curr_row > dest_row:
-                    agent_data["movement"]["row"] -= 1
+                # Pathfinding Logic
+                # If we don't have a path, or we are not at target, calculate it
+                if not agent_data.get("path") and not target["reached"]:
+                    # Calculate path
+                    try:
+                        start_tile = maze.get_tile(curr_col, curr_row)
+                        end_tile = maze.get_tile(dest_col, dest_row)
+                        path = maze.find_path(start_tile, end_tile)
+                        if path and len(path) > 1:
+                            agent_data["path"] = path[1:] # Exclude current tile
+                            print(f"Calculated path for {name}: {len(path)} steps.")
+                        else:
+                            print(f"No path found for {name} from ({curr_col},{curr_row}) to ({dest_col},{dest_row})")
+                    except Exception as e:
+                        print(f"Pathfinding error for {name}: {e}")
 
-                # Check if reached
+                # Move along path
+                if agent_data.get("path"):
+                    next_tile = agent_data["path"].pop(0)
+                    agent_data["movement"]["col"] = next_tile.x
+                    agent_data["movement"]["row"] = next_tile.y
+
+                # Check if reached target
+                # We check distance to target or if path is empty and we are at target
                 if agent_data["movement"]["col"] == dest_col and agent_data["movement"]["row"] == dest_row:
                     if not target["reached"]:
                         target["reached"] = True
                         agent_data["activity"] = target["target_activity"]
                         agent_data["emoji"] = target["target_emoji"]
                         agent_data["description"] = f"Arrived at destination to {target['target_activity']}."
+                        agent_data["path"] = [] # Clear path just in case
                 else:
                      agent_data["activity"] = "walking"
             else:
-                 # Random movement for others
+                 # Random movement for others (or implement random wander using maze later)
+                 # For now, keep simple random walk but check collision
                 move = random.choice([(0,1), (0,-1), (1,0), (-1,0), (0,0)])
-                agent_data["movement"]["col"] += move[0]
-                agent_data["movement"]["row"] += move[1]
+                next_x = agent_data["movement"]["col"] + move[0]
+                next_y = agent_data["movement"]["row"] + move[1]
+                
+                # Check collision
+                if 0 <= next_x < maze.maze_width and 0 <= next_y < maze.maze_height:
+                    tile = maze.get_tile(next_x, next_y)
+                    if tile.is_walkable():
+                        agent_data["movement"]["col"] = next_x
+                        agent_data["movement"]["row"] = next_y
 
             
             # Bounds check (simplified)

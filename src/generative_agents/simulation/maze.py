@@ -21,7 +21,7 @@ import os
 
 from generative_agents.utils import get_project_root
 
-BASE_PATH = os.path.join(get_project_root(), "assets/matrix/half_ville")
+BASE_PATH = os.path.join(get_project_root(), "assets/matrix/the_ville")
 
 #named tuple for the ville
 """{"world_name": "the ville", 
@@ -356,11 +356,11 @@ class Maze:
         return tiles
     
     @lru_cache(maxsize=1000)
-    def _find_path(self, start: Tuple[int, int], end: Tuple[int, int]) -> List[GridNode]:
-        start_node = self.grid.node(start[0], start[1])
-        end_node = self.grid.node(end[0], end[1])
+    def _find_path(self, start: Tuple[int, int], end: Tuple[int, int]) -> List[Tile]:
+        start_tile = self.get_tile(start[0], start[1])
+        end_tile = self.get_tile(end[0], end[1])
 
-        return self.finder.find_path(start_node, end_node, self.grid)
+        return self.finder.find_path(start_tile, end_tile)
         
 
     @lru_cache(maxsize=1000)

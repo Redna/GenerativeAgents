@@ -74,6 +74,23 @@ This file contains critical context, architectural decisions, and operational kn
 -   **Chat & Interaction**: Add ability to "talk" to agents via UI.
 -   **Pathfinding Visualization**: Show agent destination/path on map.
 
+## 6. Recent Updates & Fixes (Feb 16, 2026)
+
+### Map Update
+- **Switched to "The Ville"**: The codebase now uses `assets/matrix/the_ville` instead of `half_ville`.
+- **Maze Logic**: `src/generative_agents/simulation/maze.py` `BASE_PATH` updated.
+
+### Pathfinding Fixes (Critical)
+- **Heuristic**: Fixed A* heuristic typo (`start.y - start.y` -> `start.y - end.y`).
+- **Hashing**: Fixed `Tile.__hash__` to call `self.get_unique_name()`.
+- **Enum**: Fixed `Tile.get_path` enum comparison (`level == Level.WORLD`).
+- **Return Types**: `_find_path` now correctly returns `List[Tile]` compatible with `SimplePathFinder`.
+
+### Mock Server Upgrade
+- **Integrated Pathfinding**: `mock_server.py` now instantiates `Maze` and uses `maze.find_path()` for agent movement.
+- **Reachable Targets**: Agents (Klaus, Maria) now navigate to verified reachable locations (Library, Park) instead of mock coordinates.
+- **Dependencies**: `python-socketio` (replacing `socketio`), `aiohttp`, `pathfinding`, and `colorama` are required and added to `pyproject.toml`.
+
 ---
-**Last Updated**: 2026-02-14
+**Last Updated**: 2026-02-16
 **Author**: Antigravity (Agent)
