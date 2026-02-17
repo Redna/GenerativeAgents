@@ -1,4 +1,4 @@
-import { AgentDTO } from "./connector/dtos";
+import { AgentDTO, LogDTO } from "./connector/dtos";
 
 export default class UI {
     private roundElement: HTMLElement | null;
@@ -18,7 +18,11 @@ export default class UI {
                 this.deselectAgent();
             };
         }
+
+        this.logPanel = document.getElementById("log-panel");
     }
+
+    private logPanel: HTMLElement | null;
 
     updateStatus(round: number, time: string) {
         if (this.roundElement) this.roundElement.innerText = round.toString();
@@ -65,15 +69,20 @@ export default class UI {
     }
 
     selectAgent(agent: AgentDTO) {
+        if (this.selectedAgentName === agent.name) return;
+
         this.selectedAgentName = agent.name;
         this.renderAgentDetails(agent);
+        this.clearLogs();
 
-        // Dispatch event for GameScene to pick up
-        window.dispatchEvent(new CustomEvent('agent-selected', { detail: { name: agent.name } }));
+        // Dispatch event for GameScene to pick up (highlighting)
+        // Corrected event name to match Game.ts listener
+        window.dispatchEvent(new CustomEvent('agent-subscribe', { detail: { name: agent.name } }));
     }
 
     deselectAgent() {
         this.selectedAgentName = null;
+        this.clearLogs();
         const detailsEl = document.getElementById("agent-details");
         if (detailsEl) {
             detailsEl.style.display = "none";
@@ -100,5 +109,49 @@ export default class UI {
         setText("detail-desc", agent.description);
         setText("detail-loc", agent.location);
         setText("detail-act", agent.activity);
+        setText("detail-act", agent.activity);
+    }
+
+    renderLogMessage(log: LogDTO) {
+        if (!this.logPanel) return;
+
+        // Client-side filtering is no longer needed as the backend emits to specific agent rooms
+        // if (this.selectedAgentName !== log.agent) return;
+        console.log(log)
+        // If it's the first log, clear the "placeholder" text
+        if (this.logPanel.children.length > 0 && this.logPanel.children[0].tagName === "DIV" && (this.logPanel.children[0] as HTMLElement).innerText.includes("Select an agent")) {
+            this.logPanel.innerHTML = "";
+        }
+
+        const logItem = document.createElement("div");
+        logItem.style.marginBottom = "5px";
+        logItem.style.borderBottom = "1px solid #444";
+        logItem.style.paddingBottom = "5px";
+
+        const meta = document.createElement("span");
+        meta.style.color = "#888";
+        meta.style.fontSize = "0.9em";
+        meta.innerText = `${log.timestamp.split(' ')[1]} [${log.level}]: `;
+
+        const msg = document.createElement("span");
+        if (log.level === "DEBUG") msg.style.color = "#aaa";
+        else if (log.level === "WARNING") msg.style.color = "#ffeb3b";
+        else if (log.level === "ERROR") msg.style.color = "#f44336";
+        else msg.style.color = "#fff";
+
+        msg.innerText = log.message;
+
+        logItem.appendChild(meta);
+        logItem.appendChild(msg);
+        this.logPanel.appendChild(logItem);
+
+        // Auto scroll
+        this.logPanel.scrollTop = this.logPanel.scrollHeight;
+    }
+
+    clearLogs() {
+        if (this.logPanel) {
+            this.logPanel.innerHTML = '<div style="color: #aaa; font-style: italic;">Select an agent to see logs...</div>';
+        }
     }
 }

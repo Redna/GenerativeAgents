@@ -1,5 +1,5 @@
 import { io, Socket } from "socket.io-client"
-import { AgentDTO, RoundUpdateDTO } from "./dtos";
+import { AgentDTO, RoundUpdateDTO, LogDTO } from "./dtos";
 import Character from "../scenes/Character";
 
 interface ServerToClientEvents {
@@ -9,6 +9,8 @@ interface ServerToClientEvents {
 interface ClientToServerEvents {
     watch: () => void;
     spawn: (agent: AgentDTO) => void;
+    subscribe_agent_log: (data: { agent_name: string }) => void;
+    unsubscribe_agent_log: (data: { agent_name: string }) => void;
 }
 
 export default class SimulationConnector {
@@ -17,7 +19,17 @@ export default class SimulationConnector {
 
     // constructor
     constructor() {
+        console.log("Connector: Initializing socket...");
         this.socket = io("http://localhost:8000", { reconnectionDelay: 240000, reconnectionAttempts: 10 });
+
+        this.socket.on("connect", () => {
+            console.log("Connector: Socket connected!", this.socket.id);
+        });
+
+        this.socket.on("connect_error", (err) => {
+            console.error("Connector: Connection error", err);
+        });
+
         this.socket.emit("watch")
     }
 
@@ -28,7 +40,6 @@ export default class SimulationConnector {
     onUpdate(callback: (roundUpdate: RoundUpdateDTO) => void) {
         this.socket.on("update", (roundUpdate: RoundUpdateDTO) => {
             // Seems like a bug of socket.io that the payload is not properly parsed...
-            console.log(roundUpdate)
             if (typeof roundUpdate === "string") {
                 callback(JSON.parse(roundUpdate));
             }
@@ -37,5 +48,32 @@ export default class SimulationConnector {
             }
         });
     }
+
+    onAgentLog(callback: (log: LogDTO) => void) {
+        console.log("Connector: Setting up agent_log listener");
+        this.socket.on("agent_log" as any, (log: LogDTO | string) => {
+            console.log("Connector: RAW LISTEN agent_log", log);
+            let parsedLog: LogDTO;
+            if (typeof log === "string") {
+                try {
+                    parsedLog = JSON.parse(log);
+                } catch (e) {
+                    console.error("Connector: Failed to parse agent_log", e);
+                    return;
+                }
+            } else {
+                parsedLog = log;
+            }
+            console.log("Connector: Received agent_log parsed", parsedLog);
+            callback(parsedLog);
+        });
+    }
+
+    subscribeAgentLog(agentName: string) {
+        console.log("Connector: Emitting subscribe_agent_log for", agentName);
+        this.socket.emit("subscribe_agent_log", { agent_name: agentName });
+        console.log("Connector: Emit called.");
+    }
+
 
 }

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Socket Test</title>
+    <!-- Load Socket.IO from CDN to avoid build issues -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #222;
+            color: #eee;
+        }
+
+        #logs {
+            border: 1px solid #444;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+            background: #111;
+            font-family: monospace;
+        }
+
+        .log-entry {
+            border-bottom: 1px solid #333;
+            padding: 2px 0;
+        }
+
+        .success {
+            color: #4f4;
+        }
+
+        .error {
+            color: #f44;
+        }
+
+        .info {
+            color: #4bf;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Socket Connection Test</h1>
+    <div id="status">Status: <span id="status-text" class="error">Disconnected</span></div>
+    <br>
+    <button onclick="subscribe('Klaus_Mueller')">Subscribe Klaus</button>
+    <button onclick="subscribe('Maria_Lopez')">Subscribe Maria</button>
+    <br><br>
+    <div id="logs"></div>
+
+    <script>
+        const logDiv = document.getElementById('logs');
+        const statusText = document.getElementById('status-text');
+
+        function addLog(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log-entry ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logDiv.appendChild(div);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type}] ${msg}`);
+        }
+
+        addLog("Initializing Socket.IO...");
+
+        const socket = io("http://localhost:8000", {
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 5,
+            transports: ['websocket', 'polling']
+        });
+
+        socket.on("connect", () => {
+            statusText.textContent = "Connected";
+            statusText.className = "success";
+            addLog(`Connected! Socket ID: ${socket.id}`, "success");
+
+            // Auto subscribe to verification
+            addLog("Sending 'watch' event...", "info");
+            socket.emit("watch");
+        });
+
+        socket.on("connect_error", (err) => {
+            statusText.textContent = "Error";
+            statusText.className = "error";
+            addLog(`Connection Error: ${err.message}`, "error");
+        });
+
+        socket.on("disconnect", () => {
+            statusText.textContent = "Disconnected";
+            statusText.className = "error";
+            addLog("Disconnected from server", "error");
+        });
+
+        socket.on("update", (data) => {
+            // Heartbeat
+            // addLog("Received 'update' event (heartbeat)", "info");
+        });
+
+        socket.on("agent_log", (data) => {
+            addLog(`RECEIVED AGENT LOG: ${JSON.stringify(data)}`, "success");
+        });
+
+        window.subscribe = function (name) {
+            addLog(`Subscribing to ${name}...`, "info");
+            socket.emit("subscribe_agent_log", { agent_name: name });
+        }
+    </script>
+</body>
+
+</html>

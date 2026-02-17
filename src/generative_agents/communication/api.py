@@ -44,6 +44,22 @@ async def disconnect(sid):
     if sid in sids:
         sids.remove(sid)
 
+@sio.event
+async def subscribe_agent_log(sid, data):
+    agent_name = data.get('agent_name')
+    if agent_name:
+        print(f"Client {sid} subscribing to logs for {agent_name}")
+        await sio.enter_room(sid, agent_name)
+
+@sio.event
+async def unsubscribe_agent_log(sid, data):
+    agent_name = data.get('agent_name')
+    if agent_name:
+        print(f"Client {sid} unsubscribing from logs for {agent_name}")
+        await sio.leave_room(sid, agent_name)
+
+
+
 async def updater():
     while True:
         if update_simulation:
@@ -64,6 +80,11 @@ def init_app(update: Callable, spawn_agent_function: Callable):
     global update_simulation
     spawn_agent = spawn_agent_function
     update_simulation = update
+    
+    # Initialize Logging with SIO instance
+    from generative_agents.core.logging import initialize_socket_logging, log_agent
+    initialize_socket_logging(sio)
+    log_agent("System", "Real Backend API Initialized", "INFO")
     
     # Start the background task
     # We can't use sio.start_background_task here easily because we need the loop

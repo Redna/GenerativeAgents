@@ -4,7 +4,7 @@
   "description": "Phaser 3 TypeScript Starter",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite dev",
     "build": "vite build",
     "serve": "vite preview"
   },

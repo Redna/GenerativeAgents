@@ -1,12 +1,21 @@
+from typing import TYPE_CHECKING
 import datetime
+from generative_agents.core.logging import log_agent
+from generative_agents.core.events import EventType, PerceivedEvent
+from generative_agents.persistence.database import ConversationFilling
+from generative_agents.conversational.pipelines.poignance import rate_poignance
+from generative_agents.conversational.pipelines.action_event_tripple import action_event_triple
+from generative_agents.conversational.pipelines.reflection_points import reflection_points
+from generative_agents.conversational.pipelines.evidence_and_insights import evidence_and_insights
+from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
+from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
 
-
+if TYPE_CHECKING:
+    from generative_agents.core.agent import Agent
 
 class Reflection:
-    def __init__(self, agent: Agent):
+    def __init__(self, agent: 'Agent'):
         self.agent = agent
-
-    def run(self):
         # 1. Reflect on conversation
         if self._should_reflect_on_conversation():
             self._reflect_on_conversation()
@@ -30,15 +39,15 @@ class Reflection:
 
             planning_thought = self._generate_planning_thought_on_conversation(
                 last_conversation.filling)
-            whisper(self.agent.name, f"planning thought is {planning_thought}")
+            log_agent(self.agent.name, f"planning thought is {planning_thought}", "DEBUG")
             planning_thought = f"For {self.agent.scratch.name}'s planning: {planning_thought}"
             self._add_reflection_thought(planning_thought, evidence)
-            whisper(self.agent.name, f"added reflection thought")
+            log_agent(self.agent.name, f"added reflection thought", "DEBUG")
 
             memo_thought = self._generate_memo_on_conversation(
                 last_conversation.filling)
             memo_thought = f"{self.agent.name} {memo_thought}"
-            whisper(self.agent.name, f"memo thought is {memo_thought}")
+            log_agent(self.agent.name, f"memo thought is {memo_thought}", "DEBUG")
             self._add_reflection_thought(memo_thought, evidence)
 
     def _run_reflect(self):
@@ -53,13 +62,13 @@ class Reflection:
         """
         # Reflection requires certain focal points. Generate that first.
         focal_points = self._generate_reflection_points(3)
-        whisper(self.agent.name, f"generated {focal_points} focal points")
+        log_agent(self.agent.name, f"generated {focal_points} focal points", "DEBUG")
         # Retrieve the relevant Nodes object for each of the focal points.
         # <retrieved> has keys of focal points, and values of the associated Nodes.
         retrieved = self.agent.associative_memory.retrieve_relevant_entries(
             focal_points)
 
-        whisper(self.agent.name, f"retrieved {len(retrieved)} relevant nodes")
+        log_agent(self.agent.name, f"retrieved {len(retrieved)} relevant nodes", "DEBUG")
 
         # For each of the focal points, generate thoughts and save it in the
         # agent's memory.

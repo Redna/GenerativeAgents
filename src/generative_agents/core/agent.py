@@ -3,10 +3,11 @@ from enum import Enum
 from enum import Enum
 
 from generative_agents.communication.models import AgentDTO, MovementDTO
+from generative_agents.core.events import Event, EventType, PerceivedEvent
 from generative_agents.core.memory.associative import AssociativeMemory
 from generative_agents.core.memory.spatial import MemoryTree
 from generative_agents.core.memory.scratch import Scratch
-from generative_agents.core.whisper.whisper import whisper
+from generative_agents.core.logging import log_agent
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.persistence.database import initialize_agent
 from generative_agents.simulation.time import DayType, SimulationTime
@@ -36,7 +37,7 @@ class Agent:
         self.scratch.tile = tile
         self.scratch.description = description
 
-        whisper(self.name, f"Initialized {self.name} at {self.scratch.tile}")
+        log_agent(self.name, f"Initialized {self.name} at {self.scratch.tile}")
 
     def to_dto(self):
         return AgentDTO(
@@ -108,7 +109,7 @@ class Agent:
         if type(event) != PerceivedEvent:
             event_poignancy = self._rate_perception_poignancy(type_, event.description)
 
-            whisper(self.name, f"event poignancy is {event_poignancy}")
+            log_agent(self.name, f"event poignancy is {event_poignancy}", "DEBUG")
             event = PerceivedEvent(**asdict(event), event_type=type_, poignancy=event_poignancy)
             event = self.associative_memory.add(event)
         return event

@@ -31,10 +31,10 @@ fi
 
 if [ "$MODE" == "mock" ]; then
     echo "Running in **MOCK** mode..."
-    $PYTHON_EXEC -m generative_agents.mock_server &
+    $PYTHON_EXEC -m generative_agents.mock_server > "$SCRIPT_DIR/backend.log" 2>&1 &
 else
     echo "Running in **REAL** mode..."
-    $PYTHON_EXEC -m generative_agents &
+    $PYTHON_EXEC -m generative_agents > "$SCRIPT_DIR/backend.log" 2>&1 &
 fi
 BACKEND_PID=$!
 

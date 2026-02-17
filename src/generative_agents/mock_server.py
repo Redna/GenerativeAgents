@@ -47,18 +47,46 @@ async def connect(sid, environ):
 @sio.event
 async def disconnect(sid):
     print(f"Client disconnected: {sid}")
+@sio.event
+async def spawn(sid, data):
+    print(f"Client {sid} spawned something... ignored.")
+
+@sio.event
+async def disconnect(sid):
+    print(f"Client disconnected: {sid}")
 
 @sio.event
 async def watch(sid):
     print(f"Client {sid} started watching.")
 
 @sio.event
-async def spawn(sid, data):
-    print(f"Client requested spawn: {data}")
+async def connect(sid, environ):
+    print(f"Client connected: {sid}")
+
+@sio.event
+async def subscribe_agent_log(sid, data):
+    agent_name = data.get('agent_name')
+    if agent_name:
+        print(f"Client {sid} subscribing to logs for {agent_name}")
+        await sio.enter_room(sid, agent_name)
+
+@sio.event
+async def unsubscribe_agent_log(sid, data):
+    agent_name = data.get('agent_name')
+    if agent_name:
+        print(f"Client {sid} unsubscribing from logs for {agent_name}")
+        await sio.leave_room(sid, agent_name)
 
 async def mock_simulation_loop():
     global SIMULATION_ROUND
+    global SIMULATION_ROUND
+    print("DEBUG: Mock simulation loop MOCKED_LOOP_START")
     print("Mock simulation loop started.")
+    
+    # Initialize Logging with SIO instance
+    from generative_agents.core.logging import initialize_socket_logging, log_agent
+    initialize_socket_logging(sio)
+    log_agent("System", "Mock Simulation Initialized", "INFO")
     
     # Initialize Pathfinding
     try:
@@ -84,8 +112,11 @@ async def mock_simulation_loop():
         }
     }
 
+    from generative_agents import global_state
+    
     while True:
         SIMULATION_ROUND += 1
+        global_state.tick = SIMULATION_ROUND
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         agent_dtos = []
@@ -108,17 +139,22 @@ async def mock_simulation_loop():
                         path = maze.find_path(start_tile, end_tile)
                         if path and len(path) > 1:
                             agent_data["path"] = path[1:] # Exclude current tile
-                            print(f"Calculated path for {name}: {len(path)} steps.")
+                            log_agent(name, f"Calculated path: {len(path)} steps to {target['target_activity']}", "INFO")
                         else:
-                            print(f"No path found for {name} from ({curr_col},{curr_row}) to ({dest_col},{dest_row})")
+                            log_agent(name, f"No path found from ({curr_col},{curr_row}) to ({dest_col},{dest_row})", "WARNING")
                     except Exception as e:
-                        print(f"Pathfinding error for {name}: {e}")
+                        log_agent(name, f"Pathfinding error: {e}", "ERROR")
 
                 # Move along path
                 if agent_data.get("path"):
                     next_tile = agent_data["path"].pop(0)
                     agent_data["movement"]["col"] = next_tile.x
                     agent_data["movement"]["row"] = next_tile.y
+                    
+                    # Log walking frequently
+                    if SIMULATION_ROUND % 2 == 0:
+                         log_agent(name, f"Walking to {target['target_activity']}...", "INFO")
+
 
                 # Check if reached target
                 # We check distance to target or if path is empty and we are at target
@@ -127,13 +163,20 @@ async def mock_simulation_loop():
                         target["reached"] = True
                         agent_data["activity"] = target["target_activity"]
                         agent_data["emoji"] = target["target_emoji"]
-                        agent_data["description"] = f"Arrived at destination to {target['target_activity']}."
+                        description = f"Arrived at destination to {target['target_activity']}."
+                        agent_data["description"] = description
+                        log_agent(name, description, "INFO")
                         agent_data["path"] = [] # Clear path just in case
                 else:
                      agent_data["activity"] = "walking"
             else:
                  # Random movement for others (or implement random wander using maze later)
                  # For now, keep simple random walk but check collision
+                
+                # Log wandering occasionally
+                if SIMULATION_ROUND % 2 == 0:
+                     log_agent(name, f"Wandering around {agent_data['location'].split(':')[-1]}...", "INFO")
+
                 move = random.choice([(0,1), (0,-1), (1,0), (-1,0), (0,0)])
                 next_x = agent_data["movement"]["col"] + move[0]
                 next_y = agent_data["movement"]["row"] + move[1]
@@ -145,6 +188,16 @@ async def mock_simulation_loop():
                         agent_data["movement"]["col"] = next_x
                         agent_data["movement"]["row"] = next_y
 
+            # Simulate random thoughts (Global check, so it happens during walking OR wandering)
+            if random.random() < 0.2:
+                thoughts = [
+                    "Typical day...", 
+                    "I wonder who I'll meet today.", 
+                    "The weather is nice.", 
+                    "Did I lock the door?",
+                    "I should call my mom."
+                ]
+                log_agent(name, f"Thought: {random.choice(thoughts)}", "DEBUG")
             
             # Bounds check (simplified)
             agent_data["movement"]["col"] = max(0, min(agent_data["movement"]["col"], 140)) 

@@ -1,8 +1,9 @@
+console.log("GameScene module loaded");
 import Phaser from 'phaser';
 import Character, { Bubble } from './Character';
 import SimulationConnector from '../connector/simulationConnector';
 import { MOVEMENT_SPEED, UPDATE_INTERVAL_MS, toPixelPosition } from '../globals';
-import { RoundUpdateDTO } from '../connector/dtos';
+import { RoundUpdateDTO, LogDTO } from '../connector/dtos';
 import UI from '../ui';
 
 class SimulationUpdateEngine {
@@ -22,10 +23,21 @@ class SimulationUpdateEngine {
     this.gameScene = GameScene;
     this.ui = new UI();
 
+    console.log("SimulationUpdateEngine: Initializing...");
     this.connector = new SimulationConnector()
     this.connector.onUpdate((update: RoundUpdateDTO) => {
       this.add(update);
     });
+
+    this.connector.onAgentLog((log: LogDTO) => {
+      console.log("GameScene: Wrapper callback for agent_log", log);
+      this.ui.renderLogMessage(log);
+    });
+  }
+
+  public subscribeToAgent(name: string) {
+    console.log("SimulationUpdateEngine: Subscribing to agent", name);
+    this.connector.subscribeAgentLog(name);
   }
 
   addCharacters(characters: { [key: string]: Character }): void {
@@ -115,6 +127,7 @@ export default class GameScene extends Phaser.Scene {
 
   constructor() {
     super('GameScene');
+    (window as any).gameScene = this; // Expose for debugging
     this.simulationUpdateEngine = new SimulationUpdateEngine(this)
   }
 
@@ -267,16 +280,14 @@ export default class GameScene extends Phaser.Scene {
     });
 
     // Listen for UI selection events
-    window.addEventListener('agent-selected', (e: any) => {
+    window.addEventListener('agent-subscribe', (e: any) => {
       const name = e.detail.name;
-      this.highlightAgent(name);
-    });
-
-    window.addEventListener('deselect-agent', () => {
-      this.selectedAgentName = null;
-      this.cameras.main.stopFollow();
-      if (this.selectionGraphics) {
-        this.selectionGraphics.clear();
+      console.log("GameScene: Received agent-subscribe event for:", name);
+      if (this.simulationUpdateEngine) {
+        console.log("GameScene: Calling subscribeToAgent on engine");
+        this.simulationUpdateEngine.subscribeToAgent(name);
+      } else {
+        console.error("GameScene: simulationUpdateEngine is not defined!");
       }
     });
 
@@ -371,6 +382,8 @@ export default class GameScene extends Phaser.Scene {
 
     const character = new Character(name, sprite, new Bubble(this.getInitials(name), bubble, emoji), { col: cellX, row: cellY }, "description", "", "");
     this.simulationUpdateEngine.addCharacter(character);
+
+
     this.character_names[name] = [cellX, cellY];
     this.characters[name] = character;
     return character;

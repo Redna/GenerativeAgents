@@ -4,6 +4,8 @@
 from copy import deepcopy
 from dataclasses import asdict
 from functools import lru_cache
+from generative_agents.core.events import EventType, PerceivedEvent
+from generative_agents.persistence import database
 class Retrieval:
     def __init__(self, agent):
         self.agent = agent

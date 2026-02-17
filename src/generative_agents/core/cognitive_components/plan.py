@@ -3,20 +3,23 @@ import datetime
 from enum import Enum
 import random
 from generative_agents.utils import get_time_string
-from langgraph.graph import StateGraph
-from langgraph.constants import START, END
+
 
 
 from generative_agents.conversational.pipelines.poignance import rate_poignance
 
 from generative_agents.core.events import Action, Event, EventType, ObjectAction, PerceivedEvent
-from generative_agents.core.whisper.whisper import whisper
+from generative_agents.core.logging import log_agent
 from generative_agents.persistence.database import ConversationFilling
 from generative_agents.simulation.maze import Level
 from generative_agents.simulation.time import DayType
 from generative_agents.persistence import database
 
-from generative_agents.core.agent import Agent
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from generative_agents.core.agent import Agent
+
 from generative_agents.conversational.pipelines.wake_up_hour import estimate_wake_up_hour
 from generative_agents.conversational.pipelines.daily_plan import create_daily_plan_and_status
 from generative_agents.conversational.pipelines.hourly_breakdown import create_hourly_schedule
@@ -58,7 +61,7 @@ class PlanState(Enum):
     focused_event: dict[str, list[PerceivedEvent]]
 
 class Plan:
-    def __init__(self, agent: Agent, agents: dict[str, Agent]):
+    def __init__(self, agent: 'Agent', agents: dict[str, 'Agent']):
         self.agent = agent
         self.agents = agents
 
@@ -86,8 +89,8 @@ class Plan:
 
         if focused_event:
             reaction_mode, payload = self._should_react(focused_event, self.agents)
-            whisper(
-                self.agent.name, f"reaction mode is {reaction_mode} with payload {payload}")
+            log_agent(
+                self.agent.name, f"reaction mode is {reaction_mode} with payload {payload}", "DEBUG")
             if reaction_mode and reaction_mode != ReactionMode.DO_OTHER_THINGS:
                 # If we do want to chat, then we generate conversation
                 if reaction_mode == ReactionMode.CHAT:
@@ -141,7 +144,7 @@ class Plan:
             wake_up_hour = estimate_wake_up_hour(
                 self.agent.name, self.agent.scratch.identity, self.agent.scratch.lifestyle)
 
-            whisper(self.agent.name, f"wake up hour is at {wake_up_hour}")
+            log_agent(self.agent.name, f"wake up hour is at {wake_up_hour}", "DEBUG")
 
         # When it is a new day, we start by creating the daily_req of the persona.
         # Note that the daily_req is a list of strings that describe the persona's
@@ -156,8 +159,8 @@ class Plan:
         if daytype == DayType.NEW_DAY:
             daily_plan, current_status = self._generate_daily_plan_and_current_status()
 
-            whisper(self.agent.name, f"new daily plan is {daily_plan}")
-            whisper(self.agent.name, f"new current status is {current_status}")
+            log_agent(self.agent.name, f"new daily plan is {daily_plan}", "DEBUG")
+            log_agent(self.agent.name, f"new current status is {current_status}", "DEBUG")
 
             self.agent.scratch.daily_requirements = daily_plan
             self.agent.scratch.current_status = current_status
@@ -176,7 +179,7 @@ class Plan:
         self.agent.scratch.daily_schedule_hourly_organzied = self.agent.scratch.daily_schedule = [
             (entry['activity'], 60) for entry in self.agent.scratch.daily_schedule]
 
-        whisper(self.agent.name, f"new daily plan is {description}")
+        log_agent(self.agent.name, f"new daily plan is {description}", "DEBUG")
 
         perceived_plan = PerceivedEvent(event_type=EventType.PLAN,
                                         poignancy=0.5,
@@ -302,15 +305,15 @@ class Plan:
 
         action_game_object = None
         next_address = ""
-        whisper(
-            self.agent.name, f"determined next action: {action_description}")
+        log_agent(
+            self.agent.name, f"determined next action: {action_description}", "DEBUG")
         action_sector = self._generate_next_action_sector(action_description)
 
-        whisper(self.agent.name,
-                f"determined next sector: {action_sector}")
+        log_agent(self.agent.name,
+                f"determined next sector: {action_sector}", "DEBUG")
         action_arena = self._generate_next_action_arena(
             action_description, action_sector)
-        whisper(self.agent.name, f"determined next arena: {action_arena}")
+        log_agent(self.agent.name, f"determined next arena: {action_arena}", "DEBUG")
         next_address = self._generate_next_action_game_object(
             action_description, action_arena)
 
@@ -318,31 +321,31 @@ class Plan:
         tile = self.agent.spatial_memory[address_parts[0]][address_parts[1]
                                                             ][address_parts[2]].game_objects[address_parts[3]]
 
-        whisper(self.agent.name,
-                f"determined next game object: {action_game_object}")
+        log_agent(self.agent.name,
+                f"determined next game object: {action_game_object}", "DEBUG")
 
         action_pronouncio = self._generate_action_pronunciatio(
             action_description)
-        whisper(self.agent.name,
-                f"determined next pronouncio: {action_pronouncio}")
+        log_agent(self.agent.name,
+                f"determined next pronouncio: {action_pronouncio}", "DEBUG")
 
         action_event = self._generate_action_event_triple(action_description)
-        whisper(self.agent.name,
-                f"determined next event triple: {action_event}")
+        log_agent(self.agent.name,
+                f"determined next event triple: {action_event}", "DEBUG")
 
         object_action = None
         if next_address != "<random>":
             action_object_desctiption, tripplet = self._generate_action_object_description(
                 next_address, action_description)
-            whisper(
-                self.agent.name, f"determined next object description: {action_object_desctiption}")
+            log_agent(
+                self.agent.name, f"determined next object description: {action_object_desctiption}", "DEBUG")
             action_object_pronunciatio = self._generate_action_pronunciatio(
                 action_object_desctiption)
-            whisper(
-                self.agent.name, f"determined next object pronouncio: {action_object_pronunciatio}")
+            log_agent(
+                self.agent.name, f"determined next object pronouncio: {action_object_pronunciatio}", "DEBUG")
             subject, predicate, object_ = tripplet
-            whisper(
-                self.agent.name, f"determined next object event triple: {subject}, {predicate}, {object_}")
+            log_agent(
+                self.agent.name, f"determined next object event triple: {subject}, {predicate}, {object_}", "DEBUG")
 
             object_action = ObjectAction(address=next_address,
                                          emoji=action_object_pronunciatio,

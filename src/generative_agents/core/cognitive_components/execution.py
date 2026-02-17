@@ -1,7 +1,13 @@
 import random
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from generative_agents.core.agent import Agent
+
+from generative_agents.simulation.maze import Maze
 
 class Execution:
-    def __init__(self, agent: Agent, maze: Maze, agents: dict[str, 'Agent']):
+    def __init__(self, agent: 'Agent', maze: Maze, agents: dict[str, 'Agent']):
         self.agent = agent
         self.maze = maze
         self.agents = agents
