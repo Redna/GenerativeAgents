@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # Configuration
-BACKEND_DIR="/Users/alexandergruhl/Development/GenerativeAgents"
-FRONTEND_DIR="/Users/alexandergruhl/Development/GenerativeAgents/frontend"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$SCRIPT_DIR"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
 
 MODE=$1
 
