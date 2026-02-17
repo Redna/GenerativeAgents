@@ -1,20 +1,13 @@
-import sqlite3
+from datetime import datetime
+from typing import List, Dict, Optional, Tuple, Any, Union
 from enum import Enum
-from time import sleep
-from typing import Dict, List, Optional
-
 from pydantic import BaseModel
-from qdrant_client import QdrantClient, models
+import logging
 
-from generative_agents.persistence.qdrant_wrapper import (
-    TimeAndImportanceBaseSchema,
-    TimeAndImportanceWrapper,
-)
+from generative_agents.agents.memory.repository import JSONMemoryRepository
 
-_collections: Dict[str, TimeAndImportanceWrapper] = {}
-_client = QdrantClient(":memory:")
-_connection = sqlite3.connect("conversation.db")
-
+# Singleton registry for repositories
+_repositories: Dict[str, JSONMemoryRepository] = {}
 
 class MemoryType(Enum):
     CHAT = "chat"
@@ -22,305 +15,104 @@ class MemoryType(Enum):
     EVENT = "event"
     THOUGHT = "thought"
 
-
 class ConversationFilling(BaseModel):
-    name: str
-    utterance: str
-    end: bool
+    name: str = ""
+    utterance: str = ""
+    end: bool = False
 
-
-class MemoryEntry(TimeAndImportanceBaseSchema):
+class MemoryEntry(BaseModel):
+    # Core fields
+    id: str
+    content: str
+    created_at: datetime
+    last_accessed_at: datetime
+    importance: float = 0.5
+    
+    # Metadata
     memory_type: str
-    depth: int
-
-    subject: str
-    predicate: str
-    object_: str
-
+    depth: int = 1
+    subject: str = ""
+    predicate: str = ""
+    object_: str = ""
+    
+    # Optional
     poignancy: float = 0.5
     keywords: List[str] = []
-    filling: List[str | ConversationFilling] = []
+    filling: List[Union[ConversationFilling, dict]] = []
+    hash_key: Optional[str] = None
+    
+    # Graph Links (New JSON structure)
+    related_events: List[Dict[str, str]] = []  # {"id": "uuid", "relation": "caused"}
 
-    hash_key: str = None
-
+def get_repository(agent_name: str) -> JSONMemoryRepository:
+    if agent_name not in _repositories:
+        _repositories[agent_name] = JSONMemoryRepository(agent_name)
+    return _repositories[agent_name]
 
 def initialize_database(recreate: bool = False):
-    if recreate:
-        _connection.execute("DROP TABLE IF EXISTS active_conversations")
-        _connection.execute("DROP TABLE IF EXISTS last_conversations")
-
-    _connection.execute(
-            "CREATE TABLE IF NOT EXISTS active_conversations ("
-            "agent TEXT, with_agent TEXT, conversation_id TEXT, PRIMARY KEY (agent, with_agent))"
-    )
-    _connection.execute(
-            "CREATE TABLE IF NOT EXISTS last_conversations ("
-            "agent TEXT, with_agent TEXT, conversation_id TEXT, PRIMARY KEY (agent, with_agent))"
-    )
-    _connection.commit()
-
-
-def _get_active_conversation_id(agent_name: str, with_agent_name: str):
-    cursor = _connection.execute(
-        "SELECT conversation_id FROM active_conversations WHERE agent = ? AND with_agent = ?",
-        (agent_name, with_agent_name),
-    )
-    result = cursor.fetchone()
-    return result[-1] if result else None
-
-
-def _get_last_conversation_id(agent_name: str, with_agent_name: str):
-    cursor = _connection.execute(
-        "SELECT conversation_id FROM last_conversations WHERE agent = ? AND with_agent = ?",
-        (agent_name, with_agent_name),
-    )
-    result = cursor.fetchone()
-    return result[-1] if result else None
-
-
-def _set_active_conversation_id(
-    agent_name: str, with_agent_name: str, conversation_id: str
-):
-    _connection.execute(
-        "INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)",
-        (agent_name, with_agent_name, conversation_id),
-    )
-    _connection.commit()
-
-
-def _set_last_conversation_id(
-    agent_name: str, with_agent_name: str, conversation_id: str
-):
-    _connection.execute(
-        "INSERT OR REPLACE INTO active_conversations (agent, with_agent, conversation_id) VALUES (?, ?, ?)",
-        (agent_name, with_agent_name, conversation_id),
-    )
-    _connection.commit()
-
-
-def _delete_active_conversation_id(agent_name: str, with_agent_name: str):
-    _connection.execute(
-        "DELETE FROM active_conversations WHERE agent = ? AND with_agent = ?",
-        (agent_name, with_agent_name),
-    )
-    _connection.commit()
-
+    # No-op for file based system
+    pass
 
 def initialize_agent(agent_name: str):
-    if agent_name in _collections:
-        raise Exception(f"Agent {agent_name} already exists")
+    get_repository(agent_name)
 
-    _collections[agent_name] = TimeAndImportanceWrapper(
-        client=_client, collection_name=agent_name, data_schema=MemoryEntry
-    )
+def add(agent_name: str, memory_entry: Any) -> MemoryEntry:
+    repo = get_repository(agent_name)
+    
+    # If it's a Pydantic model, convert to dict for storage but keep object for return
+    stored_data = repo.add_memory(memory_entry)
+    
+    return MemoryEntry(**stored_data)
 
-
-def add(agent_name: str, memory_entry: MemoryEntry) -> MemoryEntry:
-    if agent_name not in _collections:
-        initialize_agent(agent_name)
-
-    collection = _collections[agent_name]
-    memory_entry = collection.add([memory_entry])[0]
-
-    if memory_entry.memory_type == MemoryType.CHAT.value:
-        _set_active_conversation_id(agent_name, memory_entry.object_, memory_entry.id)
-
-        if memory_entry.filling[-1] and memory_entry.filling[-1].end:
-            _set_last_conversation_id(agent_name, memory_entry.object_, memory_entry.id)
-            _delete_active_conversation_id(agent_name, memory_entry.object_)
-
-    return memory_entry
-
-
-def get(agent_name: str, context: str, limit=50) -> MemoryEntry:
-    if agent_name not in _collections:
-        raise Exception(f"Agent {agent_name} does not exist")
-
-    result_set = _collections[agent_name].get_relevant_entries(context, limit=limit)
-    return result_set
-
+def get(agent_name: str, context: str, limit=5) -> List[MemoryEntry]:
+    repo = get_repository(agent_name)
+    results = repo.retrieve(context, limit=limit)
+    return [MemoryEntry(**data) for data in results]
 
 def get_by_hash(agent_name: str, hash_key: str):
-    if agent_name not in _collections:
-        raise Exception(f"Agent {agent_name} does not exist")
+    # Linear scan 
+    repo = get_repository(agent_name)
+    found = []
+    for m in repo.memories:
+        if m.get("hash_key") == hash_key:
+            found.append(MemoryEntry(**m))
+    return found
 
-    collection = _collections[agent_name]
+def get_active_chat(agent_name: str, with_agent: str) -> Optional[MemoryEntry]:
+    repo = get_repository(agent_name)
+    sorted_memories = sorted(repo.memories, key=lambda x: x["created_at"], reverse=True)
+    
+    for m in sorted_memories:
+        if m["memory_type"] == MemoryType.CHAT.value and m.get("object_") == with_agent:
+            fillings = m.get("filling", [])
+            if fillings:
+                last_fill = fillings[-1]
+                is_end = last_fill.get("end") if isinstance(last_fill, dict) else last_fill.end
+                if not is_end:
+                    return MemoryEntry(**m)
+            else:
+                return MemoryEntry(**m)
+    return None
 
-    filter = models.Filter(
-        must=[
-            models.FieldCondition(
-                key="hash_key",
-                match=models.MatchText(text=hash_key),
-            )
-        ]
-    )
+def get_last_chat(agent_name: str, with_agent: str) -> Optional[MemoryEntry]:
+    repo = get_repository(agent_name)
+    sorted_memories = sorted(repo.memories, key=lambda x: x["created_at"], reverse=True)
+    for m in sorted_memories:
+        if m["memory_type"] == MemoryType.CHAT.value and m.get("object_") == with_agent:
+            return MemoryEntry(**m)
+    return None
 
-    result_set = collection.get_relevant_entries(query="", filter=filter)
-    return result_set
+# Graph operations
+def add_event_link(source_id: str, target_id: str, relation_type: str):
+    # We must scan repositories because agent_name is lost in this global function signature
+    for name, repo in _repositories.items():
+        repo.add_relation(source_id, target_id, relation_type)
 
-
-def get_by_type(agent_name: str, context: str, memory_type: MemoryType):
-    if agent_name not in _collections:
-        raise Exception(f"Agent {agent_name} does not exist")
-
-    collection = _collections[agent_name]
-
-    filter = models.Filter(
-        must=[
-            models.FieldCondition(
-                key="memory_type",
-                match=models.MatchText(text=memory_type.value),
-            )
-        ]
-    )
-
-    result_set = collection.get_relevant_entries(context, filter=filter)
-    return result_set
-
-
-def get_last_chat(agent_name, with_agent_name) -> Optional[MemoryEntry]:
-    if agent_name not in _collections:
-        raise Exception(f"Agent {agent_name} does not exist")
-
-    collection = _collections[agent_name]
-
-    id = _get_last_conversation_id(agent_name, with_agent_name)
-
-    return collection.get_by_id(id)
-
-
-def get_active_chat(agent_name, with_agent_name) -> Optional[MemoryEntry]:
-    if agent_name not in _collections:
-        raise Exception(f"Agent {agent_name} does not exist")
-
-    collection = _collections[agent_name]
-
-    id = _get_active_conversation_id(agent_name, with_agent_name)
-    record = collection.get_by_id(id)
-    return MemoryEntry(**record.payload) if record else None
-
-
-if __name__ == "__main__":
-    initialize_database(True)
-    initialize_agent("John Doe")
-
-    add(
-        "John Doe",
-        MemoryEntry(
-            content="I am John Doe",
-            memory_type=MemoryType.CHAT.value,
-            depth=0,
-            subject="John Doe",
-            predicate="is",
-            object="John Doe",
-        ),
-    )
-    add(
-        "John Doe",
-        MemoryEntry(
-            content="The kitchen is dirty",
-            memory_type=MemoryType.OBSERVATION.value,
-            depth=0,
-            subject="The kitchen",
-            predicate="is",
-            object="dirty",
-        ),
-    )
-
-    add(
-        "John Doe",
-        MemoryEntry(
-            content="I love pizza",
-            memory_type=MemoryType.CHAT.value,
-            depth=0,
-            subject="I",
-            predicate="love",
-            object="pizza",
-        ),
-    )
-    sleep(1)
-    first = add(
-        "John Doe",
-        MemoryEntry(
-            content="Talking with Mike Jones about the weather.",
-            memory_type=MemoryType.CHAT.value,
-            depth=0,
-            subject="John Doe",
-            predicate="is talking with",
-            object="Mike Jones",
-        ),
-    )
-    sleep(1)
-    add(
-        "John Doe",
-        MemoryEntry(
-            content="The sky is blue",
-            memory_type=MemoryType.OBSERVATION.value,
-            depth=0,
-            subject="The sky",
-            predicate="is",
-            object="blue",
-        ),
-    )
-    sleep(1)
-    add(
-        "John Doe",
-        MemoryEntry(
-            content="I am feeling happy today",
-            memory_type=MemoryType.CHAT.value,
-            depth=0,
-            subject="I",
-            predicate="am feeling",
-            object="happy",
-        ),
-    )
-    add(
-        "John Doe",
-        MemoryEntry(
-            content="The cat is sleeping",
-            memory_type=MemoryType.OBSERVATION.value,
-            depth=0,
-            subject="The cat",
-            predicate="is",
-            object="sleeping",
-        ),
-    )
-    add(
-        "John Doe",
-        MemoryEntry(
-            content="I am learning to code",
-            memory_type=MemoryType.CHAT.value,
-            depth=0,
-            subject="I",
-            predicate="am learning",
-            object="to code",
-        ),
-    )
-    sleep(1)
-    last = add(
-        "John Doe",
-        MemoryEntry(
-            content="Talking with Mike Jones about Jeff barker.",
-            memory_type=MemoryType.CHAT.value,
-            depth=0,
-            subject="John Doe",
-            predicate="is talking with",
-            object="Mike Jones",
-        ),
-    )
-    entries = get("John Doe", "I am John Doe")
-    print(entries)
-
-    entries = get("John Doe", "I love pizza")
-
-    entries = get_by_type("John Doe", "I am John Doe", MemoryType.CHAT)
-    print(entries)
-
-    entries = get_by_type("John Doe", "Blue like the river", MemoryType.OBSERVATION)
-    print(entries)
-
-    entries = get_last_chat("John Doe", "Mike Jones")
-    print(entries)
-
-    add("John Doe", first)
-    entries = get_last_chat("John Doe", "Mike Jones")
+def get_related_events(source_id: str, relation_type: Optional[str] = None) -> List[Tuple[str, str]]:
+    related = []
+    for name, repo in _repositories.items():
+        res = repo.get_related(source_id, relation_type)
+        if res:
+            related.extend(res)
+            # Typically a memory ID is unique globally (UUID), but checking all is safer if ID reused
+    return related

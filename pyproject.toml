@@ -26,6 +26,7 @@ dependencies = [
     "qdrant-client>=1.7.0",
     "sentence-transformers>=5.2.2",
     "ruff>=0.15.1",
+    "pytest",
 ]
 dynamic = ["version"]
 

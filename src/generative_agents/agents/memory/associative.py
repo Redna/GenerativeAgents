@@ -1,87 +1,56 @@
-from dataclasses import dataclass, field
-from typing import Dict, List
+from datetime import datetime, timedelta
+from typing import List, Optional, Union
 
-from generative_agents.common.events import PerceivedEvent
+from generative_agents.common import global_state
 from generative_agents.persistence import database
+from generative_agents.persistence.database import ConversationFilling, MemoryEntry, MemoryType
 
 
-@dataclass
 class LastEntryStore:
-    max_size: int
-    entries: List[PerceivedEvent] = field(default_factory=list)
-    entry_hashmap: Dict[str, int] = field(default_factory=dict)
+    def __init__(self, key: str, period: timedelta):
+        self.key = key
+        self.period = period
+        self.last_entry: Optional[datetime] = None
 
-    def put(self, event: PerceivedEvent):
-        if len(self.entries) == self.max_size:
-            self._pop()
-
-        self._put(event)
-
-    def get(self, most_recent=0):
-        if most_recent == 0:
-            return self.entries
-        else:
-            return self.entries[-most_recent:]
-
-    def _pop(self):
-        entry = self.entries.pop(0)
-        del self.entry_hashmap[entry.id]
-        self.entry_hashmap = {
-            key: value - 1 for key, value in self.entry_hashmap.items()
-        }
-
-    def _put(self, event: PerceivedEvent):
-        if event.id in self.entry_hashmap:
-            index = self.entry_hashmap[event.id]
-            self.entries[index] = event
-        else:
-            self.entries.append(event)
-            self.entry_hashmap[event.id] = len(self.entries) - 1
+    def check(self) -> bool:
+        if self.last_entry is None:
+            self.last_entry = global_state.time.time
+            return True
+        if global_state.time.time - self.last_entry > self.period:
+            self.last_entry = global_state.time.time
+            return True
+        return False
 
 
 class AssociativeMemory:
-    def __init__(self, agent_name, retention):
+    def __init__(self, agent_name: str, retention: float = 1.0):
         self.agent_name = agent_name
         self.retention = retention
-        self.last_entries = LastEntryStore(max_size=retention)
 
-    def add(self, event: PerceivedEvent) -> PerceivedEvent:
-        db_event = database.get_by_hash(self.agent_name, event.hash_key)
+    def add(self, memory_entry: MemoryEntry) -> MemoryEntry:
+        # Pass through to new persistence layer
+        return database.add(self.agent_name, memory_entry)
 
-        if not db_event:
-            memory_entry = database.add(self.agent_name, event.to_db_entry())
-            db_event = PerceivedEvent.from_db_entry(memory_entry)
-        else:
-            db_event = PerceivedEvent.from_db_entry(db_event[-1])
+    def retrieve_relevant_entries(self, context: str, limit: int = 50) -> List[MemoryEntry]:
+        return database.get(self.agent_name, context, limit)
 
-        self.last_entries.put(db_event)
-        return db_event
+    def retrieve_relevant_memories(
+        self, context: str, memory_type: MemoryType, limit: int = 50
+    ) -> List[MemoryEntry]:
+        # Filter done in database/repository or post-processing
+        # Our repository retrieve doesn't filter by type yet, so we filter here for now
+        entries = database.get(self.agent_name, context, limit=limit * 2)
+        filtered = [e for e in entries if e.memory_type == memory_type.value]
+        return filtered[:limit]
 
-    @property
-    def latest_events_summary(self):
-        return [event.spo_summary for event in self.last_entries.entries]
+    def add_relation(self, source_id: str, target_id: str, relation: str):
+        database.add_event_link(source_id, target_id, relation)
 
-    def retrieve_relevant_entries(
-        self, context: List[str], limit=50
-    ) -> List[PerceivedEvent]:
-        memories = []
+    def get_related_events(self, source_id: str, relation: str):
+        return database.get_related_events(source_id, relation)
 
-        for context_element in context:
-            memories += database.get(
-                self.agent_name, context_element, limit=limit // len(context)
-            )
+    def get_last_chat(self, with_agent_name: str) -> Optional[MemoryEntry]:
+        return database.get_last_chat(self.agent_name, with_agent_name)
 
-        memories = database.get(self.agent_name, context, limit=50)
-        return [PerceivedEvent.from_db_entry(memory) for memory in memories]
-
-    def last_conversation_with(self, agent_name: str) -> PerceivedEvent:
-        last_chat = database.get_last_chat(self.agent_name, agent_name)
-        return PerceivedEvent.from_db_entry(last_chat) if last_chat else None
-
-    def active_conversation_with(self, agent_name: str) -> PerceivedEvent:
-        active_chat = database.get_active_chat(self.agent_name, agent_name)
-        return PerceivedEvent.from_db_entry(active_chat) if active_chat else None
-
-    def get_most_recent_memories(self, most_recent=0):
-        memories = self.last_entries.get(most_recent=most_recent)
-        return [PerceivedEvent.from_db_entry(memory) for memory in memories]
+    def get_active_chat(self, with_agent_name: str) -> Optional[MemoryEntry]:
+        return database.get_active_chat(self.agent_name, with_agent_name)
