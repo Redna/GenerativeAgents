@@ -1,18 +1,17 @@
 from __future__ import annotations
-from typing import List, Dict, TYPE_CHECKING
+
 import math
 from operator import itemgetter
+from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
     from generative_agents.agents.agent import Agent
 
-from generative_agents.simulation.maze import Maze, Tile, Level
-from generative_agents.common.events import Event, PerceivedEvent
-from generative_agents.simulation.time import SimulationTime
-from generative_agents.common.percept import Percept
-
-
 from generative_agents.common.models import AgentDTO, RoundUpdateDTO
+from generative_agents.common.percept import Percept
+from generative_agents.simulation.maze import Level, Maze, Tile
+from generative_agents.simulation.time import SimulationTime
+
 
 class SimulationEngine:
     def __init__(self, maze: Maze, agents: List[Agent], time: SimulationTime):
@@ -46,9 +45,7 @@ class SimulationEngine:
     def _record_round_update(self):
         agents_dto = [agent.to_dto() for agent in self.agents.values()]
         round_update = RoundUpdateDTO(
-            round=len(self.round_updates),
-            time=self.time.as_string(),
-            agents=agents_dto
+            round=len(self.round_updates), time=self.time.as_string(), agents=agents_dto
         )
         self.round_updates.append(round_update)
 
@@ -69,7 +66,7 @@ class SimulationEngine:
         """
         for name, agent in self.agents.items():
             old_tile = old_tiles[name]
-            new_tile = agent.scratch.tile # Agent has already moved in run_step
+            new_tile = agent.scratch.tile  # Agent has already moved in run_step
 
             # Remove old events from old tile
             while agent.scratch.finished_action:
@@ -80,18 +77,17 @@ class SimulationEngine:
             # Add new event to new tile
             event = agent.scratch.action.event
             new_tile.events[event.subject] = agent.scratch.action.event
-            
+
             # Handle object actions (interactions with objects)
             object_action = agent.scratch.action.object_action
             if object_action and object_action.event:
                 object_event = object_action.event
                 if object_action.address in self.maze.address_tiles:
                     # Note: accessing [0] might be risky if multiple tiles, but follows original logic
-                    target_tile = self.maze.address_tiles[object_action.address][0] 
+                    target_tile = self.maze.address_tiles[object_action.address][0]
                     target_tile.events[object_event.subject] = object_event
                 else:
                     print(f"WARNING: {object_action.address} not in maze")
-
 
             # Logging (Optional, but good for debug)
             # print(f"{agent.name} is {agent.emoji} at {new_tile}")
@@ -110,8 +106,10 @@ class SimulationEngine:
         Calculates what a specific agent sees.
         Moves logic from Perception.perceive_space and Perception.perceive_events here.
         """
-        nearby_tiles = self.maze.get_nearby_tiles(agent.scratch.tile, agent.scratch.vision_radius)
-        
+        nearby_tiles = self.maze.get_nearby_tiles(
+            agent.scratch.tile, agent.scratch.vision_radius
+        )
+
         # Filter for Events
         current_arena = agent.scratch.tile.get_path(Level.ARENA)
         percept_events_list = []
@@ -120,13 +118,15 @@ class SimulationEngine:
         for tile in nearby_tiles:
             if not tile.events:
                 continue
-            
+
             # Agents can only see events in the same arena (room)
             if tile.get_path(Level.ARENA) != current_arena:
                 continue
 
-            dist = math.dist([tile.x, tile.y], [agent.scratch.tile.x, agent.scratch.tile.y])
-            
+            dist = math.dist(
+                [tile.x, tile.y], [agent.scratch.tile.x, agent.scratch.tile.y]
+            )
+
             try:
                 for event in tile.events.values():
                     # Avoid duplicates
@@ -138,13 +138,10 @@ class SimulationEngine:
 
         # Sort by distance
         percept_events_list = sorted(percept_events_list, key=itemgetter(0))
-        
+
         # Apply attention bandwidth
         visible_events = []
-        for _, event in percept_events_list[:agent.scratch.attention_bandwith]:
+        for _, event in percept_events_list[: agent.scratch.attention_bandwith]:
             visible_events.append(event)
 
-        return Percept(
-            nearby_tiles=nearby_tiles,
-            events=visible_events
-        )
+        return Percept(nearby_tiles=nearby_tiles, events=visible_events)

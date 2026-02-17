@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from enum import Enum
 
-from pydantic import BaseModel
 from generative_agents.common import global_state
+
 
 @dataclass
 class Thought:

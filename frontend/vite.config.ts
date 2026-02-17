@@ -19,9 +19,9 @@ export default defineConfig({
           'typeof EXPERIMENTAL': "'true'",
           'typeof PLUGIN_CAMERA3D': "'false'",
           'typeof PLUGIN_FBINSTANT': "'false'",
-          'typeof FEATURE_SOUND': "'true'"
-        })
-      ]
-    }
-  }
+          'typeof FEATURE_SOUND': "'true'",
+        }),
+      ],
+    },
+  },
 });

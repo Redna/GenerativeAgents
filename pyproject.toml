@@ -25,8 +25,30 @@ dependencies = [
     "python-socketio>=5.12.1",
     "qdrant-client>=1.7.0",
     "sentence-transformers>=5.2.2",
+    "ruff>=0.15.1",
 ]
 dynamic = ["version"]
 
 [tool.setuptools.dynamic]
 version = {attr = "generative_agents.version"}
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [
+    "frontend",
+    "experiments",
+    "manual_mapping",
+    "*.ipynb",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+

@@ -1,9 +1,12 @@
 from typing import List
+
 from pydantic import BaseModel
+
 
 class MovementDTO(BaseModel):
     col: int
     row: int
+
 
 class AgentDTO(BaseModel):
     name: str
@@ -14,6 +17,7 @@ class AgentDTO(BaseModel):
     emoji: str
     activity: str
     movement: MovementDTO
+
 
 class RoundUpdateDTO(BaseModel):
     round: int

@@ -1,21 +1,19 @@
-
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 import uuid
-from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import List, Optional, Tuple, Type, TypeVar
 
-from sentence_transformers import SentenceTransformer
+from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient, models
 
-from datetime import datetime
-
 from generative_agents.common import global_state
-from generative_agents.persistence.cachable_sentence_transformer import CachableSentenceTransformer
-
+from generative_agents.persistence.cachable_sentence_transformer import (
+    CachableSentenceTransformer,
+)
 
 _model = CachableSentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
 DIMENSION = 768
+
 
 class BaseSchema(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -37,39 +35,50 @@ K = TypeVar("K", bound=TimeAndImportanceBaseSchema)
 class QdrantCollection:
     _rerank_limit: int = 200
 
-    def __init__(self, client: QdrantClient,
-                 collection_name: str,
-                 data_schema: Type[T],
-                 decay_rate: float = Field(default=0.01)):
+    def __init__(
+        self,
+        client: QdrantClient,
+        collection_name: str,
+        data_schema: Type[T],
+        decay_rate: float = Field(default=0.01),
+    ):
         self.client = client
         self.collection_name = collection_name
         self.data_schema = data_schema
         self.decay_rate = decay_rate
 
         if collection_name not in self.client.get_collections():
-            vectors_config = models.VectorParams(size=DIMENSION,
-                                                 distance=models.Distance.COSINE)
+            vectors_config = models.VectorParams(
+                size=DIMENSION, distance=models.Distance.COSINE
+            )
             self.client.create_collection(
-                collection_name, vectors_config=vectors_config)
+                collection_name, vectors_config=vectors_config
+            )
             self.client.create_payload_index(
-                self.collection_name, field_name="memory_type", field_schema="keyword")
+                self.collection_name, field_name="memory_type", field_schema="keyword"
+            )
             self.client.create_payload_index(
-                self.collection_name, field_name="created", field_schema="integer")
+                self.collection_name, field_name="created", field_schema="integer"
+            )
 
-    def _get_relevant_entries_with_scores(self, query, filter=None, limit=5) -> List[Tuple[T, float]]:
-        
-        if type(query) == list:
+    def _get_relevant_entries_with_scores(
+        self, query, filter=None, limit=5
+    ) -> List[Tuple[T, float]]:
+
+        if isinstance(query, list):
             query = ", ".join(query)
 
         query_vector = _model.encode(query)
         try:
-            points = self.client.search(collection_name=self.collection_name,
-                                    query_filter=filter,
-                                    limit=limit,
-                                    query_vector=query_vector, 
-                                    with_vectors=True)
+            points = self.client.search(
+                collection_name=self.collection_name,
+                query_filter=filter,
+                limit=limit,
+                query_vector=query_vector,
+                with_vectors=True,
+            )
         except Exception as e:
-            raise Exception(f"Error raised by Qdrant: {e}")              
+            raise Exception(f"Error raised by Qdrant: {e}")
 
         result = []
         for point in points:
@@ -87,14 +96,14 @@ class QdrantCollection:
         return self.add(result, new_vectors=False)
 
     def get_by_id(self, id: str) -> Optional[T]:
-        points = self.client.retrieve(collection_name=self.collection_name,
-                                        ids=[id])
+        points = self.client.retrieve(collection_name=self.collection_name, ids=[id])
         return points[0] if points else None
 
     def add(self, entries: List[T], new_vectors=True) -> List[T]:
         if any([not isinstance(entry, self.data_schema) for entry in entries]):
-            raise Exception("Entries must be of type {}".format(
-                self.data_schema.__name__))
+            raise Exception(
+                "Entries must be of type {}".format(self.data_schema.__name__)
+            )
 
         ids = [entry.id for entry in entries]
         payloads = [entry.model_dump(exclude=["id"]) for entry in entries]
@@ -106,11 +115,7 @@ class QdrantCollection:
 
         self.client.upsert(
             collection_name=self.collection_name,
-            points=models.Batch(
-                ids=ids,
-                payloads=payloads,
-                vectors=vectors
-            )
+            points=models.Batch(ids=ids, payloads=payloads, vectors=vectors),
         )
 
         return entries
@@ -119,8 +124,16 @@ class QdrantCollection:
 class TimeAndImportanceWrapper(QdrantCollection):
     rerank_limit = 200
 
-    def __init__(self, client: QdrantClient, collection_name: str, data_schema: Type[K], decay_rate: float = 0.01):
-        self.collection = super().__init__(client, collection_name, data_schema, decay_rate=decay_rate)
+    def __init__(
+        self,
+        client: QdrantClient,
+        collection_name: str,
+        data_schema: Type[K],
+        decay_rate: float = 0.01,
+    ):
+        self.collection = super().__init__(
+            client, collection_name, data_schema, decay_rate=decay_rate
+        )
 
     def add(self, entries: List[K], new_vectors=True) -> List[K]:
         current_time = global_state.time.time
@@ -132,16 +145,19 @@ class TimeAndImportanceWrapper(QdrantCollection):
 
     def get_relevant_entries(self, query, filter=None, limit=5) -> List[K]:
         candiates = super()._get_relevant_entries_with_scores(
-            query, filter, self.rerank_limit)
+            query, filter, self.rerank_limit
+        )
         current_time = global_state.time.time
 
-        combined_scores = [(entry, self._get_combined_score(
-            entry, score, current_time)) for entry, score in candiates]
+        combined_scores = [
+            (entry, self._get_combined_score(entry, score, current_time))
+            for entry, score in candiates
+        ]
         combined_scores.sort(key=lambda x: x[1], reverse=True)
 
         result = []
 
-        for entry, _ in combined_scores[: limit]:
+        for entry, _ in combined_scores[:limit]:
             entry.last_accessed_at = current_time
             result += [entry]
 

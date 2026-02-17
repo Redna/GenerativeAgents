@@ -1,31 +1,33 @@
 {
-  "name": "GenerativeAgentsUI",
+  "name": "generative-agents-ui",
   "version": "1.1.0",
   "description": "Phaser 3 TypeScript Starter",
   "main": "dist/index.js",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write ."
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/geocine/phaser3-rollup-typescript.git"
+  "dependencies": {
+    "phaser": "^3.60.0",
+    "socket.io-client": "^4.7.2"
   },
-  "author": "Aivan Monceller",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/geocine/phaser3-rollup-typescript/issues"
-  },
-  "homepage": "https://github.com/geocine/phaser3-rollup-typescript#readme",
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@rollup/plugin-alias": "^3.1.9",
     "@rollup/plugin-commonjs": "^22.0.0",
     "@rollup/plugin-replace": "^4.0.0",
-    "@types/node": "^17.0.31",
-    "phaser": "^3.60.0",
-    "socket.io-client": "^4.7.2",
-    "typescript": "^5.1.6",
-    "vite": "^4.4.9"
+    "@types/node": "^20.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^6.0.0"
   }
 }

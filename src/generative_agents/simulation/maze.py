@@ -1,44 +1,56 @@
 import csv
-from enum import Enum
-from functools import lru_cache
 import heapq
 import json
-import random
-from typing import List, NamedTuple, Tuple
-from pathfinding.core.grid import Grid, GridNode
-from pathfinding.finder.a_star import AStarFinder
 
-   # create a tile class holding the following structure 
-   # {'world': 'double studio', 
-    #         'sector': 'double studio', 'arena': 'bedroom 2', 
-    #         'game_object': 'bed', 'spawning_location': 'bedroom-2-a', 
-    #         'collision': False,
-    #         'events': {('double studio:double studio:bedroom 2:bed',
-    #                    None, None)}} 
-
+# create a tile class holding the following structure
+# {'world': 'double studio',
+#         'sector': 'double studio', 'arena': 'bedroom 2',
+#         'game_object': 'bed', 'spawning_location': 'bedroom-2-a',
+#         'collision': False,
+#         'events': {('double studio:double studio:bedroom 2:bed',
+#                    None, None)}}
 # Set current workdir to file location
 import os
+import random
+from enum import Enum
+from functools import lru_cache
+from typing import List, NamedTuple, Tuple
+
+from pathfinding.core.grid import Grid
+from pathfinding.finder.a_star import AStarFinder
 
 from generative_agents.common.utils import get_project_root
 
 BASE_PATH = os.path.join(get_project_root(), "assets/matrix/the_ville")
 
-#named tuple for the ville
+# named tuple for the ville
 """{"world_name": "the ville", 
  "maze_width": 140,
  "maze_height": 100,
  "sq_tile_size": 32}"""
-MazeInfo = NamedTuple("MazeInfo", [("world_name", str), 
-                                   ("maze_width", int),
-                                   ("maze_height", int),
-                                   ("sq_tile_size", int)])
+MazeInfo = NamedTuple(
+    "MazeInfo",
+    [
+        ("world_name", str),
+        ("maze_width", int),
+        ("maze_height", int),
+        ("sq_tile_size", int),
+    ],
+)
+
 
 def _load_maze_meta_info():
     """load the json file containing the maze meta information"""
     with open(os.path.join(BASE_PATH, "maze_meta_info.json"), "r") as file:
         data = json.load(file)
-    
-    return MazeInfo(data["world_name"], data["maze_width"], data["maze_height"], data["sq_tile_size"])
+
+    return MazeInfo(
+        data["world_name"],
+        data["maze_width"],
+        data["maze_height"],
+        data["sq_tile_size"],
+    )
+
 
 class Level(Enum):
     WORLD = "world"
@@ -47,8 +59,20 @@ class Level(Enum):
     GAME_OBJECT = "game_object"
     SPAWNING_LOCATION = "spawning_location"
 
+
 class Tile:
-    def __init__(self, x,y, world, sector, arena, game_object, spawning_location, collision, events):
+    def __init__(
+        self,
+        x,
+        y,
+        world,
+        sector,
+        arena,
+        game_object,
+        spawning_location,
+        collision,
+        events,
+    ):
         super().__init__()
         self.x = x
         self.y = y
@@ -59,11 +83,11 @@ class Tile:
         self.spawning_location = spawning_location
         self.collision = collision
         self.events = events
-    
+
     def get_unique_name(self):
         address = ""
 
-        if self.world: 
+        if self.world:
             address += self.world
         if self.sector:
             address += f":{self.sector}"
@@ -71,79 +95,84 @@ class Tile:
             address += f":{self.arena}"
         if self.game_object:
             address += f":{self.game_object}"
-        #if self.spawning_location:
+        # if self.spawning_location:
         #    address = f'<spawn_loc>{self.spawning_location}'
 
         return address
-    
+
     def get_path(self, level: Level):
         path = f"{self.world}"
 
-        if level == Level.WORLD: 
+        if level == Level.WORLD:
             return path
-        else: 
+        else:
             path += f":{self.sector}"
-        
-        if level == Level.SECTOR: 
+
+        if level == Level.SECTOR:
             return path
-        else: 
+        else:
             path += f":{self.arena}"
 
-        if level == Level.ARENA: 
+        if level == Level.ARENA:
             return path
-        else: 
+        else:
             path += f":{self.game_object}"
 
         return path
-        
+
     def is_sector(self):
         return self.sector != ""
-    
+
     def is_arena(self):
         return self.arena != ""
-    
+
     def is_game_object(self):
         return self.game_object != ""
-    
+
     def is_spawning_location(self):
         return self.spawning_location != ""
-    
+
     def is_walkable(self):
         return not self.collision
-    
-    def l2_distance(self, other: 'Tile') -> float:
-        return ((self.x - other.x)**2 + (self.y - other.y)**2)**0.5
+
+    def l2_distance(self, other: "Tile") -> float:
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
 
     def __str__(self):
-        return f"Tile(world={self.world}, sector={self.sector}, arena={self.arena}, game_object={self.game_object}, spawning_location={self.spawning_location}, collision={self.collision}, events={self.events})"
+        return (
+            f"Tile(x={self.x}, y={self.y}, sector={self.sector}, arena={self.arena}, "
+            f"game_object={self.game_object}, spawning_location={self.spawning_location}, "
+            f"collision={self.collision}, events={self.events})"
+        )
 
     def __repr__(self):
         return self.__str__()
-    
-    def __gt__(self, other: 'Tile') -> bool:
+
+    def __gt__(self, other: "Tile") -> bool:
         return (self.x, self.y) > (other.x, other.y)
-    
-    def __lt__(self, other: 'Tile') -> bool:
+
+    def __lt__(self, other: "Tile") -> bool:
         return (self.x, self.y) < (other.x, other.y)
-    
-    def __eq__(self, other: 'Tile') -> bool:
+
+    def __eq__(self, other: "Tile") -> bool:
         return (self.x, self.y) == (other.x, other.y)
-    
+
     def __hash__(self) -> int:
         return hash((self.get_unique_name(), self.x, self.y))
 
-class SimplePathFinder():
+
+class SimplePathFinder:
     def __init__(self, grid: List[List[Tile]]):
         self.grid = grid
-    
+
     def find_path(self, start, end):
         open_set = []
         closed_set = set()
         heapq.heappush(open_set, (0, start))
         came_from = {}
-        g_score = {pos: float('inf') for row in self.grid for pos in row}
+        g_score = {pos: float("inf") for row in self.grid for pos in row}
         g_score[start] = 0
-        f_score = {pos: float('inf') for row in self.grid for pos in row}
+        f_score = {pos: float("inf") for row in self.grid for pos in row}
         f_score[start] = self._heuristic(start, end)
 
         while open_set:
@@ -164,7 +193,9 @@ class SimplePathFinder():
                 if tentative_g_score < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g_score
-                    f_score[neighbor] = g_score[neighbor] + self._heuristic(neighbor, end)
+                    f_score[neighbor] = g_score[neighbor] + self._heuristic(
+                        neighbor, end
+                    )
                     if neighbor not in [pos for _, pos in open_set]:
                         heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
@@ -210,17 +241,17 @@ class Maze:
         self.maze = []
 
         # READING IN SPECIAL BLOCKS
-        # Special blocks are those that are colored in the Tiled map. 
+        # Special blocks are those that are colored in the Tiled map.
 
-        # Here is an example row for the arena block file: 
+        # Here is an example row for the arena block file:
         # e.g., "25335, Double Studio, Studio, Common Room"
-        # And here is another example row for the game object block file: 
+        # And here is another example row for the game object block file:
         # e.g, "25331, Double Studio, Studio, Bedroom 2, Painting"
 
-        # Notice that the first element here is the color marker digit from the 
-        # Tiled export. Then we basically have the block path: 
-        # World, Sector, Arena, Game Object -- again, these paths need to be 
-        # unique within an instance of Reverie. 
+        # Notice that the first element here is the color marker digit from the
+        # Tiled export. Then we basically have the block path:
+        # World, Sector, Arena, Game Object -- again, these paths need to be
+        # unique within an instance of Reverie.
         blocks_folder = os.path.join(BASE_PATH, "special_blocks")
 
         world_blocks = self.read_special_blocks(blocks_folder + "/world_blocks.csv")
@@ -228,68 +259,116 @@ class Maze:
 
         sector_blocks = self.read_special_blocks(blocks_folder + "/sector_blocks.csv")
         sector_blocks_dict = {block[0]: block[-1] for block in sector_blocks}
-        
+
         arena_blocks = self.read_special_blocks(blocks_folder + "/arena_blocks.csv")
         arena_blocks_dict = {block[0]: block[-1] for block in arena_blocks}
 
-        game_object_blocks = self.read_special_blocks(blocks_folder + "/game_object_blocks.csv")
+        game_object_blocks = self.read_special_blocks(
+            blocks_folder + "/game_object_blocks.csv"
+        )
         game_object_blocks_dict = {block[0]: block[-1] for block in game_object_blocks}
 
-        spawning_location_blocks = self.read_special_blocks(blocks_folder + "/spawning_location_blocks.csv")
-        spawning_location_blocks_dict = {block[0]: block[-1] for block in spawning_location_blocks}
+        spawning_location_blocks = self.read_special_blocks(
+            blocks_folder + "/spawning_location_blocks.csv"
+        )
+        spawning_location_blocks_dict = {
+            block[0]: block[-1] for block in spawning_location_blocks
+        }
 
-        # [SECTION 3] Reading in the matrices 
-        # This is your typical two dimensional matrices. It's made up of 0s and 
-        # the number that represents the color block from the blocks folder. 
+        # [SECTION 3] Reading in the matrices
+        # This is your typical two dimensional matrices. It's made up of 0s and
+        # the number that represents the color block from the blocks folder.
         maze_folder = os.path.join(BASE_PATH, "maze")
 
-        collision_maze_raw = self.read_special_blocks(maze_folder + "/collision_maze.csv")[0]
+        collision_maze_raw = self.read_special_blocks(
+            maze_folder + "/collision_maze.csv"
+        )[0]
         sector_maze_raw = self.read_special_blocks(maze_folder + "/sector_maze.csv")[0]
         arena_maze_raw = self.read_special_blocks(maze_folder + "/arena_maze.csv")[0]
-        game_object_maze_raw = self.read_special_blocks(maze_folder + "/game_object_maze.csv")[0]
-        spawning_location_maze_raw = self.read_special_blocks(maze_folder + "/spawning_location_maze.csv")[0]
+        game_object_maze_raw = self.read_special_blocks(
+            maze_folder + "/game_object_maze.csv"
+        )[0]
+        spawning_location_maze_raw = self.read_special_blocks(
+            maze_folder + "/spawning_location_maze.csv"
+        )[0]
 
         # [SECTION 4] Converting the matrices to 2d lists
         # We need to convert the matrices to 2d lists.
         # We also need to convert the 0s to None.
 
-        collision_maze = self.convert_flat_list_to_2d_list(collision_maze_raw, self.maze_width)
-        sector_maze = self.convert_flat_list_to_2d_list(sector_maze_raw, self.maze_width)
+        collision_maze = self.convert_flat_list_to_2d_list(
+            collision_maze_raw, self.maze_width
+        )
+        sector_maze = self.convert_flat_list_to_2d_list(
+            sector_maze_raw, self.maze_width
+        )
         arena_maze = self.convert_flat_list_to_2d_list(arena_maze_raw, self.maze_width)
-        game_object_maze = self.convert_flat_list_to_2d_list(game_object_maze_raw, self.maze_width)
-        spawning_location_maze = self.convert_flat_list_to_2d_list(spawning_location_maze_raw, self.maze_width)
+        game_object_maze = self.convert_flat_list_to_2d_list(
+            game_object_maze_raw, self.maze_width
+        )
+        spawning_location_maze = self.convert_flat_list_to_2d_list(
+            spawning_location_maze_raw, self.maze_width
+        )
 
         # [SECTION 5] Creating the maze
         # We need to create the maze.
-        
+
         self.tiles = []
-        
+
         self.grid = Grid(self.maze_width, self.maze_height)
 
         for i in range(self.maze_height):
             row = []
             for j in range(self.maze_width):
-                sector = sector_blocks_dict[sector_maze[i][j]] if sector_maze[i][j] in sector_blocks_dict else ""
-                arena = arena_blocks_dict[arena_maze[i][j]] if arena_maze[i][j] in arena_blocks_dict else ""
-                game_object = game_object_blocks_dict[game_object_maze[i][j]] if game_object_maze[i][j] in game_object_blocks_dict else ""
-                spawning_location = spawning_location_blocks_dict[spawning_location_maze[i][j]] if spawning_location_maze[i][j] in spawning_location_blocks_dict else ""
+                sector = (
+                    sector_blocks_dict[sector_maze[i][j]]
+                    if sector_maze[i][j] in sector_blocks_dict
+                    else ""
+                )
+                arena = (
+                    arena_blocks_dict[arena_maze[i][j]]
+                    if arena_maze[i][j] in arena_blocks_dict
+                    else ""
+                )
+                game_object = (
+                    game_object_blocks_dict[game_object_maze[i][j]]
+                    if game_object_maze[i][j] in game_object_blocks_dict
+                    else ""
+                )
+                spawning_location = (
+                    spawning_location_blocks_dict[spawning_location_maze[i][j]]
+                    if spawning_location_maze[i][j] in spawning_location_blocks_dict
+                    else ""
+                )
                 collision = collision_maze[i][j] != "0"
-                row += [Tile(j, i, world_block, sector, arena, game_object, spawning_location, collision, dict())]           
-                node = self.grid.node(j,i)
+                row += [
+                    Tile(
+                        j,
+                        i,
+                        world_block,
+                        sector,
+                        arena,
+                        game_object,
+                        spawning_location,
+                        collision,
+                        dict(),
+                    )
+                ]
+                node = self.grid.node(j, i)
                 node.walkable = not collision
                 node.weight = 0 if collision else 1
 
             self.tiles += [row]
 
-        # Reverse tile access. 
-        # <self.address_tiles> -- given a string address, we return a set of all 
-        # tile coordinates belonging to that address (this is opposite of  
+        # Reverse tile access.
+        # <self.address_tiles> -- given a string address, we return a set of all
+        # tile coordinates belonging to that address (this is opposite of
         # self.tiles that give you the string address given a coordinate). This is
-        # an optimization component for finding paths for the personas' movement. 
+        # an optimization component for finding paths for the personas' movement.
         # self.address_tiles['<spawn_loc>bedroom-2-a'] == {(58, 9)}
-        # self.address_tiles['double studio:recreation:pool table'] 
-        #   == {(29, 14), (31, 11), (30, 14), (32, 11), ...}, 
-        
+        # self.address_tiles['double studio:recreation:pool table']
+        #   == {(29, 14), (31, 11), (30, 14), (32, 11), ...},
+
         self.address_tiles: dict[str, list[Tile]] = dict()
 
         for row in self.tiles:
@@ -299,20 +378,20 @@ class Maze:
 
                 address = tile.get_unique_name()
 
-                if address in self.address_tiles: 
+                if address in self.address_tiles:
                     self.address_tiles[address].append(tile)
-                else: 
+                else:
                     self.address_tiles[address] = [tile]
 
         self.finder = SimplePathFinder(self.tiles)
 
         self.__visualize_grid_as_csv()
 
-        #f = self.address_tiles["the Ville:Moreno family's house:common room"][0]
-        #t = self.address_tiles["the Ville:artist's co-living space:Abigail Chen's room"][0]
+        # f = self.address_tiles["the Ville:Moreno family's house:common room"][0]
+        # t = self.address_tiles["the Ville:artist's co-living space:Abigail Chen's room"][0]
 
-        #path = self.find_path(f, t)
-        #print(self.grid)
+        # path = self.find_path(f, t)
+        # print(self.grid)
 
     def filter_address_tiles(self, fuzzy_address: str) -> List[Tile]:
         """
@@ -322,13 +401,19 @@ class Maze:
         RETURNS:
             a list of tiles that match the fuzzy address
         """
-        return {address: tiles for address, tiles in self.address_tiles.items() if fuzzy_address in address}
+        return {
+            address: tiles
+            for address, tiles in self.address_tiles.items()
+            if fuzzy_address in address
+        }
 
     def get_random_tile(self, tile=None) -> Tile:
         """
         returns a random tile from the maze and make sure it is not the same as the tile given
         """
-        tiles = self.address_tiles[list(self.address_tiles)[random.randint(0, len(self.address_tiles) - 1)]]
+        tiles = self.address_tiles[
+            list(self.address_tiles)[random.randint(0, len(self.address_tiles) - 1)]
+        ]
 
         if tile:
             while True:
@@ -336,7 +421,7 @@ class Maze:
                 if random_tile != tile:
                     return random_tile
         return tiles[random.randint(0, len(tiles) - 1)]
-    
+
     def find_path(self, start: Tile, end: Tile) -> List[Tile]:
         """
         Calculates the path between two tiles.
@@ -348,23 +433,22 @@ class Maze:
         """
 
         path = self.finder.find_path(start, end)
-        
+
         tiles = []
         for node in path:
             tiles += [self.get_tile(node.x, node.y)]
 
         return tiles
-    
+
     @lru_cache(maxsize=1000)
     def _find_path(self, start: Tuple[int, int], end: Tuple[int, int]) -> List[Tile]:
         start_tile = self.get_tile(start[0], start[1])
         end_tile = self.get_tile(end[0], end[1])
 
         return self.finder.find_path(start_tile, end_tile)
-        
 
     @lru_cache(maxsize=1000)
-    def get_nearby_tiles(self, tile, vision_radius): 
+    def get_nearby_tiles(self, tile, vision_radius):
         """
         Given a tile, we return all the tiles within a vision radius.
 
@@ -384,23 +468,27 @@ class Maze:
 
         returns Ns
 
-        INPUT: 
-            tile: A tile coordinate. 
+        INPUT:
+            tile: A tile coordinate.
             vision_radius: An integer representing the vision radius.
         OUTPUT:
-            A set of tiles. 
+            A set of tiles.
         """
 
-        # We need to get the tile coordinates of all the tiles within the vision 
-        # radius. 
+        # We need to get the tile coordinates of all the tiles within the vision
+        # radius.
         nearby_tiles = list()
 
         for i in range(-vision_radius, vision_radius + 1):
             for j in range(-vision_radius, vision_radius + 1):
- 
-                if tile.x + i < 0 or tile.x + i >= self.maze_width or tile.y + j < 0 or tile.y + j >= self.maze_height:
+                if (
+                    tile.x + i < 0
+                    or tile.x + i >= self.maze_width
+                    or tile.y + j < 0
+                    or tile.y + j >= self.maze_height
+                ):
                     continue
-                
+
                 nearby_tile = self.get_tile(tile.x + i, tile.y + j)
 
                 if nearby_tile.is_walkable():
@@ -408,28 +496,28 @@ class Maze:
 
         return nearby_tiles
 
-
-
     def __visualize_grid_as_csv(self, sep=";"):
         """
-        Visualizes the grid as a csv file. 
-        ARGS: 
+        Visualizes the grid as a csv file.
+        ARGS:
         sep: separator for the csv file
         """
         out = ""
         for i in range(self.grid.width):
             for j in range(self.grid.height):
-                out += str(int(self.grid.node(i, j).walkable))+sep
+                out += str(int(self.grid.node(i, j).walkable)) + sep
             out += "\n"
-        
-        #write csv
-        #with open("out.csv", "w") as f:
-            #f.write(out)
+
+        # write csv
+        # with open("out.csv", "w") as f:
+        # f.write(out)
 
     @staticmethod
-    def convert_flat_list_to_2d_list(flat_list: List[str], width: int) -> List[List[str]]:
+    def convert_flat_list_to_2d_list(
+        flat_list: List[str], width: int
+    ) -> List[List[str]]:
         """
-        Converts a flat list to a 2d list. 
+        Converts a flat list to a 2d list.
         ARGS:
         flat_list: list of strings
         width: width of the 2d list
@@ -437,32 +525,30 @@ class Maze:
         RETURNS:
         2d list of strings
         """
-        return [flat_list[i:i + width] for i in range(0, len(flat_list), width)]
-
-
+        return [flat_list[i : i + width] for i in range(0, len(flat_list), width)]
 
     def load_csv(self):
         with open(self.csv_file) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=',')
+            csv_reader = csv.reader(csv_file, delimiter=",")
             for row in csv_reader:
                 self.maze.append(row)
 
     @staticmethod
     def read_special_blocks(file_path: str) -> List[List[str]]:
         """
-        Reads in a csv file to a list of list. If header is True, it returns a 
+        Reads in a csv file to a list of list. If header is True, it returns a
         tuple with (header row, all rows)
         ARGS:
-        curr_file: path to the current csv file. 
-        RETURNS: 
-        List of list where the component lists are the rows of the file. 
+        curr_file: path to the current csv file.
+        RETURNS:
+        List of list where the component lists are the rows of the file.
         """
         with open(file_path) as file_handle:
             data_reader = csv.reader(file_handle, delimiter=",")
             return [[cell.strip() for cell in row] for row in data_reader]
-        
+
     def print_maze(self):
-        """ 
+        """
         prints the 2d list of tiles as a grid
         """
         for row in self.maze:

@@ -6,8 +6,9 @@ if TYPE_CHECKING:
 
 from generative_agents.simulation.maze import Maze
 
+
 class Execution:
-    def __init__(self, agent: 'Agent', maze: Maze, agents: dict[str, 'Agent']):
+    def __init__(self, agent: "Agent", maze: Maze, agents: dict[str, "Agent"]):
         self.agent = agent
         self.maze = maze
         self.agents = agents
@@ -27,24 +28,30 @@ class Execution:
 
             if "<persona>" in plan:
                 # Executing persona-persona interaction.
-                target_persona_tile = self.agents[plan.split(
-                    "<persona>")[-1].strip()].scratch.tile
-                potential_path = self.maze.find_path(self.agent.scratch.tile,
-                                                     target_persona_tile)
+                target_persona_tile = self.agents[
+                    plan.split("<persona>")[-1].strip()
+                ].scratch.tile
+                potential_path = self.maze.find_path(
+                    self.agent.scratch.tile, target_persona_tile
+                )
 
                 if len(potential_path) <= 2:
                     target_tiles = [potential_path[0]]
                 else:
-                    potential_1 = self.maze.find_path(self.agent.scratch.tile,
-                                                      potential_path[int(len(potential_path)/2)])
-                    potential_2 = self.maze.find_path(self.agent.scratch.tile,
-                                                      potential_path[int(len(potential_path)/2)+1])
+                    potential_1 = self.maze.find_path(
+                        self.agent.scratch.tile,
+                        potential_path[int(len(potential_path) / 2)],
+                    )
+                    potential_2 = self.maze.find_path(
+                        self.agent.scratch.tile,
+                        potential_path[int(len(potential_path) / 2) + 1],
+                    )
                     if len(potential_1) <= len(potential_2):
-                        target_tiles = [
-                            potential_path[int(len(potential_path)/2)]]
+                        target_tiles = [potential_path[int(len(potential_path) / 2)]]
                     else:
                         target_tiles = [
-                            potential_path[int(len(potential_path)/2+1)]]
+                            potential_path[int(len(potential_path) / 2 + 1)]
+                        ]
 
             elif "<waiting>" in plan:
                 # Executing interaction where the persona has decided to wait before
@@ -55,8 +62,7 @@ class Execution:
 
             elif "<random>" in plan:
                 # Executing a random location action.
-                target_tiles = [self.maze.get_random_tile(
-                    self.agent.scratch.tile)]
+                target_tiles = [self.maze.get_random_tile(self.agent.scratch.tile)]
             else:
                 # This is our default execution. We simply take the persona to the
                 # location where the current action is taking place.
@@ -68,7 +74,8 @@ class Execution:
 
                     if fallback_plan not in self.maze.address_tiles:
                         fallback_plan = random.choice(
-                            list(self.maze.address_tiles.keys()))
+                            list(self.maze.address_tiles.keys())
+                        )
 
                     target_tiles = self.maze.address_tiles[fallback_plan]
                 else:
@@ -78,8 +85,7 @@ class Execution:
             # may stretch many coordinates). So, we sample a few here. And from that
             # random sample, we will take the closest ones.
             if len(target_tiles) < 4:
-                target_tiles = random.sample(
-                    list(target_tiles), len(target_tiles))
+                target_tiles = random.sample(list(target_tiles), len(target_tiles))
             else:
                 target_tiles = random.sample(list(target_tiles), 4)
 

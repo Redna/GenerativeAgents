@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
-from pydantic import BaseModel
+from typing import Dict, List
 
-from generative_agents.simulation.maze import Maze, Tile
+from generative_agents.simulation.maze import Tile
+
 
 @dataclass
 class ArenaMemory:
@@ -13,13 +13,13 @@ class ArenaMemory:
             return
 
         self.game_objects[tile.game_object] = tile
-    
+
     def __getitem__(self, key):
         return self.game_objects[key]
 
     def __getattr__(self, name):
         return getattr(self.game_objects, name)
-    
+
     def __deepcopy__(self, memo):
         return ArenaMemory(game_objects=self.game_objects.copy())
 
@@ -45,9 +45,10 @@ class SectorMemory:
 
     def __getattr__(self, name):
         return getattr(self.arenas, name)
-    
+
     def __deepcopy__(self, memo):
         return SectorMemory(arenas=self.arenas.copy())
+
 
 @dataclass
 class WorldMemory:
@@ -70,14 +71,15 @@ class WorldMemory:
 
     def __getattr__(self, name):
         return getattr(self.sectors, name)
-    
+
     def __deepcopy__(self, memo):
         return WorldMemory(sectors=self.sectors.copy())
+
 
 @dataclass
 class MemoryTree:
     tree: Dict[str, List[WorldMemory]] = field(default_factory=dict)
-                    
+
     def add(self, tile: Tile):
         if not tile.world:
             return
@@ -86,7 +88,7 @@ class MemoryTree:
             self.tree[tile.world] = WorldMemory()
 
         self.tree[tile.world].add(tile)
-    
+
     def __getitem__(self, key):
         return self.tree.get(key)
 
@@ -98,16 +100,16 @@ class MemoryTree:
 
     def get_str_accessible_sectors(self, curr_world):
         """
-        Returns a summary string of all the arenas that the persona can access 
-        within the current sector. 
+        Returns a summary string of all the arenas that the persona can access
+        within the current sector.
 
         Note that there are places a given persona cannot enter. This information
-        is provided in the persona sheet. We account for this in this function. 
+        is provided in the persona sheet. We account for this in this function.
 
         INPUT
         None
-        OUTPUT 
-        A summary string of all the arenas that the persona can access. 
+        OUTPUT
+        A summary string of all the arenas that the persona can access.
         EXAMPLE STR OUTPUT
         "bedroom, kitchen, dining room, office, bathroom"
         """
@@ -116,16 +118,16 @@ class MemoryTree:
 
     def get_str_accessible_sector_arenas(self, sector):
         """
-        Returns a summary string of all the arenas that the persona can access 
-        within the current sector. 
+        Returns a summary string of all the arenas that the persona can access
+        within the current sector.
 
         Note that there are places a given persona cannot enter. This information
-        is provided in the persona sheet. We account for this in this function. 
+        is provided in the persona sheet. We account for this in this function.
 
         INPUT
             None
-        OUTPUT 
-            A summary string of all the arenas that the persona can access. 
+        OUTPUT
+            A summary string of all the arenas that the persona can access.
         EXAMPLE STR OUTPUT
             "bedroom, kitchen, dining room, office, bathroom"
         """
@@ -137,15 +139,15 @@ class MemoryTree:
 
     def get_str_accessible_arena_game_objects(self, arena):
         """
-        Get a str list of all accessible game object_s that are in the arena. If 
+        Get a str list of all accessible game object_s that are in the arena. If
         temp_address is specified, we return the object_s that are available in
         that arena, and if not, we return the object_s that are in the arena our
-        persona is currently in. 
+        persona is currently in.
 
         INPUT
             temp_address: optional arena address
-        OUTPUT 
-            str list of all accessible game object_s in the gmae arena. 
+        OUTPUT
+            str list of all accessible game object_s in the gmae arena.
         EXAMPLE STR OUTPUT
             "phone, charger, bed, nightstand"
         """
@@ -155,10 +157,12 @@ class MemoryTree:
             return ""
 
         try:
-            x = ", ".join(list(self.tree[curr_world][curr_sector][curr_arena].game_objects.keys()))
-        except:
+            x = ", ".join(
+                list(self.tree[curr_world][curr_sector][curr_arena].game_objects.keys())
+            )
+        except Exception:
             return None
         return x
-    
+
     def __deepcopy__(self, memo):
         return MemoryTree(tree=self.tree.copy())

@@ -1,12 +1,14 @@
-import unittest
-from unittest.mock import MagicMock, patch
 import datetime
+import unittest
+from unittest.mock import MagicMock
 
-from generative_agents.core.simulation_engine import SimulationEngine, Percept
+from generative_agents.core.events import Event
+from generative_agents.core.simulation_engine import Percept, SimulationEngine
+
 # from generative_agents.core.agent import Agent # Avoid importing Agent to skip huge dependencies
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.simulation.time import SimulationTime
-from generative_agents.core.events import Event, PerceivedEvent
+
 
 # Mock Agent for testing
 class MockAgent:
@@ -20,7 +22,8 @@ class MockAgent:
         self.run_step = MagicMock()
 
     def to_dto(self):
-        # Return a dict that satisfies AgentDTO structure (or a mock that passes pydantic validation if lenient, but dict is safer)
+        # Return a dict that satisfies AgentDTO structure (or a mock that passes pydantic validation
+        # if lenient, but dict is safer)
         # Actually Pydantic validates against the model.
         # Let's import AgentDTO if possible or mock the data structure.
         # Minimal fields for AgentDTO: name, age, inniate_traits, description, location, emoji, activity, movement
@@ -32,8 +35,9 @@ class MockAgent:
             "location": "World:Sector:Arena:Object",
             "emoji": "🧪",
             "activity": "testing",
-            "movement": {"col": 10, "row": 10}
+            "movement": {"col": 10, "row": 10},
         }
+
 
 class TestSimulationEngine(unittest.TestCase):
     def setUp(self):
@@ -46,12 +50,12 @@ class TestSimulationEngine(unittest.TestCase):
         self.time = MagicMock(spec=SimulationTime)
         self.time.today = "Monday"
         self.time.time = datetime.datetime.now()
-        self.time.as_string.return_value = "2023-01-01T00:00:00" # Fixed return value
+        self.time.as_string.return_value = "2023-01-01T00:00:00"  # Fixed return value
 
         # Mock Agent
         self.agent = MockAgent("TestAgent")
-        self.agent.scratch.tile = MagicMock() # Removed spec=Tile
-        self.agent.scratch.tile.events = {}   # Initialize events
+        self.agent.scratch.tile = MagicMock()  # Removed spec=Tile
+        self.agent.scratch.tile.events = {}  # Initialize events
         self.agent.scratch.tile.x = 10
         self.agent.scratch.tile.y = 10
         self.agent.scratch.tile.get_path.return_value = "World:Sector:Arena"
@@ -70,7 +74,7 @@ class TestSimulationEngine(unittest.TestCase):
         tile_with_event.x = 11
         tile_with_event.y = 10
         tile_with_event.get_path.return_value = "World:Sector:Arena"
-        
+
         event = MagicMock(spec=Event)
         event.spo_summary = ("Subject", "Predicate", "Object")
         event.dist = 1
@@ -88,13 +92,15 @@ class TestSimulationEngine(unittest.TestCase):
 
     def test_step_calls_agent_run_step(self):
         # Mock calculate_percepts to avoid complex logic
-        self.engine._calculate_percepts = MagicMock(return_value={"TestAgent": Percept()})
-        
+        self.engine._calculate_percepts = MagicMock(
+            return_value={"TestAgent": Percept()}
+        )
+
         self.engine.step()
 
         self.agent.run_step.assert_called_once()
         self.engine._calculate_percepts.assert_called_once()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

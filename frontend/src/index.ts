@@ -1,13 +1,10 @@
-console.log("Index module loaded");
+console.log('Index module loaded');
 import Phaser from 'phaser';
-import config from './config';
+import config from './Config';
 import GameScene from './scenes/Game';
-import SimulationConnector from './connector/simulationConnector';
-
 
 new Phaser.Game(
   Object.assign(config, {
-    scene: [GameScene]
-  })
+    scene: [GameScene],
+  }),
 );
-

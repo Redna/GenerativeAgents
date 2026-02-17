@@ -1,18 +1,16 @@
-
-import hashlib
 import os
-import json
 import pickle
+
 from sentence_transformers import SentenceTransformer
 
 from generative_agents.common.utils import generate_hash_from_signature
-from generative_agents.common import global_state
+
 
 class CachableSentenceTransformer(SentenceTransformer):
     def encode(self, *args, **kwargs):
         # merge args and kwargs to one dict
         hash_key = generate_hash_from_signature(*args, **kwargs)
-        cache_dir = f".generation_cache/embed/"
+        cache_dir = ".generation_cache/embed/"
         os.makedirs(cache_dir, exist_ok=True)
         cache_file_path = f"{cache_dir}/{hash_key}.pkl"
 
