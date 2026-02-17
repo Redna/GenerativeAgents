@@ -1,6 +1,6 @@
 import sys
 from loguru import logger
-from generative_agents import global_state
+from generative_agents.common import global_state
 import asyncio
 
 # Configure Loguru

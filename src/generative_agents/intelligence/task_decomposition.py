@@ -1,7 +1,7 @@
 import dspy
 from pydantic import BaseModel, Field
 import datetime
-from generative_agents.utils import time_string_to_time
+from generative_agents.common.utils import time_string_to_time
 
 class SubtaskItem(BaseModel):
     activity_name: str = Field(description="Description of the 5-minute subtask.")

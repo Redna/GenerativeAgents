@@ -2,7 +2,7 @@ import random
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from generative_agents.core.agent import Agent
+    from generative_agents.agents.agent import Agent
 
 from generative_agents.simulation.maze import Maze
 

@@ -1,17 +1,17 @@
 from typing import TYPE_CHECKING
 import datetime
-from generative_agents.core.logging import log_agent
-from generative_agents.core.events import EventType, PerceivedEvent
+from generative_agents.common.logging import log_agent
+from generative_agents.common.events import EventType, PerceivedEvent
 from generative_agents.persistence.database import ConversationFilling
-from generative_agents.conversational.pipelines.poignance import rate_poignance
-from generative_agents.conversational.pipelines.action_event_tripple import action_event_triple
-from generative_agents.conversational.pipelines.reflection_points import reflection_points
-from generative_agents.conversational.pipelines.evidence_and_insights import evidence_and_insights
-from generative_agents.conversational.pipelines.memo_on_conversation import memo_on_conversation
-from generative_agents.conversational.pipelines.planning_on_conversation import planning_on_conversation
+from generative_agents.intelligence.poignance import rate_poignance
+from generative_agents.intelligence.action_event_tripple import action_event_triple
+from generative_agents.intelligence.reflection_points import reflection_points
+from generative_agents.intelligence.evidence_and_insights import evidence_and_insights
+from generative_agents.intelligence.memo_on_conversation import memo_on_conversation
+from generative_agents.intelligence.planning_on_conversation import planning_on_conversation
 
 if TYPE_CHECKING:
-    from generative_agents.core.agent import Agent
+    from generative_agents.agents.agent import Agent
 
 class Reflection:
     def __init__(self, agent: 'Agent'):

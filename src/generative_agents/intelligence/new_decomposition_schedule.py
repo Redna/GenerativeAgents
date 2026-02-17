@@ -1,6 +1,6 @@
 import dspy
 from pydantic import BaseModel, Field
-from generative_agents.utils import hour_string_to_time
+from generative_agents.common.utils import hour_string_to_time
 import datetime
 
 class Task(BaseModel):

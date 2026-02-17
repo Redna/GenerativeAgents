@@ -2,14 +2,14 @@
 import datetime
 from enum import Enum
 import random
-from generative_agents.utils import get_time_string
+from generative_agents.common.utils import get_time_string
 
 
 
-from generative_agents.conversational.pipelines.poignance import rate_poignance
+from generative_agents.intelligence.poignance import rate_poignance
 
-from generative_agents.core.events import Action, Event, EventType, ObjectAction, PerceivedEvent
-from generative_agents.core.logging import log_agent
+from generative_agents.common.events import Action, Event, EventType, ObjectAction, PerceivedEvent
+from generative_agents.common.logging import log_agent
 from generative_agents.persistence.database import ConversationFilling
 from generative_agents.simulation.maze import Level
 from generative_agents.simulation.time import DayType
@@ -18,28 +18,28 @@ from generative_agents.persistence import database
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from generative_agents.core.agent import Agent
+    from generative_agents.agents.agent import Agent
 
-from generative_agents.conversational.pipelines.wake_up_hour import estimate_wake_up_hour
-from generative_agents.conversational.pipelines.daily_plan import create_daily_plan_and_status
-from generative_agents.conversational.pipelines.hourly_breakdown import create_hourly_schedule
-from generative_agents.conversational.pipelines.contextualize_event import contextualize_event
-from generative_agents.conversational.pipelines.decide_to_talk import decide_to_talk
-from generative_agents.conversational.pipelines.decide_to_react import decide_to_react
-from generative_agents.conversational.pipelines.action_location_sector import action_sector_locations
-from generative_agents.conversational.pipelines.action_location_arena import action_area_locations
-from generative_agents.conversational.pipelines.action_location_game_object import action_location_game_object
-from generative_agents.conversational.pipelines.object_event import describe_object_state
-from generative_agents.conversational.pipelines.action_pronunciatio import action_pronunciatio
-from generative_agents.conversational.pipelines.action_event_tripple import action_event_triple
-from generative_agents.conversational.pipelines.summarize_chat_relationship import summarize_chat_relationship
-from generative_agents.conversational.pipelines.conversation import run_conversation
-from generative_agents.conversational.pipelines.conversation_summary import conversation_summary
+from generative_agents.intelligence.wake_up_hour import estimate_wake_up_hour
+from generative_agents.intelligence.daily_plan import create_daily_plan_and_status
+from generative_agents.intelligence.hourly_breakdown import create_hourly_schedule
+from generative_agents.intelligence.contextualize_event import contextualize_event
+from generative_agents.intelligence.decide_to_talk import decide_to_talk
+from generative_agents.intelligence.decide_to_react import decide_to_react
+from generative_agents.intelligence.action_location_sector import action_sector_locations
+from generative_agents.intelligence.action_location_arena import action_area_locations
+from generative_agents.intelligence.action_location_game_object import action_location_game_object
+from generative_agents.intelligence.object_event import describe_object_state
+from generative_agents.intelligence.action_pronunciatio import action_pronunciatio
+from generative_agents.intelligence.action_event_tripple import action_event_triple
+from generative_agents.intelligence.summarize_chat_relationship import summarize_chat_relationship
+from generative_agents.intelligence.conversation import run_conversation
+from generative_agents.intelligence.conversation_summary import conversation_summary
 
-from generative_agents.conversational.pipelines.poignance import rate_poignance
-from generative_agents.conversational.pipelines.new_decomposition_schedule import create_new_decomposition_schedule
-from generative_agents.conversational.pipelines.task_decomposition import create_decomposition_schedule
-from generative_agents.conversational.pipelines.first_daily_plan import create_daily_plan
+from generative_agents.intelligence.poignance import rate_poignance
+from generative_agents.intelligence.new_decomposition_schedule import create_new_decomposition_schedule
+from generative_agents.intelligence.task_decomposition import create_decomposition_schedule
+from generative_agents.intelligence.first_daily_plan import create_daily_plan
 
 
 LONG_TERM_PLANNING = "long_term_planning"

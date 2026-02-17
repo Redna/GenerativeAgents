@@ -2,10 +2,8 @@
 # yarn lockfile v1
 
 
-"@esbuild/linux-arm64@0.18.20":
+"@esbuild/darwin-arm64@0.18.20":
   version "0.18.20"
-  resolved "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.18.20.tgz"
-  integrity sha512-2YbscF+UL7SQAVIpnWvYwM+3LskyDmPhe31pE7/aoTMFKKzIc9lLbyGUpmmb8a8AixOL61sQ/mFh3jEjHYFvdA==
 
 "@rollup/plugin-alias@^3.1.9":
   version "3.1.9"
@@ -117,6 +115,9 @@ eventemitter3@^5.0.0:
 
 fs.realpath@^1.0.0:
   version "1.0.0"
+
+fsevents@~2.3.2:
+  version "2.3.3"
 
 function-bind@^1.1.1:
   version "1.1.1"

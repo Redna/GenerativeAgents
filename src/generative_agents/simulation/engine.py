@@ -4,15 +4,15 @@ import math
 from operator import itemgetter
 
 if TYPE_CHECKING:
-    from generative_agents.core.agent import Agent
+    from generative_agents.agents.agent import Agent
 
 from generative_agents.simulation.maze import Maze, Tile, Level
-from generative_agents.core.events import Event, PerceivedEvent
+from generative_agents.common.events import Event, PerceivedEvent
 from generative_agents.simulation.time import SimulationTime
-from generative_agents.core.percept import Percept
+from generative_agents.common.percept import Percept
 
 
-from generative_agents.communication.models import AgentDTO, RoundUpdateDTO
+from generative_agents.common.models import AgentDTO, RoundUpdateDTO
 
 class SimulationEngine:
     def __init__(self, maze: Maze, agents: List[Agent], time: SimulationTime):

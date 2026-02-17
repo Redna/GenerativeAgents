@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Import models from the project to ensure compatibility
 # Make sure PYTHONPATH includes src/
-from generative_agents.communication.models import AgentDTO, RoundUpdateDTO, MovementDTO
+from generative_agents.common.models import AgentDTO, RoundUpdateDTO, MovementDTO
 from generative_agents.simulation.maze import Maze
 
 # Create Async SocketIO Server
@@ -84,7 +84,7 @@ async def mock_simulation_loop():
     print("Mock simulation loop started.")
     
     # Initialize Logging with SIO instance
-    from generative_agents.core.logging import initialize_socket_logging, log_agent
+    from generative_agents.common.logging import initialize_socket_logging, log_agent
     initialize_socket_logging(sio)
     log_agent("System", "Mock Simulation Initialized", "INFO")
     
@@ -112,7 +112,7 @@ async def mock_simulation_loop():
         }
     }
 
-    from generative_agents import global_state
+    from generative_agents.common import global_state
     
     while True:
         SIMULATION_ROUND += 1

@@ -19,7 +19,7 @@ from pathfinding.finder.a_star import AStarFinder
 # Set current workdir to file location
 import os
 
-from generative_agents.utils import get_project_root
+from generative_agents.common.utils import get_project_root
 
 BASE_PATH = os.path.join(get_project_root(), "assets/matrix/the_ville")
 

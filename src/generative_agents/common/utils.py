@@ -10,7 +10,7 @@ from time import perf_counter, time
 from functools import wraps, lru_cache
 from colorama import Fore, Style, Back
 
-from generative_agents import global_state
+from generative_agents.common import global_state
 
 @contextmanager
 def colored(style, fore, back):
@@ -58,7 +58,7 @@ def time_string_to_time(time: str) -> datetime:
 
 
 def get_project_root() -> Path:
-    return Path(__file__).parent.parent.parent
+    return Path(__file__).parent.parent.parent.parent
 
 def hash_string(s: str) -> int:
     """ Returns a hash of the string. """

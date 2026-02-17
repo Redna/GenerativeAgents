@@ -140,3 +140,27 @@ Simplify the agent's execution flow by removing the complex graph-based orchestr
 ---
 **Last Updated**: 2026-02-16
 **Author**: Antigravity (Agent)
+
+## 10. Phase 4: Module Refactoring (Feb 17, 2026)
+
+### Objective
+Improve codebase structure and organization by grouping related components into logical directories.
+
+### Key Changes
+- **Directory Restructure**:
+    - `core/agent.py` -> `agents/agent.py`
+    - `core/memory/` -> `agents/memory/`
+    - `core/cognitive_components/` -> `agents/components/`
+    - `core/simulation_engine.py` -> `simulation/engine.py`
+    - `conversational/pipelines/` -> `intelligence/`
+    - `mock_server.py` -> `server/mock.py`
+    - `communication/` -> `server/` (api.py) & `common/` (models.py)
+    - `core/` files (events, percept, logging) -> `common/`
+- **Import Updates**: All imports updated to reflect new structure.
+- **Fixes**:
+    - Resolved `global_state` import circulars (`from generative_agents.common import global_state`).
+    - Fixed asset path resolution in `common/utils.py` (added parent directory traversal).
+
+### Verification
+- **Run Mock Server**: `uv run python -m generative_agents.server.mock`
+- **Status**: Verified working with agent pathfinding and movement.

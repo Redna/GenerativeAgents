@@ -3,13 +3,13 @@ import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Tuple
-from generative_agents import global_state
+from generative_agents.common import global_state
 
 from generative_agents.persistence.database import ConversationFilling, MemoryEntry
 from pydantic import BaseModel
 from generative_agents.simulation.maze import Tile
 
-from generative_agents.utils import hash_string
+from generative_agents.common.utils import hash_string
 
 
 class EventType(Enum):

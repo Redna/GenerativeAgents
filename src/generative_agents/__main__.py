@@ -5,11 +5,11 @@ from time import sleep
 
 from aiohttp import web
 
-from generative_agents import global_state
-from generative_agents.communication import api
-from generative_agents.core.agent import Agent
-from generative_agents.core.simulation_engine import SimulationEngine
-from generative_agents.core.memory.spatial import MemoryTree
+from generative_agents.common import global_state
+from generative_agents.server import api
+from generative_agents.agents.agent import Agent
+from generative_agents.simulation.engine import SimulationEngine
+from generative_agents.agents.memory.spatial import MemoryTree
 from generative_agents.persistence.database import initialize_database
 from generative_agents.simulation.maze import Maze, BASE_PATH
 
@@ -41,7 +41,7 @@ def initialize_agent(agent_data, maze, start_tile) -> Agent:
     return agent
 
 async def main():
-    from generative_agents.core.dspy_config import configure_dspy
+    from generative_agents.common.dspy_config import configure_dspy
     configure_dspy()
 
     maze = Maze()

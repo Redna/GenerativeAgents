@@ -3,12 +3,12 @@ from dataclasses import dataclass, field
 import datetime
 from typing import Tuple
 
-from generative_agents.conversational.pipelines.identity import formulate_identity
+from generative_agents.intelligence.identity import formulate_identity
 from generative_agents.simulation.time import SimulationTime
-from generative_agents.core.events import Action
+from generative_agents.common.events import Action
 from generative_agents.simulation.maze import Tile
-from generative_agents.utils import hash_string
-from generative_agents import global_state
+from generative_agents.common.utils import hash_string
+from generative_agents.common import global_state
 
 @dataclass
 class Scratch():

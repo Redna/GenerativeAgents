@@ -9,7 +9,7 @@ from qdrant_client import QdrantClient, models
 
 from datetime import datetime
 
-from generative_agents import global_state
+from generative_agents.common import global_state
 from generative_agents.persistence.cachable_sentence_transformer import CachableSentenceTransformer
 
 

@@ -2,7 +2,7 @@
 import datetime
 from enum import Enum
 
-from generative_agents import global_state
+from generative_agents.common import global_state
 
 class DayType(Enum):
     FIRST_DAY = 1

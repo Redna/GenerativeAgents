@@ -5,7 +5,7 @@ from typing import Dict, List
 from pydantic import BaseModel
 
 from generative_agents.persistence import database
-from generative_agents.core.events import PerceivedEvent
+from generative_agents.common.events import PerceivedEvent
 
 @dataclass
 class LastEntryStore:

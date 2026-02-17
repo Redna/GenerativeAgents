@@ -1,6 +1,6 @@
 import dspy
 from pydantic import BaseModel, Field
-from generative_agents.utils import time_string_to_time
+from generative_agents.common.utils import time_string_to_time
 
 class HourlyScheduleItem(BaseModel):
     time: str = Field(description="The time of the activity (e.g. 09:00 AM).")

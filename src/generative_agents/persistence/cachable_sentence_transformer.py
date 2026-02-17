@@ -5,8 +5,8 @@ import json
 import pickle
 from sentence_transformers import SentenceTransformer
 
-from generative_agents.utils import generate_hash_from_signature
-from generative_agents import global_state
+from generative_agents.common.utils import generate_hash_from_signature
+from generative_agents.common import global_state
 
 class CachableSentenceTransformer(SentenceTransformer):
     def encode(self, *args, **kwargs):

@@ -82,7 +82,7 @@ def init_app(update: Callable, spawn_agent_function: Callable):
     update_simulation = update
     
     # Initialize Logging with SIO instance
-    from generative_agents.core.logging import initialize_socket_logging, log_agent
+    from generative_agents.common.logging import initialize_socket_logging, log_agent
     initialize_socket_logging(sio)
     log_agent("System", "Real Backend API Initialized", "INFO")
     

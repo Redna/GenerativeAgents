@@ -2,24 +2,24 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from enum import Enum
 
-from generative_agents.communication.models import AgentDTO, MovementDTO
-from generative_agents.core.events import Event, EventType, PerceivedEvent
-from generative_agents.core.memory.associative import AssociativeMemory
-from generative_agents.core.memory.spatial import MemoryTree
-from generative_agents.core.memory.scratch import Scratch
-from generative_agents.core.logging import log_agent
+from generative_agents.common.models import AgentDTO, MovementDTO
+from generative_agents.common.events import Event, EventType, PerceivedEvent
+from generative_agents.agents.memory.associative import AssociativeMemory
+from generative_agents.agents.memory.spatial import MemoryTree
+from generative_agents.agents.memory.scratch import Scratch
+from generative_agents.common.logging import log_agent
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.persistence.database import initialize_agent
 from generative_agents.simulation.time import DayType, SimulationTime
-from generative_agents.utils import timeit
-from generative_agents.core.percept import Percept
-from generative_agents.conversational.pipelines.poignance import rate_poignance
+from generative_agents.common.utils import timeit
+from generative_agents.common.percept import Percept
+from generative_agents.intelligence.poignance import rate_poignance
 
 # Cognitive Components - Direct Imports
-from generative_agents.core.cognitive_components.execution import Execution
-from generative_agents.core.cognitive_components.plan import Plan
-from generative_agents.core.cognitive_components.reflection import Reflection
-from generative_agents.core.cognitive_components.retrieval import Retrieval
+from generative_agents.agents.components.execution import Execution
+from generative_agents.agents.components.plan import Plan
+from generative_agents.agents.components.reflection import Reflection
+from generative_agents.agents.components.retrieval import Retrieval
 
 class Agent:
     def __init__(self, name: str, age: int, description: str, innate_traits: list[str], time: SimulationTime, location: str, emoji: str, activity: str, tile: Tile, tree: MemoryTree = None):
