@@ -77,10 +77,14 @@ class WorldMemory:
 
 
 @dataclass
-class MemoryTree:
+class WorldMap:
+    """
+    The Agent's internal model of the world (Spatial Memory).
+    """
     tree: Dict[str, List[WorldMemory]] = field(default_factory=dict)
 
-    def add(self, tile: Tile):
+    def add_tile(self, tile: Tile):
+        """Adds a discovered tile to the map."""
         if not tile.world:
             return
 
@@ -88,81 +92,42 @@ class MemoryTree:
             self.tree[tile.world] = WorldMemory()
 
         self.tree[tile.world].add(tile)
+        
+    def add(self, tile: Tile):
+        """Legacy alias."""
+        self.add_tile(tile)
 
     def __getitem__(self, key):
         return self.tree.get(key)
-
-    def __setitem__(self, key, value):
-        self.tree[key] = value
-
-    def __getattr__(self, name):
-        return getattr(self.tree, name)
-
+        
     def get_str_accessible_sectors(self, curr_world):
-        """
-        Returns a summary string of all the arenas that the persona can access
-        within the current sector.
-
-        Note that there are places a given persona cannot enter. This information
-        is provided in the persona sheet. We account for this in this function.
-
-        INPUT
-        None
-        OUTPUT
-        A summary string of all the arenas that the persona can access.
-        EXAMPLE STR OUTPUT
-        "bedroom, kitchen, dining room, office, bathroom"
-        """
+        if curr_world not in self.tree: return ""
         x = ", ".join(list(self.tree[curr_world].keys()))
         return x
 
     def get_str_accessible_sector_arenas(self, sector):
-        """
-        Returns a summary string of all the arenas that the persona can access
-        within the current sector.
-
-        Note that there are places a given persona cannot enter. This information
-        is provided in the persona sheet. We account for this in this function.
-
-        INPUT
-            None
-        OUTPUT
-            A summary string of all the arenas that the persona can access.
-        EXAMPLE STR OUTPUT
-            "bedroom, kitchen, dining room, office, bathroom"
-        """
+        if ":" not in sector: return ""
         curr_world, curr_sector = sector.split(":")
-        if not curr_sector:
+        if curr_world not in self.tree or curr_sector not in self.tree[curr_world]:
             return ""
         x = ", ".join(list(self.tree[curr_world][curr_sector].keys()))
         return x
 
     def get_str_accessible_arena_game_objects(self, arena):
-        """
-        Get a str list of all accessible game object_s that are in the arena. If
-        temp_address is specified, we return the object_s that are available in
-        that arena, and if not, we return the object_s that are in the arena our
-        persona is currently in.
-
-        INPUT
-            temp_address: optional arena address
-        OUTPUT
-            str list of all accessible game object_s in the gmae arena.
-        EXAMPLE STR OUTPUT
-            "phone, charger, bed, nightstand"
-        """
-        curr_world, curr_sector, curr_arena = arena.split(":")
-
-        if not curr_arena:
-            return ""
-
+        parts = arena.split(":")
+        if len(parts) < 3: return ""
+        curr_world, curr_sector, curr_arena = parts[0], parts[1], parts[2]
+        
         try:
             x = ", ".join(
                 list(self.tree[curr_world][curr_sector][curr_arena].game_objects.keys())
             )
         except Exception:
-            return None
+            return ""
         return x
-
+        
     def __deepcopy__(self, memo):
-        return MemoryTree(tree=self.tree.copy())
+        return WorldMap(tree=self.tree.copy())
+
+# Alias for backward compatibility during refactor
+MemoryTree = WorldMap

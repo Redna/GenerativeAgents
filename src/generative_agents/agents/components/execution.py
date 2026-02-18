@@ -16,12 +16,12 @@ class Execution:
     def run(self, address: str) -> dict:
         plan = address
 
-        if "<random>" in plan or self.agent.scratch.planned_path == []:
-            self.agent.scratch.action_path_set = False
+        if "<random>" in plan or self.agent.working_memory.planned_path == []:
+            self.agent.working_memory.action_path_set = False
 
         # <action_path_set> is set to True if the path is set for the current action.
         # It is False otherwise, and means we need to construct a new path.
-        if not self.agent.scratch.action_path_set:
+        if not self.agent.working_memory.action_path_set:
             # <target_tiles> is a list of tile coordinates where the persona may go
             # to execute the current action. The goal is to pick one of them.
             target_tiles = None
@@ -30,20 +30,20 @@ class Execution:
                 # Executing persona-persona interaction.
                 target_persona_tile = self.agents[
                     plan.split("<persona>")[-1].strip()
-                ].scratch.tile
+                ].working_memory.tile
                 potential_path = self.maze.find_path(
-                    self.agent.scratch.tile, target_persona_tile
+                    self.agent.working_memory.tile, target_persona_tile
                 )
 
                 if len(potential_path) <= 2:
                     target_tiles = [potential_path[0]]
                 else:
                     potential_1 = self.maze.find_path(
-                        self.agent.scratch.tile,
+                        self.agent.working_memory.tile,
                         potential_path[int(len(potential_path) / 2)],
                     )
                     potential_2 = self.maze.find_path(
-                        self.agent.scratch.tile,
+                        self.agent.working_memory.tile,
                         potential_path[int(len(potential_path) / 2) + 1],
                     )
                     if len(potential_1) <= len(potential_2):
@@ -62,7 +62,7 @@ class Execution:
 
             elif "<random>" in plan:
                 # Executing a random location action.
-                target_tiles = [self.maze.get_random_tile(self.agent.scratch.tile)]
+                target_tiles = [self.maze.get_random_tile(self.agent.working_memory.tile)]
             else:
                 # This is our default execution. We simply take the persona to the
                 # location where the current action is taking place.
@@ -108,7 +108,7 @@ class Execution:
             target_tiles = new_target_tiles
             # Now that we've identified the target tile, we find the shortest path to
             # one of the target tiles.
-            curr_tile = self.agent.scratch.tile
+            curr_tile = self.agent.working_memory.tile
             closest_target_tile = None
             path = None
             for i in target_tiles:
@@ -127,19 +127,22 @@ class Execution:
 
             # Actually setting the <planned_path> and <action_path_set>. We cut the
             # first element in the planned_path because it includes the curr_tile.
-            self.agent.scratch.planned_path = path[1:]
-            self.agent.scratch.action_path_set = True
+            self.agent.working_memory.planned_path = path[1:]
+            self.agent.working_memory.action_path_set = True
 
         # Setting up the next immediate step. We stay at our curr_tile if there is
         # no <planned_path> left, but otherwise, we go to the next tile in the path.
-        ret = self.agent.scratch.tile
-        if self.agent.scratch.planned_path:
-            ret = self.agent.scratch.planned_path[0]
-            self.agent.scratch.planned_path = self.agent.scratch.planned_path[1:]
+        ret = self.agent.working_memory.tile
+        if self.agent.working_memory.planned_path:
+            ret = self.agent.working_memory.planned_path[0]
+            self.agent.working_memory.planned_path = self.agent.working_memory.planned_path[1:]
 
-        description = f"{self.agent.scratch.action.event.description}"
-        description += f" @ {self.agent.scratch.action.address}"
-
-        self.agent.emoji = self.agent.scratch.action.emoji
-        self.agent.description = description
+        if self.agent.working_memory.action:
+            description = f"{self.agent.working_memory.action.event.description}"
+            description += f" @ {self.agent.working_memory.action.address}"
+            self.agent.emoji = self.agent.working_memory.action.emoji
+            self.agent.description = description
+        else:
+            # Fallback if no action is set (e.g. idle)
+            pass
         return {"next_tile": ret}

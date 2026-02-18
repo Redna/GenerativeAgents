@@ -40,6 +40,7 @@ class MemoryEntry(BaseModel):
     keywords: List[str] = []
     filling: List[Union[ConversationFilling, dict]] = []
     hash_key: Optional[str] = None
+    expiration_date: Optional[datetime] = None
     
     # Graph Links (New JSON structure)
     related_events: List[Dict[str, str]] = []  # {"id": "uuid", "relation": "caused"}

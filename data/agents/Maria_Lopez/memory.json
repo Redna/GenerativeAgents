@@ -1,0 +1,24 @@
+{
+  "agent_name": "Maria_Lopez",
+  "last_updated": "2026-02-18T22:40:24.320293",
+  "memories": [
+    {
+      "id": "107cad0a-8f10-45eb-a8c5-a4086f753860",
+      "content": "This is Maria_Lopez's plan for Wednesday February 18: Sleeping,Sleeping,Sleeping,Sleeping,Sleeping,Sleeping,Sleeping,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle,Idle.",
+      "created_at": "2026-02-18 22:50:23.806882",
+      "last_accessed_at": "2026-02-18 08:58:00",
+      "importance": 0.5,
+      "memory_type": "plan",
+      "depth": 1,
+      "subject": "Maria_Lopez",
+      "predicate": "plan",
+      "object_": "Wednesday February 18",
+      "poignancy": 0.5,
+      "keywords": [],
+      "filling": [],
+      "hash_key": "a6bb34270a948921d50ddf70dbfe89f74c775f23",
+      "expiration_date": "2026-03-20 22:50:23.806882",
+      "related_events": []
+    }
+  ]
+}

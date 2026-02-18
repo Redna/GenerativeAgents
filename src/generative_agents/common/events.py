@@ -70,13 +70,16 @@ class PerceivedEvent(Event):
         )
 
     def to_db_entry(self):
+        import uuid
+        memory_id = self.id if self.id else str(uuid.uuid4())
         return MemoryEntry(
+            id=memory_id,
             content=self.description,
             memory_type=self.event_type.value,
             depth=self.depth,
             created_at=self.created,
-            expiration_date=self.expiration,
             last_accessed_at=self.last_accessed,
+            expiration_date=self.expiration, # Warning: Pydantic field name might differ if not careful
             subject=self.subject,
             predicate=self.predicate,
             object_=self.object_,
