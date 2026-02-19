@@ -2,8 +2,9 @@ import datetime
 import unittest
 from unittest.mock import MagicMock
 
-from generative_agents.core.events import Event
-from generative_agents.core.simulation_engine import Percept, SimulationEngine
+from generative_agents.common.events import Event
+from generative_agents.common.percept import Percept
+from generative_agents.simulation.engine import SimulationEngine
 
 # from generative_agents.core.agent import Agent # Avoid importing Agent to skip huge dependencies
 from generative_agents.simulation.maze import Maze, Tile
@@ -14,11 +15,11 @@ from generative_agents.simulation.time import SimulationTime
 class MockAgent:
     def __init__(self, name):
         self.name = name
-        self.scratch = MagicMock()
-        self.scratch.title = MagicMock()
-        self.scratch.finished_action = []
-        self.scratch.action = MagicMock()
-        self.scratch.action.object_action = None
+        self.working_memory = MagicMock()
+        self.working_memory.tile = MagicMock()
+        self.working_memory.finished_actions = []
+        self.working_memory.action = MagicMock()
+        self.working_memory.action.object_action = None
         self.run_step = MagicMock()
 
     def to_dto(self):
@@ -54,16 +55,16 @@ class TestSimulationEngine(unittest.TestCase):
 
         # Mock Agent
         self.agent = MockAgent("TestAgent")
-        self.agent.scratch.tile = MagicMock()  # Removed spec=Tile
-        self.agent.scratch.tile.events = {}  # Initialize events
-        self.agent.scratch.tile.x = 10
-        self.agent.scratch.tile.y = 10
-        self.agent.scratch.tile.get_path.return_value = "World:Sector:Arena"
-        self.agent.scratch.vision_radius = 5
-        self.agent.scratch.attention_bandwith = 10
-        self.agent.scratch.finished_action = []
-        self.agent.scratch.action.event.subject = "TestAgent"
-        self.agent.scratch.action.object_action = None
+        self.agent.working_memory.tile = MagicMock()  # Removed spec=Tile
+        self.agent.working_memory.tile.events = {}  # Initialize events
+        self.agent.working_memory.tile.x = 10
+        self.agent.working_memory.tile.y = 10
+        self.agent.working_memory.tile.get_path.return_value = "World:Sector:Arena"
+        self.agent.working_memory.vision_radius = 5
+        self.agent.working_memory.attention_bandwidth = 10
+        self.agent.working_memory.finished_actions = []
+        self.agent.working_memory.action.event.subject = "TestAgent"
+        self.agent.working_memory.action.object_action = None
 
         # Setup Engine
         self.engine = SimulationEngine(self.maze, [self.agent], self.time)

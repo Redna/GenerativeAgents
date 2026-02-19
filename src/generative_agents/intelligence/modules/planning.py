@@ -106,10 +106,10 @@ class WakeUpHourPredictor(dspy.Module):
 class DailyPlanGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.remember = dspy.ChainOfThought(RememberSignature)
-        self.feelings = dspy.ChainOfThought(FeelingsSignature)
-        self.reflection = dspy.ChainOfThought(ReflectionsSignature)
-        self.plan = dspy.ChainOfThought(DailyPlanSignature) # Used for both First and New Day
+        self.remember = dspy.Predict(RememberSignature)
+        self.feelings = dspy.Predict(FeelingsSignature)
+        self.reflection = dspy.Predict(ReflectionsSignature)
+        self.plan = dspy.Predict(DailyPlanSignature) # Used for both First and New Day
 
     def forward(self, 
                 name: str, 

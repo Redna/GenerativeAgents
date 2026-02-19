@@ -6,37 +6,57 @@ from generative_agents.simulation.maze import Tile
 from generative_agents.simulation.time import SimulationTime, DayType
 
 
+from generative_agents.agents.memory.working import WorkingMemory
+
 @dataclass
 class AgentState:
     """
     A snapshot of the agent's internal and external state.
     This serves as the 'Context Tensor' for the AgentBrain.
     """
-    # Identity
-    name: str
-    identity_description: str
-    innate_traits: List[str]
-    
-    # Temporal Context
-    time: SimulationTime
+    working_memory: WorkingMemory
     daytype: DayType
-    
-    # Spatial Context
-    current_tile: Tile
-    
-    # Planning Context
-    daily_plan_requirements: str
-    daily_schedule: List[Tuple[str, int]]
-    current_action: Optional[Action]
-    
-    # Social Context
-    chatting_with: Optional[str]
-    chatting_with_buffer: Dict[str, int]
-    
-    # Recent Memory Context (Optional raw feed for the brain)
-    # This might be populated by the retrieval layer, but having the top-level
-    # summary here is useful.
     recent_events: List[PerceivedEvent] = field(default_factory=list)
+
+    @property
+    def name(self) -> str:
+        return self.working_memory.name
+
+    @property
+    def identity_description(self) -> str:
+        return self.working_memory.identity_description
+
+    @property
+    def innate_traits(self) -> List[str]:
+        return self.working_memory.innate_traits
+
+    @property
+    def time(self) -> SimulationTime:
+        return self.working_memory.time
+
+    @property
+    def current_tile(self) -> Tile:
+        return self.working_memory.tile
+
+    @property
+    def daily_plan_requirements(self) -> str:
+        return self.working_memory.daily_requirements
+
+    @property
+    def daily_schedule(self) -> List[Tuple[str, int]]:
+        return self.working_memory.daily_schedule
+
+    @property
+    def current_action(self) -> Optional[Action]:
+        return self.working_memory.action
+
+    @property
+    def chatting_with(self) -> Optional[str]:
+        return self.working_memory.chatting_with
+
+    @property
+    def chatting_with_buffer(self) -> Dict[str, int]:
+        return self.working_memory.chatting_with_buffer
 
 
 @dataclass

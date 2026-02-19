@@ -12,7 +12,6 @@ from generative_agents.common.events import Event, EventType, PerceivedEvent
 from generative_agents.common.logging import log_agent
 from generative_agents.common.models import AgentDTO, MovementDTO
 from generative_agents.common.percept import Percept
-from generative_agents.intelligence.modules.perception import PoignanceRater
 from generative_agents.persistence.database import initialize_agent
 from generative_agents.simulation.maze import Maze, Tile
 from generative_agents.simulation.time import DayType, SimulationTime
@@ -53,9 +52,6 @@ class Agent:
         
         # Unified Memory System (Long-Term Semantic/Graph)
         self.memory = MemorySystem(self.name, self.working_memory.retention)
-        
-        # Perception Modules
-        self.poignance_rater = PoignanceRater()
         
         self.time = time
         # Sync time to working memory
@@ -114,54 +110,11 @@ class Agent:
 
     def perceive(self, percept: Percept):
         """
-        Processes the incoming percept (what the agent sees/hears).
-        updates spatial memory and unified self.memory.
+        Updates the spatial memory based on the incoming percept.
+        Note: Cognitive processing of events has moved to AgentBrain.SensoryProcessingLayer.
         """
-        # 1. Update Spatial Memory (Map)
         for tile in percept.nearby_tiles:
             self.map.add_tile(tile)
-
-        # 2. Process Events
-        for event in percept.events:
-            if not event.predicate:
-                event.predicate = "is"
-
-            if (
-                not isinstance(event, PerceivedEvent)
-                or event.event_type != EventType.CHAT
-            ):
-                event = self._perceive_event(event, type_=EventType.EVENT)
-                if ":" in event.subject:
-                    event.description = (
-                        f"{event.subject.split(':')[-1]} is {event.description}"
-                    )
-
-            if event.subject == self.name and event.predicate == "chat with":
-                event = self._perceive_event(event, type_=EventType.CHAT)
-
-            self.working_memory.reflection_trigger_counter -= event.poignancy * 10
-
-    def _perceive_event(self, event: Event, type_: EventType = EventType.EVENT):
-        if not isinstance(event, PerceivedEvent):
-            event_poignancy = self._rate_perception_poignancy(type_, event.description)
-
-            log_agent(self.name, f"event poignancy is {event_poignancy}", "DEBUG")
-            event = PerceivedEvent(
-                **asdict(event), event_type=type_, poignancy=event_poignancy
-            )
-            self.memory.add(event)
-        return event
-
-    def _rate_perception_poignancy(
-        self, event_type: EventType, description: str
-    ) -> float:
-        if "idle" in description:
-            return 0.1
-
-        score = self.poignance_rater(
-            self.name, self.working_memory.identity_description, event_type.value, description
-        )
-        return int(score) / 10
 
     def run_step(
         self,
@@ -175,37 +128,34 @@ class Agent:
         """
         # Update Time
         daytype: DayType = DayType.SAME_DAY
-        if not self.working_memory.time:
+        if not self.working_memory.daily_schedule:
             daytype = DayType.FIRST_DAY
         elif self.working_memory.time.today != time.today:
             daytype = DayType.NEW_DAY
         self.working_memory.time = time
         self.time = time
 
-        # 1. Perception (Body)
+        # 1. Perception (Body - Spatial only)
         self.perceive(percept)
         
         # 2. Construct State (Context)
         state = AgentState(
-            name=self.name,
-            identity_description=self.working_memory.identity_description,
-            innate_traits=self.working_memory.innate_traits,
-            time=time,
+            working_memory=self.working_memory,
             daytype=daytype,
-            current_tile=self.working_memory.tile,
-            daily_plan_requirements=self.working_memory.daily_requirements,
-            daily_schedule=self.working_memory.daily_schedule,
-            current_action=self.working_memory.action,
-            chatting_with=self.working_memory.chatting_with,
-            chatting_with_buffer=self.working_memory.chatting_with_buffer,
             recent_events=percept.events
         )
 
         # 3. Brain Forward Pass (Reasoning)
-        signal = self.brain(percept, state)
+        # We pass self.memory.retrieve so the brain's retrieval layer can fetch context
+        signal = self.brain(percept, state, retrieve_fn=self.memory.retrieve)
 
         # 4. Apply Action Signal (Effectors)
         self._apply_action_signal(signal)
+
+        # Update reflection trigger based on new memories
+        for memory in signal.new_memories:
+             if hasattr(memory, 'poignancy'):
+                 self.working_memory.reflection_trigger_counter -= memory.poignancy * 10
 
         # 5. Execution (Motor Control)
         # Convert the decision (Action Address) into movement (Next Tile)

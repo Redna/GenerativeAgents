@@ -13,21 +13,12 @@ from generative_agents.simulation.engine import SimulationEngine
 from generative_agents.simulation.maze import BASE_PATH, Maze
 
 
-def initialize_visible_memory_tree(maze, start_tile):
-    tree = MemoryTree()
-    for tile in maze.get_nearby_tiles(start_tile, 1000):
-        tree.add(tile)
-    return tree
-
-
 def initialize_agent(agent_data, maze, start_tile) -> Agent:
     name = agent_data["name"]
     location = agent_data["location"]
 
     # Ensure tile exists
     tile_coords = maze.address_tiles[location][-1]
-
-    tree = initialize_visible_memory_tree(maze, start_tile)
 
     agent = Agent(
         name=name,
@@ -38,7 +29,6 @@ def initialize_agent(agent_data, maze, start_tile) -> Agent:
         emoji=agent_data["emoji"],
         activity="idle",
         tile=tile_coords,
-        tree=tree,
         description=agent_data["description"],
     )
     return agent
@@ -80,11 +70,8 @@ async def main():
     # Run Simulation Loop
     try:
         while True:
-            # Execute step
-            engine.step()
-
-            # Print status (optional, matching previous output style)
-            # print(f"Time: {global_state.time.as_string()}")
+            # Execute step in a separate thread so sync DSPy calls don't block socket.io
+            await asyncio.to_thread(engine.step)
 
             # Yield control to asyncio event loop to allow API requests processing
             await asyncio.sleep(0.01)

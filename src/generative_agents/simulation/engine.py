@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from operator import itemgetter
 from typing import TYPE_CHECKING, Dict, List
+import concurrent.futures
 
 if TYPE_CHECKING:
     from generative_agents.agents.agent import Agent
@@ -22,21 +23,36 @@ class SimulationEngine:
 
     def step(self):
         """
-        Executes one simulation step for all agents.
+        Executes one simulation step for all agents concurrently using a ThreadPoolExecutor.
         """
-        # 1. Calculate percepts for all agents
+        # 1. Calculate percepts for all agents sequentially
         percepts = self._calculate_percepts()
 
         # Save old tiles to handle event updates
-        old_tiles = {name: agent.scratch.tile for name, agent in self.agents.items()}
+        old_tiles = {name: agent.working_memory.tile for name, agent in self.agents.items()}
 
-        # 2. Agents decide and execute actions
-        for agent_name, agent in self.agents.items():
-            percept = percepts[agent_name]
-            # Calls the new Agent.run_step method
-            agent.run_step(percept, self.maze, self.agents, self.time)
+        # 2. Agents decide and execute actions concurrently
+        def _run_agent_step(agent, percept, maze, agents, time):
+            import asyncio
+            async def _run():
+                return agent.run_step(percept, maze, agents, time)
+            return asyncio.run(_run())
 
-        # 3. Update the environment (Tile events)
+        workers = len(self.agents) if len(self.agents) > 0 else 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, 20)) as executor:
+            futures = {
+                executor.submit(_run_agent_step, agent, percepts[agent_name], self.maze, self.agents, self.time): agent_name
+                for agent_name, agent in self.agents.items()
+            }
+            
+            for future in concurrent.futures.as_completed(futures):
+                agent_name = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    print(f"Agent {agent_name} generated an exception during run_step: {exc}")
+
+        # 3. Update the environment (Tile events) sequentially to avoid race conditions
         self._update_map_events(old_tiles)
 
         # 4. Record State for API
@@ -66,28 +82,30 @@ class SimulationEngine:
         """
         for name, agent in self.agents.items():
             old_tile = old_tiles[name]
-            new_tile = agent.scratch.tile  # Agent has already moved in run_step
+            new_tile = agent.working_memory.tile  # Agent has already moved in run_step
 
             # Remove old events from old tile
-            while agent.scratch.finished_action:
-                action = agent.scratch.finished_action.pop(0)
+            while agent.working_memory.finished_actions:
+                action = agent.working_memory.finished_actions.pop(0)
                 if action.event.subject in old_tile.events:
                     del old_tile.events[action.event.subject]
 
             # Add new event to new tile
-            event = agent.scratch.action.event
-            new_tile.events[event.subject] = agent.scratch.action.event
+            if agent.working_memory.action and agent.working_memory.action.event:
+                event = agent.working_memory.action.event
+                new_tile.events[event.subject] = event
 
             # Handle object actions (interactions with objects)
-            object_action = agent.scratch.action.object_action
-            if object_action and object_action.event:
-                object_event = object_action.event
-                if object_action.address in self.maze.address_tiles:
-                    # Note: accessing [0] might be risky if multiple tiles, but follows original logic
-                    target_tile = self.maze.address_tiles[object_action.address][0]
-                    target_tile.events[object_event.subject] = object_event
-                else:
-                    print(f"WARNING: {object_action.address} not in maze")
+            if agent.working_memory.action and agent.working_memory.action.object_action:
+                object_action = agent.working_memory.action.object_action
+                if object_action.event:
+                    object_event = object_action.event
+                    if object_action.address in self.maze.address_tiles:
+                        # Note: accessing [0] might be risky if multiple tiles, but follows original logic
+                        target_tile = self.maze.address_tiles[object_action.address][0]
+                        target_tile.events[object_event.subject] = object_event
+                    else:
+                        print(f"WARNING: {object_action.address} not in maze")
 
             # Logging (Optional, but good for debug)
             # print(f"{agent.name} is {agent.emoji} at {new_tile}")
@@ -107,11 +125,11 @@ class SimulationEngine:
         Moves logic from Perception.perceive_space and Perception.perceive_events here.
         """
         nearby_tiles = self.maze.get_nearby_tiles(
-            agent.scratch.tile, agent.scratch.vision_radius
+            agent.working_memory.tile, agent.working_memory.vision_radius
         )
 
         # Filter for Events
-        current_arena = agent.scratch.tile.get_path(Level.ARENA)
+        current_arena = agent.working_memory.tile.get_path(Level.ARENA)
         percept_events_list = []
         percept_events_dict = dict()
 
@@ -124,7 +142,7 @@ class SimulationEngine:
                 continue
 
             dist = math.dist(
-                [tile.x, tile.y], [agent.scratch.tile.x, agent.scratch.tile.y]
+                [tile.x, tile.y], [agent.working_memory.tile.x, agent.working_memory.tile.y]
             )
 
             try:
@@ -141,7 +159,7 @@ class SimulationEngine:
 
         # Apply attention bandwidth
         visible_events = []
-        for _, event in percept_events_list[: agent.scratch.attention_bandwith]:
+        for _, event in percept_events_list[: agent.working_memory.attention_bandwidth]:
             visible_events.append(event)
 
         return Percept(nearby_tiles=nearby_tiles, events=visible_events)

@@ -4,7 +4,7 @@ from typing import Callable
 import socketio
 from aiohttp import web
 
-from .models import AgentDTO
+from generative_agents.common.models import AgentDTO
 
 sids = set()
 

@@ -164,3 +164,32 @@ Improve codebase structure and organization by grouping related components into 
 ### Verification
 - **Run Mock Server**: `uv run python -m generative_agents.server.mock`
 - **Status**: Verified working with agent pathfinding and movement.
+
+## 11. Phase 5: Intelligence & Brain Refactor (Feb 18, 2026)
+
+### Objective
+Transition the agent's cognitive architecture to a modular, optimizable `dspy.Module` system ("AgentBrain") and remove legacy functional code.
+
+### Key Changes
+- **AgentBrain**: Introduced `src/generative_agents/agents/brain.py` as the central orchestrator.
+- **Cognitive Layers**:
+    - `SensoryProcessingLayer`: Perception filtering, poignancy, & event creation. (`agents/layers/perception.py`)
+    - `AssociativeMemoryLayer`: Context retrieval based on current state & recent events. (`agents/layers/retrieval.py`)
+    - `PlanningLayer`: Long-term scheduling (`intelligence/modules/planning.py`).
+    - `ActorLayer`: Immediate actions & dialogue (`intelligence/modules/perception.py`, `dialogue.py`, `spatial.py`).
+    - `MemoryConsolidator`: Reflection and Identity updates (`intelligence/modules/reflection.py`).
+- **Intelligence Modules**: Refactored ~30 standalone functions into clustered `dspy.Module` classes:
+    - `planning.py`: WakeUp, DailyPlan, HourlySchedule.
+    - `perception.py`: EventParser, Poignance, Reaction.
+    - `dialogue.py`: TalkDecider, DialogueGenerator.
+    - `reflection.py`: Insights, Identity.
+    - `spatial.py`: Sector/Arena/Object selection.
+- **Legacy Cleanup**: 
+    - Deleted `agents/components/plan.py`, `reflection.py`, `retrieval.py`.
+    - Deleted all standalone intelligence function files.
+    - Moved `intelligence/whisper/thought.py` to `common/thought.py`.
+    - Deleted `intelligence/whisper/` directory.
+
+### Verification
+- **Manual Test**: `tests/verify_brain_manual.py` validates the entire brain pipeline (Plan -> Act -> Reflect).
+- **Status**: Verified w/ `Agent` integration. The system is now fully modular and ready for DSPy optimization.
