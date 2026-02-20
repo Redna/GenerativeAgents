@@ -3,7 +3,7 @@ from typing import List, Tuple
 from generative_agents.common.events import PerceivedEvent, EventType
 from generative_agents.common.percept import Percept
 from generative_agents.common.neural_types import AgentState
-from generative_agents.intelligence.modules.perception import PoignanceRater
+from generative_agents.intelligence.modules.perception import heuristic_poignance
 from generative_agents.common.logging import log_agent
 
 class SensoryProcessingLayer(dspy.Module):
@@ -13,7 +13,6 @@ class SensoryProcessingLayer(dspy.Module):
     """
     def __init__(self):
         super().__init__()
-        self.poignance_rater = PoignanceRater()
 
     def forward(self, percept: Percept, state: AgentState) -> List[PerceivedEvent]:
         processed_events = []
@@ -54,10 +53,7 @@ class SensoryProcessingLayer(dspy.Module):
         return processed_events
 
     def _rate_perception_poignancy(self, agent_name: str, identity: str, event_type: EventType, description: str) -> float:
+        """Heuristic scoring — zero LLM calls."""
         if "idle" in description:
             return 0.1
-
-        score = self.poignance_rater(
-            agent_name, identity, event_type.value, description
-        )
-        return int(score) / 10.0
+        return heuristic_poignance(event_type.value, description)

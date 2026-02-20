@@ -1,33 +1,31 @@
 import shutil
 import pytest
 import os
-import json
 from datetime import datetime
 import generative_agents.persistence.database
 from generative_agents.persistence.database import MemoryEntry, MemoryType, get_repository
-from generative_agents.agents.memory.repository import JSONMemoryRepository
+from generative_agents.agents.memory.repository import QdrantMemoryRepository
 
-# Fixture to handle setup and teardown
+
 @pytest.fixture
 def repo(tmp_path):
-    # Setup
-    test_dir = tmp_path / "test_data_json"
-    str_test_dir = str(test_dir)
-    
-    # Mock the repo registry
+    """Sets up a fresh QdrantMemoryRepository backed by a local tmp directory."""
+    # Clear global registry
     generative_agents.persistence.database._repositories = {}
-    
-    # Initialize repository with test path
-    repository = JSONMemoryRepository("TestAgent", data_dir=str_test_dir)
+
+    test_dir = str(tmp_path / "test_data")
+    repository = QdrantMemoryRepository("TestAgent", data_dir=test_dir)
     generative_agents.persistence.database._repositories["TestAgent"] = repository
-    
+
     yield repository
-    
-    # Teardown (optional with tmp_path as it cleans up itself, but good for explicit registry clearing)
+
     generative_agents.persistence.database._repositories.clear()
 
-def test_json_persistence(repo, tmp_path):
-    # 1. Add memory
+
+def test_qdrant_persistence(repo, tmp_path):
+    """Verifies: add → ANN retrieve → graph edge add → graph edge retrieve → restart (new repo same path)."""
+
+    # 1. Add memories
     entry = MemoryEntry(
         id="mem1",
         content="Test memory persistence",
@@ -37,45 +35,50 @@ def test_json_persistence(repo, tmp_path):
         depth=1,
         subject="Test",
         predicate="is",
-        object_="Persistent"
+        object_="Persistent",
     )
     generative_agents.persistence.database.add("TestAgent", entry)
-    
-    # Verify file exists
-    # repo.base_dir is constructed from data_dir/AgentName
-    expected_path = os.path.join(repo.base_dir, "memory.json")
-    assert os.path.exists(expected_path)
-    
-    # 2. Add Graph Edge
+
     entry2 = MemoryEntry(
         id="mem2",
-        content="Child memory",
+        content="Child memory derived from test",
         created_at=datetime.now(),
         last_accessed_at=datetime.now(),
         memory_type=MemoryType.THOUGHT.value,
         depth=1,
         subject="Child",
         predicate="is",
-        object_="Derived"
+        object_="Derived",
     )
     generative_agents.persistence.database.add("TestAgent", entry2)
-    
+
+    # 2. Add graph edge
     generative_agents.persistence.database.add_event_link(entry.id, entry2.id, "caused")
-    
-    # 3. Simulate Restart
-    # Clear registry
-    generative_agents.persistence.database._repositories.clear()
-    
-    # Re-init explicitly with same path to simulate reload
-    new_repo = JSONMemoryRepository("TestAgent", data_dir=repo.base_dir.replace("/TestAgent", ""))
-    generative_agents.persistence.database._repositories["TestAgent"] = new_repo
-    
-    # 4. Verify Memory Exists via Retrieval
+
+    # 3. ANN retrieval works
     results = generative_agents.persistence.database.get("TestAgent", "Test memory persistence")
     assert len(results) > 0
     assert results[0].content == "Test memory persistence"
-    
-    # 5. Verify Graph Edge Exists
+
+    # 4. Graph edge retrieval works
     related = generative_agents.persistence.database.get_related_events(entry.id, "caused")
     assert len(related) > 0
     assert related[0][0] == entry2.id
+
+    # 5. Simulate restart — close the first client, open a new one at the same path
+    test_dir = str(tmp_path / "test_data")
+    repo._client.close()  # release the file lock before re-opening
+    generative_agents.persistence.database._repositories.clear()
+
+    new_repo = QdrantMemoryRepository("TestAgent", data_dir=test_dir)
+    generative_agents.persistence.database._repositories["TestAgent"] = new_repo
+
+    # ANN retrieval still works after restart
+    results_after = generative_agents.persistence.database.get("TestAgent", "Test memory persistence")
+    assert len(results_after) > 0, "Memories should persist across repo restarts"
+    assert results_after[0].content == "Test memory persistence"
+
+    # Graph edges persist in Qdrant payload
+    related_after = generative_agents.persistence.database.get_related_events(entry.id, "caused")
+    assert len(related_after) > 0, "Graph edges should persist in Qdrant payload"
+    assert related_after[0][0] == entry2.id

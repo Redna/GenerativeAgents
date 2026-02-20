@@ -147,7 +147,12 @@ class Agent:
 
         # 3. Brain Forward Pass (Reasoning)
         # We pass self.memory.retrieve so the brain's retrieval layer can fetch context
-        signal = self.brain(percept, state, retrieve_fn=self.memory.retrieve)
+        signal = self.brain(
+            percept,
+            state,
+            retrieve_fn=self.memory.retrieve,
+            expand_fn=self.memory.get_context,
+        )
 
         # 4. Apply Action Signal (Effectors)
         self._apply_action_signal(signal)

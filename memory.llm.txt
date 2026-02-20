@@ -193,3 +193,89 @@ Transition the agent's cognitive architecture to a modular, optimizable `dspy.Mo
 ### Verification
 - **Manual Test**: `tests/verify_brain_manual.py` validates the entire brain pipeline (Plan -> Act -> Reflect).
 - **Status**: Verified w/ `Agent` integration. The system is now fully modular and ready for DSPy optimization.
+## 12. Phase 6: LLM Call Consolidation & Hierarchical Memory (Feb 20, 2026)
+
+### Objective
+Reduce per-agent LLM calls from ~7-10/tick to 1-2. Introduce pure-Qdrant graph memory with contextual reranking.
+
+### A. Unified Day Planner (3-5 calls → 1)
+- **Before**: WakeUpHourPredictor + DailyPlanGenerator (remember+feelings+reflection+plan) + HourlyScheduler = 3-5 sequential calls.
+- **After**: UnifiedDayPlanner(dspy.ChainOfThought(UnifiedDayPlanSignature)) → one call → typed UnifiedDayPlan (wake_up_hour, plan_narrative, hourly_slots).
+- **Files**: intelligence/modules/planning.py (added), agents/layers/planning.py (rewritten).
+
+### B. ReAct Tool-Choice Actor (7+ calls → 1)
+- **Before**: TalkDecider + ReactionDecider + SectorSelector + ArenaSelector + ObjectSelector + EventParser + EmojiMapper = 7+ sequential calls.
+- **After**: ReActActor(dspy.ChainOfThought(AgentStepSignature)) → model picks tool → Python dispatches (0 extra LLM calls).
+- **Tools**: move_to(destination) | speak_to(target, opening_line) | wait() | update_action(activity).
+- **Files**: intelligence/modules/actor_react.py (new), agents/layers/actor.py (rewritten).
+
+### C. Pure Qdrant Memory + ContextualReranker (N calls → 1 batched)
+- **Before**: JSONMemoryRepository with numpy cosine similarity from in-RAM array, JSON file for persistence + graph edges. Rebuilt every startup.
+- **After**: QdrantMemoryRepository — everything in Qdrant:
+  - Vectors: ANN via query_points() (embedded local client, no server).
+  - Graph edges: in payload field related_events: [{id, relation}].
+  - Persistence: QdrantClient(path=...) for disk, QdrantClient(location=":memory:") for tests.
+- ContextualReranker(dspy.ChainOfThought) — 1 batched LLM call ranks all candidates by contextual relevance.
+- AssociativeMemoryLayer 3-stage pipeline: (1) Qdrant ANN top-20 → (2) BFS graph expansion → (3) ContextualReranker top-10.
+- expand_fn=self.memory.get_context wired: agent.run_step() → brain.forward() → AssociativeMemoryLayer.
+- database.py no longer accesses repo.memories list — all ops via Qdrant.
+- **Files**: repository.py, system.py, database.py, agents/layers/retrieval.py (rewritten), intelligence/modules/retrieval.py (new), brain.py, agent.py.
+
+### Qdrant Embedded API Gotchas (critical, version-specific)
+- QdrantClient(":memory:") does NOT work → use location=":memory:" or path="/dir".
+- .search() is gRPC/server-mode only → use .query_points() for embedded.
+- recreate_collection() removed → use collection_exists() + create_collection().
+- Local path uses file locking (portalocker) → client.close() before re-opening same path.
+- Lazy-load sentence transformer via _get_model() getter to avoid network calls at import time.
+
+### LLM Budget After Phase 6
+| Tick Type          | Before          | After          |
+|--------------------|-----------------|----------------|
+| New Day            | ~8 calls/agent  | 2 calls/agent  |
+| Normal             | ~3-5 calls/agent| 1 call/agent   |
+| 25 agents, normal  | ~75-125 calls   | 25 calls       |
+
+### Verification
+- uv run pytest tests/ -v → 3/3 passed (ANN retrieval, graph edge add/retrieve, restart persistence).
+- Key test: tests/test_memory_persistence_pytest.py::test_qdrant_persistence.
+
+---
+**Last Updated**: 2026-02-20
+**Author**: Antigravity (Agent)
+
+## 13. Phase 6 Follow-up: Intelligence Modules Cleanup (Feb 20, 2026)
+
+### Modules removed (all replaced by ReActActor tools)
+- ReactionDecider — replaced by ReActActor `wait` / `speak_to` tools
+- TalkDecider — replaced by ReActActor `speak_to` tool
+- Contextualizer — no callers, deleted
+- SectorSelector, ArenaSelector, ObjectSelector (spatial.py) — replaced by ReActActor `move_to(destination)` tool
+- spatial.py FILE DELETED entirely
+
+### Modules converted to heuristics (0 LLM calls)
+- PoignanceRater → heuristic_poignance(event_type, description)
+  Rule: base score from event type + keyword boosts (death/fired/married = +0.08) + penalties (sleeping/idle = -0.06)
+  Used in SensoryProcessingLayer._rate_perception_poignancy() — no LLM call.
+- EmojiMapper → heuristic_emoji(action_description)
+  Rule: keyword pattern match against lookup table of (keywords, emoji) pairs.
+  Used in ActorLayer._dispatch_move() and _dispatch_update_action() — no LLM call.
+
+### Modules kept (still active)
+- EventParser (perception.py) — triple extraction for ActorLayer dispatch (1 LLM call per move/update action)
+- DialogueGenerator, DialogueSummarizer, DialogueMemoer, DialoguePlanner (dialogue.py) — for future multi-turn chat loop
+- RelationshipSummarizer (dialogue.py) — reflection pipeline
+- reflection.py: ReflectionPointGenerator, InsightGenerator, IdentityFormulator — System 2, fully active
+- retrieval.py: ContextualReranker — batched LLM reranking in AssociativeMemoryLayer
+
+### LLM Calls Saved By Cleanup
+| Module | Before | After |
+|---|---|---|
+| PoignanceRater | 1 call/event | 0 (heuristic) |
+| EmojiMapper | 1 call/action | 0 (lookup) |
+| TalkDecider | 1 call/tick | 0 (ReActActor) |
+| ReactionDecider | 1 call/tick | 0 (ReActActor) |
+| SectorSelector+ArenaSelector+ObjectSelector | 3 calls/move | 0 (ReActActor) |
+
+---
+**Last Updated**: 2026-02-20
+**Author**: Antigravity (Agent)

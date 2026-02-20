@@ -1,75 +1,66 @@
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Union
 from generative_agents.persistence import database
 from generative_agents.persistence.database import MemoryEntry, MemoryType, ConversationFilling
+
 
 class MemorySystem:
     """
     The Unified Memory System ("The Connectome").
-    Combines Associative Memory (Vector Search) and Knowledge Graph (Relationships).
+    Pure Qdrant backend — vectors AND graph edges live in the same store.
     """
+
     def __init__(self, agent_name: str, retention: float = 1.0):
         self.agent_name = agent_name
         self.retention = retention
-        
+
     def add(self, memory_entry: Union[MemoryEntry, "PerceivedEvent"]) -> MemoryEntry:
-        """
-        Adds a memory entry to the system.
-        Automatically handles vector embedding (via database layer) and node creation.
-        """
-        # Handle conversion if PerceivedEvent passed
+        """Adds a memory to Qdrant (vector + payload with graph edges)."""
         if hasattr(memory_entry, "to_db_entry"):
             memory_entry = memory_entry.to_db_entry()
-            
         return database.add(self.agent_name, memory_entry)
 
     def retrieve(self, query: str, limit: int = 5) -> List[MemoryEntry]:
-        """
-        Semantic search for memories relevant to the query.
-        Wrapper around Associative Memory retrieval.
-        """
+        """ANN vector search via Qdrant."""
         return database.get(self.agent_name, query, limit)
 
     def get_context(self, node_id: str, depth: int = 1) -> List[MemoryEntry]:
         """
-        Retrieves the context around a specific memory node (Graph Traversal).
-        Returns the node itself and its neighbors up to 'depth'.
+        BFS graph traversal starting from node_id.
+        Edges are read from the 'related_events' payload field in Qdrant.
+        Returns the expanded neighborhood as MemoryEntry objects.
         """
-        # Get the central node
         repo = database.get_repository(self.agent_name)
-        root = repo.get_by_id(node_id)
-        if not root:
-             return []
-             
-        context_ids = {node_id}
-        frontier = [node_id]
-        
+
+        context_ids: set[str] = {node_id}
+        frontier: list[str] = [node_id]
+
         for _ in range(depth):
-            next_frontier = []
+            next_frontier: list[str] = []
             for current_id in frontier:
-                 # Get related events (outgoing edges)
-                 related = database.get_related_events(current_id)
-                 for target_id, relation in related:
-                     if target_id not in context_ids:
-                         context_ids.add(target_id)
-                         next_frontier.append(target_id)
+                for target_id, _ in repo.get_related(current_id):
+                    if target_id not in context_ids:
+                        context_ids.add(target_id)
+                        next_frontier.append(target_id)
             frontier = next_frontier
-            
-        # Fetch actual memory objects
-        results = []
+
+        results: List[MemoryEntry] = []
         for mid in context_ids:
-            mem = repo.get_by_id(mid)
-            if mem:
-                results.append(MemoryEntry(**mem))
-                
+            raw = repo.get_by_id(mid)
+            if raw:
+                try:
+                    results.append(MemoryEntry(**raw))
+                except Exception:
+                    pass
         return results
 
     def add_relation(self, source_id: str, target_id: str, relation: str):
-        """
-        Creates a directed edge between two memory nodes.
-        """
+        """Creates a directed edge (stored in Qdrant payload)."""
         database.add_event_link(source_id, target_id, relation)
 
-    # Legacy wrappers to maintain compatibility or specific queries
+    # ------------------------------------------------------------------
+    # Legacy helpers
+    # ------------------------------------------------------------------
+
     def get_last_chat(self, with_agent_name: str) -> Optional[MemoryEntry]:
         return database.get_last_chat(self.agent_name, with_agent_name)
 

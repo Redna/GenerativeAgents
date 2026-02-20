@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Tuple, Union, Optional
 
 from generative_agents.common.utils import time_string_to_time
+from generative_agents.common.neural_types import AgentState, ActionSignal
 
 # --- Signatures ---
 
@@ -81,7 +82,75 @@ class DecompositionSignature(dspy.Signature):
     total_duration: int = dspy.InputField(desc="Total duration in minutes.")
     subtasks: list[SubtaskItem] = dspy.OutputField(desc="List of subtasks. The sum of their durations should equal total_duration.")
 
-# --- Modules ---
+# --- Unified Day Plan (Phase 6: single call) ---
+
+class UnifiedDayScheduleItem(BaseModel):
+    hour: int = Field(description="Hour of day (0-23).", ge=0, le=23)
+    activity: str = Field(description="Brief activity description.")
+
+class UnifiedDayPlan(BaseModel):
+    wake_up_hour: int = Field(description="The hour the agent wakes up (0-23).", ge=0, le=23)
+    plan_narrative: str = Field(description="One-sentence summary of the day's goals and mood.")
+    hourly_slots: list[UnifiedDayScheduleItem] = Field(
+        description="Hourly activities for the full day, starting from wake_up_hour."
+    )
+
+class UnifiedDayPlanSignature(dspy.Signature):
+    """Given the agent's identity, relevant memories, and today's date, produce the complete day plan in one structured response. Include wake‑up hour, a mood narrative, and an hourly schedule from wake-up to sleep."""
+    name: str = dspy.InputField(desc="Agent name.")
+    identity: str = dspy.InputField(desc="Agent identity and backstory.")
+    today: str = dspy.InputField(desc="Today's date.")
+    yesterday_summary: str = dspy.InputField(desc="Brief summary of yesterday's events and status.", default="")
+    relevant_memories: str = dspy.InputField(desc="Key memories relevant for today's planning.", default="")
+    day_plan: UnifiedDayPlan = dspy.OutputField(desc="Complete structured day plan.")
+
+
+class UnifiedDayPlanner(dspy.Module):
+    """
+    Phase 6: Replaces WakeUpHourPredictor + DailyPlanGenerator + HourlyScheduler.
+    One ChainOfThought call → full typed day plan.
+    """
+    def __init__(self):
+        super().__init__()
+        self.predict = dspy.ChainOfThought(UnifiedDayPlanSignature)
+
+    def forward(
+        self,
+        state: AgentState,
+        yesterday_summary: str = "",
+        relevant_memories: str = "",
+    ) -> Tuple[str, List[Tuple[str, int]]]:
+        """
+        Returns (plan_narrative, hourly_schedule).
+        hourly_schedule: list of (activity, duration_minutes) tuples.
+        """
+        try:
+            result = self.predict(
+                name=state.name,
+                identity=state.identity_description,
+                today=str(state.time.today),
+                yesterday_summary=yesterday_summary,
+                relevant_memories=relevant_memories,
+            )
+            plan = result.day_plan
+
+            # Build 24-slot schedule; fill pre-wakeup with "Sleeping"
+            hourly_schedule: List[Tuple[str, int]] = []
+            slot_map: Dict[int, str] = {item.hour: item.activity for item in plan.hourly_slots}
+            for h in range(24):
+                if h < plan.wake_up_hour:
+                    hourly_schedule.append(("Sleeping", 60))
+                else:
+                    hourly_schedule.append((slot_map.get(h, "Idle"), 60))
+
+            return plan.plan_narrative, hourly_schedule
+        except Exception:
+            # Graceful fallback: basic sleeping → working day
+            fallback = [("Sleeping", 60)] * 7 + [("Morning routine", 60), ("Work", 60) * 8] + [("Evening routine", 60)] * 3 + [("Sleeping", 60)] * 5  # noqa: E501
+            return "", [("Sleeping", 60)] * 7 + [("Morning routine", 60)] + [("Work", 60)] * 8 + [("Evening", 60)] * 3 + [("Sleeping", 60)] * 5
+
+
+# --- Legacy Modules (kept for backward compatibility / fallback) ---
 
 class WakeUpHourPredictor(dspy.Module):
     def __init__(self):
