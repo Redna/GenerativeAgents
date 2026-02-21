@@ -90,7 +90,7 @@ def init_app(update: Callable, spawn_agent_function: Callable):
     # Initialize Logging with SIO instance
     from generative_agents.common.logging import initialize_socket_logging, log_agent
 
-    initialize_socket_logging(sio)
+    initialize_socket_logging(sio, sids)
     log_agent("System", "Real Backend API Initialized", "INFO")
 
     # Start the background task

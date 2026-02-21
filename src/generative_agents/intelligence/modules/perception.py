@@ -116,8 +116,8 @@ class EventParser(dspy.Module):
 
     def __init__(self):
         super().__init__()
-        self.triple = dspy.ChainOfThought(ActionEventTripleSignature)
-        self.object_state = dspy.ChainOfThought(ObjectEventSignature)
+        self.triple = dspy.Predict(ActionEventTripleSignature)
+        self.object_state = dspy.Predict(ObjectEventSignature)
 
     def get_triple(self, name: str, action_description: str, address: str = None) -> Tuple[str, str, str]:
         try:

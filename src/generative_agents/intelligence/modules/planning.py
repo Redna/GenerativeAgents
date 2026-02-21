@@ -5,6 +5,7 @@ from typing import List, Dict, Tuple, Union, Optional
 
 from generative_agents.common.utils import time_string_to_time
 from generative_agents.common.neural_types import AgentState, ActionSignal
+from generative_agents.common.dspy_config import thinking_lm
 
 # --- Signatures ---
 
@@ -108,11 +109,12 @@ class UnifiedDayPlanSignature(dspy.Signature):
 class UnifiedDayPlanner(dspy.Module):
     """
     Phase 6: Replaces WakeUpHourPredictor + DailyPlanGenerator + HourlyScheduler.
-    One ChainOfThought call → full typed day plan.
+    One Predict call (+ thinking_lm) → full typed day plan.
     """
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(UnifiedDayPlanSignature)
+        # thinking_lm: day planning needs multi-step reasoning about identity + schedule.
+        self.predict = dspy.Predict(UnifiedDayPlanSignature)
 
     def forward(
         self,
@@ -125,13 +127,14 @@ class UnifiedDayPlanner(dspy.Module):
         hourly_schedule: list of (activity, duration_minutes) tuples.
         """
         try:
-            result = self.predict(
-                name=state.name,
-                identity=state.identity_description,
-                today=str(state.time.today),
-                yesterday_summary=yesterday_summary,
-                relevant_memories=relevant_memories,
-            )
+            with dspy.context(lm=thinking_lm) if thinking_lm else dspy.context():
+                result = self.predict(
+                    name=state.name,
+                    identity=state.identity_description,
+                    today=str(state.time.today),
+                    yesterday_summary=yesterday_summary,
+                    relevant_memories=relevant_memories,
+                )
             plan = result.day_plan
 
             # Build 24-slot schedule; fill pre-wakeup with "Sleeping"
@@ -155,7 +158,7 @@ class UnifiedDayPlanner(dspy.Module):
 class WakeUpHourPredictor(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(WakeUpHourSignature)
+        self.predict = dspy.Predict(WakeUpHourSignature)
 
     def forward(self, agent_name: str, agent_identity: str, agent_lifestyle: str) -> str:
         try:

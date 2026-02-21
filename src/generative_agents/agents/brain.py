@@ -34,6 +34,7 @@ class AgentBrain(dspy.Module):
         state: AgentState,
         retrieve_fn: Callable[[str, int], List[MemoryEntry]] = None,
         expand_fn: Callable[[str, int], List[MemoryEntry]] = None,
+        maze=None,
     ) -> ActionSignal:
         """
         Forward pass of the Agent Brain.
@@ -63,7 +64,7 @@ class AgentBrain(dspy.Module):
         plan_signal = self.planning(state)
 
         # 4. Actor — single ReActActor tool-choice call (1 LLM call)
-        action_signal = self.actor(state, plan_signal)
+        action_signal = self.actor(state, plan_signal, maze=maze)
 
         # 5. Merge signals
         final_signal = self._merge_signals(plan_signal, action_signal)

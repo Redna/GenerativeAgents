@@ -4,16 +4,22 @@ Phase 6: ActorLayer — single ReActActor call replaces 7+ sequential LLM decisi
 The model picks a tool; Python dispatches it.
 """
 import datetime
+import random
 import dspy
 from typing import Optional, Tuple, List
 
 from generative_agents.common.neural_types import AgentState, ActionSignal
 from generative_agents.common.events import Action, Event, EventType, ObjectAction, PerceivedEvent
 from generative_agents.common.logging import log_agent
+from generative_agents.simulation.maze import Maze
 
 from generative_agents.intelligence.modules.actor_react import ReActActor, ToolCall
 from generative_agents.intelligence.modules.perception import EventParser, heuristic_emoji
 
+# How poignant an event must be to interrupt a running action
+INTERRUPT_POIGNANCY_THRESHOLD = 0.7
+# Default action duration in minutes (shorter = more responsive agents)
+DEFAULT_ACTION_DURATION = 10
 
 class ActorLayer(dspy.Module):
     """
@@ -30,14 +36,14 @@ class ActorLayer(dspy.Module):
     # Main forward pass — ONE LLM call
     # ------------------------------------------------------------------
 
-    def forward(self, state: AgentState, plan_signal: ActionSignal) -> ActionSignal:
+    def forward(self, state: AgentState, plan_signal: ActionSignal, maze: Maze = None) -> ActionSignal:
         """
         Returns an ActionSignal based on a single ReActActor tool-choice call.
         """
         schedule = plan_signal.updated_daily_schedule if plan_signal.updated_daily_schedule else state.daily_schedule
 
-        # Skip cognition if current action is still running
-        if not self._is_action_finished(state):
+        # Skip cognition unless action is finished OR a highly poignant event interrupts
+        if not self._should_act(state):
             return ActionSignal()
 
         if not schedule:
@@ -57,32 +63,38 @@ class ActorLayer(dspy.Module):
         )
         log_agent(state.name, f"ActorLayer: tool={tool_call.tool} args={tool_call.args}", "INFO")
 
-        return self._dispatch(tool_call, state, current_plan)
+        return self._dispatch(tool_call, state, current_plan, maze)
 
     # ------------------------------------------------------------------
     # Tool dispatch (pure Python — zero extra LLM calls)
     # ------------------------------------------------------------------
 
-    def _dispatch(self, tool_call: ToolCall, state: AgentState, current_plan: str) -> ActionSignal:
+    def _dispatch(self, tool_call: ToolCall, state: AgentState, current_plan: str, maze: Maze = None) -> ActionSignal:
         t = tool_call.tool
         args = tool_call.args
 
         if t == "speak_to":
             return self._dispatch_speak(state, args)
         elif t == "move_to":
-            return self._dispatch_move(state, args, current_plan)
+            return self._dispatch_move(state, args, current_plan, maze)
         elif t == "update_action":
             return self._dispatch_update_action(state, args)
         else:  # "wait"
-            return ActionSignal()  # no-op: current action continues
+            # Wander toward current schedule location instead of standing still
+            return self._dispatch_move(state, {"destination": current_plan}, current_plan, maze)
 
-    def _dispatch_move(self, state: AgentState, args: dict, fallback_plan: str) -> ActionSignal:
+    def _dispatch_move(self, state: AgentState, args: dict, fallback_plan: str, maze: Maze = None) -> ActionSignal:
         destination = args.get("destination", fallback_plan) or fallback_plan
+
+        # Resolve natural-language destination to a valid maze address
+        resolved_address = self._resolve_address(destination, maze)
+        log_agent(state.name, f"Resolved '{destination}' → '{resolved_address}'", "DEBUG")
+
         subject, predicate, object_ = self.event_parser.get_triple(state.name, destination)
         action = Action(
-            address=destination,
+            address=resolved_address,
             start_time=state.time.time,
-            duration=60,
+            duration=DEFAULT_ACTION_DURATION,
             emoji=heuristic_emoji(destination),
             event=Event(
                 subject=subject,
@@ -142,7 +154,7 @@ class ActorLayer(dspy.Module):
         action = Action(
             address="<current>",
             start_time=state.time.time,
-            duration=60,
+            duration=DEFAULT_ACTION_DURATION,
             emoji=heuristic_emoji(activity),
             event=Event(
                 subject=subject,
@@ -170,8 +182,51 @@ class ActorLayer(dspy.Module):
         try:
             duration_int = int(state.current_action.duration)
         except (ValueError, TypeError):
-            duration_int = 60
+            duration_int = DEFAULT_ACTION_DURATION
         return state.time.time >= start + datetime.timedelta(minutes=duration_int)
+
+    def _should_act(self, state: AgentState) -> bool:
+        """Returns True if the agent should make a new decision this tick."""
+        if self._is_action_finished(state):
+            return True
+        # Interrupt if any recent event is highly poignant
+        for event in state.recent_events:
+            if hasattr(event, 'poignancy') and event.poignancy >= INTERRUPT_POIGNANCY_THRESHOLD:
+                log_agent(state.name, f"Interrupting action for: {event.description} (poignancy={event.poignancy})", "INFO")
+                return True
+        return False
+
+    def _resolve_address(self, activity: str, maze: Maze = None) -> str:
+        """Resolve a natural-language activity to a valid maze address via fuzzy matching."""
+        if maze is None:
+            return activity
+        # Exact match first
+        if activity in maze.address_tiles:
+            return activity
+        # Fuzzy match: find addresses containing the activity string (case-insensitive)
+        matches = {
+            addr: tiles
+            for addr, tiles in maze.address_tiles.items()
+            if activity.lower() in addr.lower()
+        }
+        if matches:
+            # Pick the shortest matching address (most specific)
+            best = min(matches.keys(), key=len)
+            return best
+        # Try matching individual words from the activity
+        words = [w for w in activity.lower().split() if len(w) > 3]
+        for word in words:
+            word_matches = {
+                addr: tiles
+                for addr, tiles in maze.address_tiles.items()
+                if word in addr.lower()
+            }
+            if word_matches:
+                best = min(word_matches.keys(), key=len)
+                return best
+        # No match — pick a random known address
+        log_agent("System", f"No maze address found for '{activity}', using random", "WARNING")
+        return random.choice(list(maze.address_tiles.keys()))
 
     def _current_schedule_item(self, state: AgentState, schedule: List[Tuple[str, int]]) -> str:
         """Returns the description of the current schedule slot."""

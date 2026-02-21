@@ -58,6 +58,9 @@ class SimulationEngine:
         # 4. Record State for API
         self._record_round_update()
 
+        # 5. Advance simulation clock
+        self.time.tick()
+
     def _record_round_update(self):
         agents_dto = [agent.to_dto() for agent in self.agents.values()]
         round_update = RoundUpdateDTO(

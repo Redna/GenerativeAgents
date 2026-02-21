@@ -152,6 +152,7 @@ class Agent:
             state,
             retrieve_fn=self.memory.retrieve,
             expand_fn=self.memory.get_context,
+            maze=maze,
         )
 
         # 4. Apply Action Signal (Effectors)
@@ -160,7 +161,7 @@ class Agent:
         # Update reflection trigger based on new memories
         for memory in signal.new_memories:
              if hasattr(memory, 'poignancy'):
-                 self.working_memory.reflection_trigger_counter -= memory.poignancy * 10
+                 self.working_memory.reflection_trigger_counter -= memory.poignancy
 
         # 5. Execution (Motor Control)
         # Convert the decision (Action Address) into movement (Next Tile)
@@ -208,7 +209,7 @@ class Agent:
             self.working_memory.daily_schedule = signal.updated_daily_schedule
             # Also update hourly organized helper
             self.working_memory.daily_schedule_hourly_organized = [
-                (entry["activity"], 60) for entry in signal.updated_daily_schedule
+                (activity, duration) for activity, duration in signal.updated_daily_schedule
             ]
 
         # 2. Update Memories

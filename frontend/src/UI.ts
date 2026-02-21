@@ -114,8 +114,14 @@ export default class UI {
   renderLogMessage(log: LogDTO) {
     if (!this.logPanel) return;
 
-    // Client-side filtering is no longer needed as the backend emits to specific agent rooms
-    // if (this.selectedAgentName !== log.agent) return;
+    // Client-side filtering: only show logs for the selected agent
+    if (!this.selectedAgentName) return;
+    if (
+      this.selectedAgentName !== log.agent &&
+      this.selectedAgentName.replace(/_/g, ' ') !== log.agent
+    )
+      return;
+
     console.log(log);
     // If it's the first log, clear the "placeholder" text
     if (

@@ -5,7 +5,7 @@ from typing import List, Optional
 from generative_agents.common.neural_types import AgentState, ActionSignal
 from generative_agents.common.events import EventType, PerceivedEvent
 from generative_agents.common.logging import log_agent
-from generative_agents.intelligence.modules.perception import EventParser, PoignanceRater
+from generative_agents.intelligence.modules.perception import EventParser, heuristic_poignance
 from generative_agents.intelligence.modules.reflection import (
     ReflectionPointGenerator, InsightGenerator, IdentityFormulator
 )
@@ -14,7 +14,7 @@ class MemoryConsolidator(dspy.Module):
     def __init__(self):
         super().__init__()
         self.event_parser = EventParser()
-        self.poignance_rater = PoignanceRater()
+
         self.reflection_generator = ReflectionPointGenerator()
         self.insight_generator = InsightGenerator()
         self.identity_formulator = IdentityFormulator()
@@ -63,44 +63,24 @@ class MemoryConsolidator(dspy.Module):
         statements = [e.description for e in relevant_nodes]
         insights_data = self.insight_generator(statements, 3)
         
-        log_agent(state.name, f"Insights Data Type: {type(insights_data)} Value: {insights_data}", "DEBUG")
-        
-        if isinstance(insights_data, list) and len(insights_data) > 0:
-             # Handle case where it might be returned as a list of dicts or strings
-             insights_data = insights_data[0]
-             
-        if isinstance(insights_data, str):
-            try:
-                import json
-                # Try to parse JSON string
-                # Clean potential markdown code blocks
-                if "```json" in insights_data:
-                    insights_data = insights_data.split("```json")[1].split("```")[0]
-                elif "```" in insights_data:
-                    insights_data = insights_data.split("```")[1].split("```")[0]
-                    
-                insights_data = json.loads(insights_data)
-            except Exception as e:
-                log_agent(state.name, f"Failed to parse insights JSON: {e}", "ERROR")
-                insights_data = {}
-        
-        if not isinstance(insights_data, dict):
-            log_agent(state.name, f"Insights data is not a dict: {type(insights_data)}", "ERROR")
-            insights_data = {}
+        if not isinstance(insights_data, list):
+            insights_data = [insights_data] if insights_data else []
         
         # 5. Create Thoughts from Insights
-        for thought, evidence in insights_data.items():
+        for thought in insights_data:
+            if not isinstance(thought, str) or not thought.strip():
+                continue
             # Create a Thought Event
             s, p, o = self.event_parser.get_triple(state.name, thought)
             
             expiration = state.time.time + datetime.timedelta(days=30)
             
-            # Rate poignance (using just Thought type context if possible, or mapping to EVENT/THOUGHT)
-            poignancy = self.poignance_rater(state.name, state.identity_description, EventType.THOUGHT.value, thought)
+            # Rate poignance
+            poignancy = heuristic_poignance(EventType.THOUGHT.value, thought)
             
             thought_event = PerceivedEvent(
                 event_type=EventType.THOUGHT,
-                poignancy=int(poignancy)/10, 
+                poignancy=poignancy, 
                 depth=1,
                 description=thought,
                 subject=s,
@@ -108,7 +88,6 @@ class MemoryConsolidator(dspy.Module):
                 object_=o,
                 created=state.time.time,
                 expiration=expiration,
-                filling=evidence # Storing evidence IDs
             )
             
             signal.new_memories.append(thought_event)

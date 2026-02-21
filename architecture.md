@@ -54,10 +54,11 @@ agent.run_step(percept, maze, agents, time)
   2. construct AgentState snapshot
   3. brain.forward(percept, state,        → 1-2 LLM calls total (see below)
        retrieve_fn=memory.retrieve,
-       expand_fn=memory.get_context)
-  4. _apply_action_signal(signal)        → write memories, update schedule, set action
-  5. Execution.run(address)              → pathfind to next tile
-  6. [conditional] MemoryConsolidator   → System 2 reflection (every N ticks)
+       expand_fn=memory.get_context,
+       maze=maze)                         → maze passed for address resolution
+  4. _apply_action_signal(signal)         → write memories, update schedule, set action
+  5. Execution.run(address)               → resolve address, pathfind, step one tile
+  6. [conditional] MemoryConsolidator     → System 2 reflection (poignancy-triggered)
 ```
 
 ---
@@ -66,7 +67,7 @@ agent.run_step(percept, maze, agents, time)
 
 ```python
 class AgentBrain(dspy.Module):
-    def forward(percept, state, retrieve_fn, expand_fn) -> ActionSignal:
+    def forward(percept, state, retrieve_fn, expand_fn, maze=None) -> ActionSignal:
         # Layer 1: Perception (0 LLM calls)
         filtered_events = perception(percept, state)
 
@@ -77,7 +78,7 @@ class AgentBrain(dspy.Module):
         plan_signal = planning(state)
 
         # Layer 4: Actor (1 LLM call via ReActActor)
-        action_signal = actor(state, plan_signal)
+        action_signal = actor(state, plan_signal, maze=maze)
 
         return merge(plan_signal, action_signal)
 ```
@@ -114,11 +115,14 @@ class AgentBrain(dspy.Module):
 
 ### Layer 4: `ActorLayer` (Decision & Action)
 - **File**: `agents/layers/actor.py`
-- **Calls**: 1 LLM call (`ReActActor`)
+- **Calls**: 1 LLM call (`ReActActor`) — skipped if current action is still running and no interrupt
+- **Interrupt threshold**: If any perceived event has `poignancy >= 0.7` (`INTERRUPT_POIGNANCY_THRESHOLD`), the agent re-evaluates even if its current action hasn't finished. Configurable at module level.
+- **Action duration**: `DEFAULT_ACTION_DURATION = 10` minutes (configurable). Agents cycle through actions every ~60 ticks at 10-second tick resolution.
+- **Location resolution**: `_resolve_address(activity, maze)` fuzzy-matches natural-language activities (e.g. `"Morning routine"`) to real maze addresses (e.g. `"the Ville:Hobbs Cafe:cafe"`) using `maze.address_tiles`. Falls back to word matching, then random.
 - `ReActActor` picks one of 4 tools; Python dispatches (zero extra LLM calls):
-  - `move_to(destination)` → build `Action` with address
+  - `move_to(destination)` → resolve address via maze, build `Action`
   - `speak_to(target, opening_line)` → create chat `Action` + memory event
-  - `wait()` → no-op, current action continues
+  - `wait()` → wander toward current schedule location
   - `update_action(activity)` → update background activity description
 - Replaces: `TalkDecider + ReactionDecider + SectorSelector + ArenaSelector + ObjectSelector + EventParser + EmojiMapper` (was 7+ calls).
 
@@ -127,6 +131,20 @@ class AgentBrain(dspy.Module):
 - **Trigger**: `working_memory.reflection_trigger_counter <= 0` (poignancy-weighted)
 - **Role**: Compresses memories → generates insights → updates identity.
 - Runs asynchronously after the main brain pass inside `agent.run_step()`.
+
+---
+
+## Execution (Motor Control)
+
+### `Execution` — Pathfinding & Movement
+- **File**: `agents/components/execution.py`
+- **Calls**: 0 LLM calls (pure Python)
+- Receives the `Action.address` (a maze address resolved by `ActorLayer`) and converts it to tile-by-tile movement:
+  1. Look up `address` in `maze.address_tiles` (with colon-trimming fallback)
+  2. `maze.find_path(current_tile, target_tile)` → A* shortest path
+  3. Pop one tile per tick from `planned_path`
+- **Logging**: `log_agent` calls emit path calculation and per-tick movement (`Moving: (x,y) → (x,y) [N steps left]`)
+- **Path caching**: `action_path_set` flag prevents redundant re-pathing while walking. Resets when `planned_path` is empty or action changes.
 
 ---
 
@@ -241,13 +259,15 @@ Optimizable parameters: contextual importance weights (`ContextualReranker`), to
 ```
 src/generative_agents/
   agents/
-    agent.py                     ← run_step, expand_fn wiring
-    brain.py                     ← AgentBrain (4-layer forward pass)
+    agent.py                     ← run_step, expand_fn + maze wiring
+    brain.py                     ← AgentBrain (4-layer forward pass, maze passthrough)
+    components/
+      execution.py               ← Execution (pathfinding + movement logging)
     layers/
       perception.py              ← SensoryProcessingLayer
       retrieval.py               ← AssociativeMemoryLayer (3-stage)
       planning.py                ← PlanningLayer (UnifiedDayPlanner)
-      actor.py                   ← ActorLayer (ReActActor + dispatch)
+      actor.py                   ← ActorLayer (ReActActor + address resolution + interrupt)
       reflection.py              ← MemoryConsolidator (System 2)
     memory/
       repository.py              ← QdrantMemoryRepository (pure Qdrant)

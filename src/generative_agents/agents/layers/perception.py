@@ -5,6 +5,7 @@ from generative_agents.common.percept import Percept
 from generative_agents.common.neural_types import AgentState
 from generative_agents.intelligence.modules.perception import heuristic_poignance
 from generative_agents.common.logging import log_agent
+from generative_agents.common import global_state
 
 class SensoryProcessingLayer(dspy.Module):
     """
@@ -44,8 +45,8 @@ class SensoryProcessingLayer(dspy.Module):
                 subject=event.subject,
                 predicate=event.predicate,
                 object_=event.object_,
-                created=event.created,
-                expiration=event.expiration,
+                created=getattr(event, 'created', None) or global_state.time.time,
+                expiration=getattr(event, 'expiration', None),
                 tile=event.tile
             )
             processed_events.append(processed_event)

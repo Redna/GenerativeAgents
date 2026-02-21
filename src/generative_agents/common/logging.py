@@ -13,22 +13,28 @@ logger.add(
 )
 
 _sio_instance = None
+_main_loop = None
+_connected_sids = None
 
 
-def initialize_socket_logging(sio):
+def initialize_socket_logging(sio, connected_sids: set):
     """
     Initialize the socket instance for logging broadcasting.
+    Must be called from the main asyncio thread.
     """
-    global _sio_instance
+    global _sio_instance, _main_loop, _connected_sids
     _sio_instance = sio
+    _connected_sids = connected_sids
+    try:
+        _main_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _main_loop = asyncio.get_event_loop()
 
 
 def log_agent(agent_name: str, message: str, level: str = "INFO"):
     """
     Log an agent's thought or action, and optionally broadcast it over websocket.
     """
-    # Format similar to old whisper: {time} - {tick} {agent}: {message}
-    # We use loguru's formatting for the timestamp, so we just include the rest
     if global_state.time:
         time_str = global_state.time.as_string()
     else:
@@ -51,13 +57,25 @@ def log_agent(agent_name: str, message: str, level: str = "INFO"):
         logger.info(formatted_message)
 
     # Broadcast via Websocket if initialized
-    if _sio_instance:
-        asyncio.create_task(_emit_log(agent_name, message, level, time_str))
+    # Use run_coroutine_threadsafe because log_agent may be called from
+    # worker threads (via asyncio.to_thread in the simulation loop).
+    if _sio_instance and _main_loop and _connected_sids:
+        future = asyncio.run_coroutine_threadsafe(
+            _emit_log(agent_name, message, level, time_str), _main_loop
+        )
+
+        def _on_done(f):
+            exc = f.exception()
+            if exc:
+                print(f"LOG_EMIT_ERROR: {exc}")
+
+        future.add_done_callback(_on_done)
 
 
 async def _emit_log(agent_name: str, message: str, level: str, time_str: str):
     """
-    Emit the log to the specific agent room.
+    Emit the log to all connected watchers.
+    The frontend filters by selected agent.
     """
     payload = {
         "agent": agent_name,
@@ -67,9 +85,12 @@ async def _emit_log(agent_name: str, message: str, level: str, time_str: str):
         "tick": global_state.tick,
     }
 
+    sid_list = list(_connected_sids) if _connected_sids else []
+    if not sid_list:
+        return
+
     try:
-        # Broadcast log to all clients (namespace '/')
-        # Frontend ensures only the selected agent's logs are shown
-        await _sio_instance.emit("agent_log", payload, room=agent_name, namespace="/")
+        for sid in sid_list:
+            await _sio_instance.emit("agent_log", payload, to=sid)
     except Exception as e:
-        print(f"ERROR: Failed to emit log to {agent_name}: {e}")
+        print(f"ERROR: Failed to emit log: {e}")

@@ -7,6 +7,8 @@ per-event poignancy calls.
 import dspy
 from typing import Any
 
+from generative_agents.common.dspy_config import thinking_lm
+
 
 class ContextualRerankSignature(dspy.Signature):
     """
@@ -26,9 +28,6 @@ class ContextualRerankSignature(dspy.Signature):
     ranked_indices: list[int] = dspy.OutputField(
         desc="List of candidate indices (0-based) ordered from most to least important right now."
     )
-    rationale: str = dspy.OutputField(
-        desc="One sentence explaining why these memories are most relevant now."
-    )
 
 
 class ContextualReranker(dspy.Module):
@@ -41,7 +40,8 @@ class ContextualReranker(dspy.Module):
 
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(ContextualRerankSignature)
+        # thinking_lm: ranking memories requires nuanced multi-step reasoning.
+        self.predict = dspy.Predict(ContextualRerankSignature)
 
     def forward(
         self,
@@ -68,7 +68,8 @@ class ContextualReranker(dspy.Module):
         candidate_str = "\n".join(lines)
 
         try:
-            result = self.predict(
+            with dspy.context(lm=thinking_lm) if thinking_lm else dspy.context():
+                result = self.predict(
                 agent_name=agent_name,
                 current_situation=current_situation or "idle",
                 current_plan=current_plan or "no plan",

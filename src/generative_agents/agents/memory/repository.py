@@ -35,20 +35,84 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from generative_agents.persistence.cachable_sentence_transformer import CachableSentenceTransformer
+import hashlib
+import json
+import os
+import pickle
 
-VECTOR_DIM = 768       # sentence-transformers/all-mpnet-base-v2
-COLLECTION = "memories"
+import httpx
 
-# Lazy singleton embedding model
-_model: "CachableSentenceTransformer | None" = None
+# ---------------------------------------------------------------------------
+# vLLM Embeddings client (replaces CachableSentenceTransformer)
+# ---------------------------------------------------------------------------
+
+EMBED_URL   = "http://pop-os:8001/v1/embeddings"
+EMBED_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+VECTOR_DIM  = 1024   # Qwen3-Embedding-0.6B output dimensionality
+COLLECTION  = "memories"
+_CACHE_DIR  = ".generation_cache/embed/"
 
 
-def _get_model() -> CachableSentenceTransformer:
-    global _model
-    if _model is None:
-        _model = CachableSentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-    return _model
+class VLLMEmbedder:
+    """Thin wrapper around the vLLM OpenAI-compatible /v1/embeddings endpoint.
+    Caches results to disk to avoid redundant API calls (same interface as
+    the old CachableSentenceTransformer).
+    """
+
+    def encode(self, texts: list[str]) -> list[list[float]]:
+        """
+        Encodes a list of texts and returns their embedding vectors.
+        Single-string input is also accepted (returns a 1-element list).
+        """
+        if isinstance(texts, str):
+            texts = [texts]
+
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        results: list[list[float] | None] = [None] * len(texts)
+        uncached_indices: list[int] = []
+
+        # Check cache first
+        for i, text in enumerate(texts):
+            cache_key = hashlib.md5(text.encode()).hexdigest()
+            cache_path = os.path.join(_CACHE_DIR, f"{cache_key}.pkl")
+            if os.path.exists(cache_path):
+                with open(cache_path, "rb") as f:
+                    results[i] = pickle.load(f)
+            else:
+                uncached_indices.append(i)
+
+        # Batch-fetch uncached embeddings
+        if uncached_indices:
+            batch = [texts[i] for i in uncached_indices]
+            response = httpx.post(
+                EMBED_URL,
+                headers={"Authorization": "Bearer EMPTY"},
+                json={"model": EMBED_MODEL, "input": batch},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()["data"]
+            for idx, item in zip(uncached_indices, data):
+                vec = item["embedding"]
+                results[idx] = vec
+                # Write to cache
+                cache_key = hashlib.md5(texts[idx].encode()).hexdigest()
+                cache_path = os.path.join(_CACHE_DIR, f"{cache_key}.pkl")
+                with open(cache_path, "wb") as f:
+                    pickle.dump(vec, f)
+
+        return results  # type: ignore[return-value]
+
+
+# Lazy singleton
+_embedder: VLLMEmbedder | None = None
+
+
+def _get_model() -> VLLMEmbedder:
+    global _embedder
+    if _embedder is None:
+        _embedder = VLLMEmbedder()
+    return _embedder
 
 
 def _to_qdrant_id(str_id: str) -> int:
@@ -113,7 +177,7 @@ class QdrantMemoryRepository:
             entry["id"] = str(uuid.uuid4())
 
         text = entry.get("content", "")
-        vector = _get_model().encode([text])[0].tolist()
+        vector = _get_model().encode([text])[0]
 
         payload = {
             "str_id":        entry["id"],
@@ -143,7 +207,7 @@ class QdrantMemoryRepository:
         if collection_info.points_count == 0:
             return []
 
-        query_vec = _get_model().encode([query])[0].tolist()
+        query_vec = _get_model().encode([query])[0]
         result = self._client.query_points(
             collection_name=COLLECTION,
             query=query_vec,

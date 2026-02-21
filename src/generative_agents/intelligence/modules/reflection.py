@@ -1,6 +1,8 @@
 import dspy
 from typing import List
 
+from generative_agents.common.dspy_config import thinking_lm
+
 # --- Signatures ---
 
 class ReflectionPointsSignature(dspy.Signature):
@@ -26,11 +28,12 @@ class IdentitySignature(dspy.Signature):
 class ReflectionPointGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(ReflectionPointsSignature)
+        self.predict = dspy.Predict(ReflectionPointsSignature)
 
     def forward(self, memory: str, count: int) -> List[str]:
         try:
-            response = self.predict(memory=memory, count=count)
+            with dspy.context(lm=thinking_lm) if thinking_lm else dspy.context():
+                response = self.predict(memory=memory, count=count)
             return response.questions[:count]
         except Exception:
             return [f"Question {i + 1}?" for i in range(count)]
@@ -38,16 +41,17 @@ class ReflectionPointGenerator(dspy.Module):
 class InsightGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(EvidenceAndInsightsSignature)
+        self.predict = dspy.Predict(EvidenceAndInsightsSignature)
 
     def forward(self, statements: List[str], number_of_insights: int) -> List[str]:
         statements_str = "\n".join(
             [f"{i + 1}. {s.strip()}" for i, s in enumerate(statements)]
         )
         try:
-            response = self.predict(
-                statements=statements_str, number_of_insights=number_of_insights
-            )
+            with dspy.context(lm=thinking_lm) if thinking_lm else dspy.context():
+                response = self.predict(
+                    statements=statements_str, number_of_insights=number_of_insights
+                )
             return response.insights[:number_of_insights]
         except Exception:
             return [f"Insight {i + 1}" for i in range(number_of_insights)]
@@ -55,11 +59,12 @@ class InsightGenerator(dspy.Module):
 class IdentityFormulator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(IdentitySignature)
+        self.predict = dspy.Predict(IdentitySignature)
 
     def forward(self, agent: str, context: str) -> str:
         try:
-            response = self.predict(agent=agent, context=context)
+            with dspy.context(lm=thinking_lm) if thinking_lm else dspy.context():
+                response = self.predict(agent=agent, context=context)
             return response.identity
         except Exception:
             return f"{agent} is a person."

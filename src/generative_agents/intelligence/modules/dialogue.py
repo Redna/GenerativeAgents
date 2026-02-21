@@ -74,7 +74,7 @@ class DialogueGenerator(dspy.Module):
     """
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(ConversationSignature)
+        self.predict = dspy.Predict(ConversationSignature)
 
     def forward(self, agent, identity, memory, past_context, location,
                 agent_action, agent_with, agent_with_action, conversation_history) -> Tuple[str, bool]:
@@ -93,7 +93,7 @@ class DialogueSummarizer(dspy.Module):
     """Summarizes a completed conversation into one sentence."""
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(ConversationSummarySignature)
+        self.predict = dspy.Predict(ConversationSummarySignature)
 
     def forward(self, conversation: str) -> str:
         try:
@@ -106,7 +106,7 @@ class DialogueMemoer(dspy.Module):
     """Extracts an agent's personal takeaway from a conversation."""
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(MemoOnConversationSignature)
+        self.predict = dspy.Predict(MemoOnConversationSignature)
 
     def forward(self, agent: str, conversation: str) -> str:
         try:
@@ -119,7 +119,7 @@ class DialoguePlanner(dspy.Module):
     """Extracts what the agent should remember from a conversation."""
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(PlanningOnConversationSignature)
+        self.predict = dspy.Predict(PlanningOnConversationSignature)
 
     def forward(self, agent: str, conversation: str) -> str:
         try:
@@ -132,7 +132,7 @@ class RelationshipSummarizer(dspy.Module):
     """Summarizes the relationship between two agents from memory statements."""
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(ChatRelationshipSignature)
+        self.predict = dspy.Predict(ChatRelationshipSignature)
 
     def forward(self, statements: str, agent: str, agent_with: str) -> str:
         try:

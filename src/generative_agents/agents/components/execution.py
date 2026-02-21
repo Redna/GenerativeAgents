@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from generative_agents.agents.agent import Agent
 
+from generative_agents.common.logging import log_agent
 from generative_agents.simulation.maze import Maze
 
 
@@ -129,6 +130,11 @@ class Execution:
             # first element in the planned_path because it includes the curr_tile.
             self.agent.working_memory.planned_path = path[1:]
             self.agent.working_memory.action_path_set = True
+            log_agent(
+                self.agent.name,
+                f"Path calculated: {len(path)} steps → {closest_target_tile} (address: {plan})",
+                "DEBUG",
+            )
 
         # Setting up the next immediate step. We stay at our curr_tile if there is
         # no <planned_path> left, but otherwise, we go to the next tile in the path.
@@ -136,6 +142,11 @@ class Execution:
         if self.agent.working_memory.planned_path:
             ret = self.agent.working_memory.planned_path[0]
             self.agent.working_memory.planned_path = self.agent.working_memory.planned_path[1:]
+            log_agent(
+                self.agent.name,
+                f"Moving: ({self.agent.working_memory.tile.x},{self.agent.working_memory.tile.y}) → ({ret.x},{ret.y}) [{len(self.agent.working_memory.planned_path)} steps left]",
+                "DEBUG",
+            )
 
         if self.agent.working_memory.action:
             description = f"{self.agent.working_memory.action.event.description}"

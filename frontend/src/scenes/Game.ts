@@ -50,8 +50,15 @@ class SimulationUpdateEngine {
     this.characters[character.name] = character;
   }
 
+  private lastReceivedRound: number = -1;
+
   add(update: RoundUpdateDTO): void {
-    this.updates.push(update);
+    // Deduplicate: the backend emits the same latest update repeatedly,
+    // so only add genuinely new rounds.
+    if (update.round > this.lastReceivedRound) {
+      this.lastReceivedRound = update.round;
+      this.updates.push(update);
+    }
   }
 
   hasNext(): boolean {
@@ -339,6 +346,7 @@ export default class GameScene extends Phaser.Scene {
       const customEvent = e as CustomEvent;
       const name = customEvent.detail.name;
       console.log('GameScene: Received agent-subscribe event for:', name);
+      this.highlightAgent(name);
       if (this.simulationUpdateEngine) {
         console.log('GameScene: Calling subscribeToAgent on engine');
         this.simulationUpdateEngine.subscribeToAgent(name);

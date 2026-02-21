@@ -54,9 +54,6 @@ class AgentStepSignature(dspy.Signature):
     available_tools: str = dspy.InputField(
         desc="Description of the tools the agent can call."
     )
-    reasoning: str = dspy.OutputField(
-        desc="1–2 sentences of inner reasoning before choosing a tool."
-    )
     tool_name: str = dspy.OutputField(
         desc="Exactly one tool name: move_to | speak_to | wait | update_action"
     )
@@ -77,7 +74,10 @@ class ReActActor(dspy.Module):
 
     def __init__(self):
         super().__init__()
-        self.predict = dspy.ChainOfThought(AgentStepSignature)
+        # Use Predict — Qwen3-8B handles reasoning internally via <think> tokens.
+        # Thinking is enabled at the LM level via fast_lm (default, thinking=False).
+        # For tool selection we want fast, structured output, not deep reasoning.
+        self.predict = dspy.Predict(AgentStepSignature)
 
     def forward(
         self,
