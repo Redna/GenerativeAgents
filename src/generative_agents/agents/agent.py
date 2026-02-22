@@ -3,7 +3,7 @@ from dataclasses import asdict
 # Cognitive Components
 from generative_agents.agents.brain import AgentBrain
 from generative_agents.common.neural_types import AgentState, ActionSignal
-from generative_agents.agents.components.execution import Execution
+from generative_agents.agents.execution import Execution
 
 from generative_agents.agents.memory.system import MemorySystem
 from generative_agents.agents.memory.working import WorkingMemory
@@ -187,7 +187,7 @@ class Agent:
             reflection_state = state 
             reflection_state.recent_events = context_events
 
-            signal_s2 = system2(reflection_state)
+            signal_s2 = system2(reflection_state, retrieve_fn=self.memory.retrieve)
             self._apply_action_signal(signal_s2)
             
             # Reset trigger

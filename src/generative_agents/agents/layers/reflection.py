@@ -1,11 +1,11 @@
 import datetime
 import dspy
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 from generative_agents.common.neural_types import AgentState, ActionSignal
 from generative_agents.common.events import EventType, PerceivedEvent
 from generative_agents.common.logging import log_agent
-from generative_agents.intelligence.modules.perception import EventParser, heuristic_poignance
+from generative_agents.intelligence.modules.perception import heuristic_poignance
 from generative_agents.intelligence.modules.reflection import (
     ReflectionPointGenerator, InsightGenerator, IdentityFormulator
 )
@@ -13,13 +13,12 @@ from generative_agents.intelligence.modules.reflection import (
 class MemoryConsolidator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.event_parser = EventParser()
 
         self.reflection_generator = ReflectionPointGenerator()
         self.insight_generator = InsightGenerator()
         self.identity_formulator = IdentityFormulator()
         
-    def forward(self, state: AgentState) -> ActionSignal:
+    def forward(self, state: AgentState, retrieve_fn: Optional[Callable] = None) -> ActionSignal:
         """
         Refactoring of Reflection._run_reflect.
         Analyze recent memories and generate high-level insights.
@@ -34,16 +33,7 @@ class MemoryConsolidator(dspy.Module):
         log_agent(state.name, "System 2: Starting Memory Consolidation (Reflection)", "INFO")
         
         # 2. Generate Focal Points (What to think about?)
-        # We need recent memories. Assuming retrieval layer or state provides access.
-        # For MVP, we need access to AssociativeMemory which is not in AgentState fully.
-        # This is a limitation of the current strict isolation. 
-        # We will assume a helper or that we can query the DB.
-        
-        # TODO: This requires DB access. 
-        # Ideally, `state.recent_events` is populated with enough history.
-        # Or we inject a 'memory_reader' function into this module.
-        # For now, let's assume we can generate points based on the recent events in state
-        # if they are sufficient, or we skipped implementation until we solve DB access in pure modules.
+        # We use recent memories provided in the state for focal point generation.
         
         if not state.recent_events or len(state.recent_events) < 5:
             return signal
@@ -54,10 +44,19 @@ class MemoryConsolidator(dspy.Module):
         log_agent(state.name, f"Generated focal points: {focal_points}", "DEBUG")
         
         # 3. Retrieve Nodes for Focal Points
-        # This step implies we search the *entire* memory for these topics.
-        # Again, requires DB access.
-        # Simulating retrieval for now using available context
-        relevant_nodes = state.recent_events # Placeholder for retrieval(focal_points)
+        relevant_nodes = []
+        if retrieve_fn is not None:
+            seen_desc = set()
+            for point in focal_points:
+                retrieved = retrieve_fn(point, limit=10)
+                for entry in retrieved:
+                    event = PerceivedEvent.from_db_entry(entry)
+                    if event.description not in seen_desc:
+                        seen_desc.add(event.description)
+                        relevant_nodes.append(event)
+        else:
+            # Fallback for isolated testing without memory access
+            relevant_nodes = state.recent_events
         
         # 4. Generate Insights
         statements = [e.description for e in relevant_nodes]
@@ -71,7 +70,6 @@ class MemoryConsolidator(dspy.Module):
             if not isinstance(thought, str) or not thought.strip():
                 continue
             # Create a Thought Event
-            s, p, o = self.event_parser.get_triple(state.name, thought)
             
             expiration = state.time.time + datetime.timedelta(days=30)
             
@@ -83,9 +81,7 @@ class MemoryConsolidator(dspy.Module):
                 poignancy=poignancy, 
                 depth=1,
                 description=thought,
-                subject=s,
-                predicate=p,
-                object_=o,
+                entity_id=state.name,
                 created=state.time.time,
                 expiration=expiration,
             )
@@ -95,23 +91,10 @@ class MemoryConsolidator(dspy.Module):
 
         # 6. Update Identity (System 2 Self-Concept Modification)
         # We re-evaluate who we are based on recent thoughts and actions
-        # initialized in init ideally, but for now importing or using if added to init
-        # self.identity_formulator was not added to init in previous step, checking...
-        # I need to add it to init first.
-        
-        # For this step I will just replace the import and use the module if available
-        # Wait, I missed adding `self.identity_formulator` to `__init__` in the previous successful tool call.
-        # I should add it there.
         
         commonset = ""
         commonset += f"Name: {state.name}\n"
-        commonset += f"Age: {state.innate_traits}\n" # Note: Age/Traits mixed in source, correcting in principle but following pattern
-        # Actually state.innate_traits is a list. state (AgentState) has innate_traits. 
-        # Using state attributes directly.
-        # But wait, AgentState doesn't have age explicitly? It does have innate_traits.
-        # Let's check AgentState definition or assume widely available.
-        # AgentState definition in Agent.run_step: name, identity_description, innate_traits...
-        
+        commonset += f"Age: {state.working_memory.age}\n"
         commonset += f"Innate traits: {state.innate_traits}\n"
         commonset += f"Current Role/Lifestyle: {state.identity_description}\n" # approximate
         commonset += f"Daily Requirement: {state.daily_plan_requirements}\n"
@@ -124,7 +107,6 @@ class MemoryConsolidator(dspy.Module):
         if isinstance(insights_data, dict):
             commonset += f"Recent Insights: {list(insights_data.keys())}\n"
 
-        # Assumption: self.identity_formulator is available (will add in next step if not)
         new_identity = self.identity_formulator(state.name, commonset)
         signal.updated_identity = new_identity
         log_agent(state.name, f"Identity Updated: {new_identity[:50]}...", "INFO")

@@ -275,7 +275,32 @@ Reduce per-agent LLM calls from ~7-10/tick to 1-2. Introduce pure-Qdrant graph m
 | TalkDecider | 1 call/tick | 0 (ReActActor) |
 | ReactionDecider | 1 call/tick | 0 (ReActActor) |
 | SectorSelector+ArenaSelector+ObjectSelector | 3 calls/move | 0 (ReActActor) |
+| EventParser | 1 call/action | 0 (Removed S/P/O triples) |
 
 ---
-**Last Updated**: 2026-02-20
+
+## 14. Phase 7: S/P/O Eradication, Object States, and Dynamic Replanning (Feb 22, 2026)
+
+### Objective
+Further optimize the simulation by completely removing legacy NLP concepts (Event Triples), restoring native object interactions, and enabling agents to react dynamically to significant daily events through on-the-fly mid-day replanning.
+
+### Key Changes
+- **Eradicating S/P/O Variables**:
+    - The Stanford-style knowledge graph triples (`subject`, `predicate`, `object_`) were rendered vestigial by semantic vector search. 
+    - Purged completely from `events.py` (`Event`, `PerceivedEvent`), `database.py` (Pydantic models), `repository.py` (Qdrant schema), and all cognitive layers.
+    - Replaced with a single lightweight `entity_id` tracking the originating agent or game object.
+- **EventParser Removal**:
+    - Deleted `EventParser` from `perception.py`, removing 1 unnecessary LLM call per action.
+- **Restoring Object Tracking**:
+    - `ActorLayer` now natively detects interactions with Game Objects (checking for `World:Sector:Arena:Object` pattern).
+    - It dispatches an `ObjectAction`, tracking the target object using `entity_id`.
+    - `SimulationEngine` correctly caches these object states on Maze tiles and clears them when the agent departs (e.g. `bed is in use by John Lin`).
+- **Dynamic Mid-Day Replanning**:
+    - `perception.py`: Boosted `heuristic_poignance` math to detect scheduling keywords (`"invited"`, `"canceled"`, `"plan"` -> `+0.15`), allowing them to breach the `0.8` interrupt threshold.
+    - Added `ReplanningLayer` + `ReplanEvaluator`: If an agent perceives an event with `poignancy >= 0.8`, `AgentBrain` halts their normal flow. The agent executes a fast `thinking_lm` logic pass to determine if their daily schedule must change. If yes, they instantly regenerate the remaining hourly slots for the entire day.
+- **"Idle" Fix (Forward-fill)**:
+    - Updated `UnifiedDayPlanner` to use a "forward-fill" algorithm when casting broad schedule outputs into a strict 24-slot hourly array. Agents now seamlessly continue underlying activities without dropping into accidental `"Idle"` states.
+
+---
+**Last Updated**: 2026-02-22
 **Author**: Antigravity (Agent)

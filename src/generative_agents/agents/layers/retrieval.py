@@ -22,7 +22,7 @@ class AssociativeMemoryLayer(dspy.Module):
     """
 
     BROAD_LIMIT = 20   # candidates from Qdrant before reranking
-    TOP_N = 10         # candidates returned to Brain after reranking
+    TOP_N = 20         # candidates returned to Brain after reranking
 
     def __init__(self):
         super().__init__()

@@ -13,9 +13,7 @@ Payload schema per point:
     "depth":         int,
     "created_ts":    float,          # Unix timestamp
     "importance":    float,
-    "subject":       str,
-    "predicate":     str,
-    "object_":       str,
+    "entity_id":     str,
     "related_events": [              # graph edges
       {"id": str, "relation": str},
       ...
@@ -25,6 +23,7 @@ Payload schema per point:
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
+from functools import lru_cache
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -59,6 +58,12 @@ class VLLMEmbedder:
     the old CachableSentenceTransformer).
     """
 
+    def __init__(self):
+        # In-memory dictionary to hold computed embeddings (avoids disk read overhead)
+        self._memory_cache: dict[str, list[float]] = {}
+        # Max size to prevent unbounded RAM usage over a long running simulation
+        self._max_memory_cache_size = 5000 
+
     def encode(self, texts: list[str]) -> list[list[float]]:
         """
         Encodes a list of texts and returns their embedding vectors.
@@ -71,17 +76,26 @@ class VLLMEmbedder:
         results: list[list[float] | None] = [None] * len(texts)
         uncached_indices: list[int] = []
 
-        # Check cache first
+        # Check in-memory cache and then disk cache
         for i, text in enumerate(texts):
             cache_key = hashlib.md5(text.encode()).hexdigest()
+            
+            # 1. Fast path: Memory Cache
+            if cache_key in self._memory_cache:
+                results[i] = self._memory_cache[cache_key]
+                continue
+                
+            # 2. Slower path: Disk Cache
             cache_path = os.path.join(_CACHE_DIR, f"{cache_key}.pkl")
             if os.path.exists(cache_path):
                 with open(cache_path, "rb") as f:
-                    results[i] = pickle.load(f)
+                    vec = pickle.load(f)
+                    results[i] = vec
+                    self._add_to_memory_cache(cache_key, vec)
             else:
                 uncached_indices.append(i)
 
-        # Batch-fetch uncached embeddings
+        # 3. Slowest path: Batch-fetch uncached embeddings via API
         if uncached_indices:
             batch = [texts[i] for i in uncached_indices]
             response = httpx.post(
@@ -95,13 +109,25 @@ class VLLMEmbedder:
             for idx, item in zip(uncached_indices, data):
                 vec = item["embedding"]
                 results[idx] = vec
-                # Write to cache
                 cache_key = hashlib.md5(texts[idx].encode()).hexdigest()
+                
+                # Write to disk cache
                 cache_path = os.path.join(_CACHE_DIR, f"{cache_key}.pkl")
                 with open(cache_path, "wb") as f:
                     pickle.dump(vec, f)
+                    
+                # Write to memory cache
+                self._add_to_memory_cache(cache_key, vec)
 
         return results  # type: ignore[return-value]
+
+    def _add_to_memory_cache(self, key: str, vec: list[float]):
+        if len(self._memory_cache) >= self._max_memory_cache_size:
+            # Naive pruning if limit reached (clears 20% of oldest/random entries)
+            keys_to_delete = list(self._memory_cache.keys())[:int(self._max_memory_cache_size * 0.2)]
+            for k in keys_to_delete:
+                del self._memory_cache[k]
+        self._memory_cache[key] = vec
 
 
 # Lazy singleton
@@ -186,9 +212,7 @@ class QdrantMemoryRepository:
             "depth":         int(entry.get("depth", 1)),
             "created_ts":    _ts(entry.get("created_at")),
             "importance":    float(entry.get("importance", 0.5)),
-            "subject":       str(entry.get("subject", "")),
-            "predicate":     str(entry.get("predicate", "")),
-            "object_":       str(entry.get("object_", "")),
+            "entity_id":     str(entry.get("entity_id", "")),
             "related_events": entry.get("related_events", []),  # graph edges
         }
 

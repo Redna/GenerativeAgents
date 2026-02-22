@@ -76,6 +76,10 @@ class AgentBrain(dspy.Module):
 
         # Layer 3: Planning (1 LLM call on new-day only, else 0)
         plan_signal = planning(state)
+        
+        # Layer 3.5: Replanning (1 LLM call IF event poignancy >= 0.8, else 0)
+        replan_signal = replanning(state, filtered_events)
+        if replan_signal: plan_signal.updated_daily_schedule = replan_signal.updated_daily_schedule
 
         # Layer 4: Actor (1 LLM call via ReActActor)
         action_signal = actor(state, plan_signal, maze=maze)
@@ -88,6 +92,7 @@ class AgentBrain(dspy.Module):
 |---|---|---|
 | New Day | **2** (Planner + Actor) | ~50 |
 | Normal | **1** (Actor only, Reranker batched) | ~25 |
+| Interrupt | **+1** (Replanning Evaluator) | |
 
 ---
 
@@ -124,7 +129,8 @@ class AgentBrain(dspy.Module):
   - `speak_to(target, opening_line)` → create chat `Action` + memory event
   - `wait()` → wander toward current schedule location
   - `update_action(activity)` → update background activity description
-- Replaces: `TalkDecider + ReactionDecider + SectorSelector + ArenaSelector + ObjectSelector + EventParser + EmojiMapper` (was 7+ calls).
+- **Object Tracking**: Outputs an `ObjectAction` natively if the address resolves to `World:Sector:Arena:Object` syntax, registering state directly on the maze tile via `entity_id`.
+- Replaces: `TalkDecider + ReactionDecider + SectorSelector + ArenaSelector + ObjectSelector + EmojiMapper` (was 6+ calls).
 
 ### System 2: `MemoryConsolidator` (Reflection, offline)
 - **File**: `agents/layers/reflection.py`
@@ -165,9 +171,7 @@ class AgentBrain(dspy.Module):
     "depth":          int,   # 0=raw, 1=reflection, 2=insight
     "created_ts":     float, # Unix timestamp
     "importance":     float,
-    "subject":        str,
-    "predicate":      str,
-    "object_":        str,
+    "entity_id":      str,   # Originating agent or object identifier
     "related_events": list,  # [{id: str, relation: str}] — graph edges
   }
   ```
@@ -217,7 +221,6 @@ All LLM logic lives in `intelligence/modules/`. Every `dspy.Module` is end-to-en
 | `planning.py` | `UnifiedDayPlanner` | 1 (new-day) | Single-call day plan (wake + schedule) |
 | `actor_react.py` | `ReActActor` | 1/tick | Tool-choice actor: move / speak / wait / update |
 | `retrieval.py` | `ContextualReranker` | 1 batched | Contextual importance re-ranking |
-| `perception.py` | `EventParser` | 1/dispatch | Triple extraction for move/update actions |
 | `dialogue.py` | `DialogueGenerator`, `DialogueSummarizer`, `DialogueMemoer`, `DialoguePlanner` | 1 each | Multi-turn chat _(not yet wired in main brain)_ |
 | `dialogue.py` | `RelationshipSummarizer` | 1 | Reflection: relationship summary |
 | `reflection.py` | `ReflectionPointGenerator`, `InsightGenerator`, `IdentityFormulator` | 1 each | System 2: memory compression + identity |
@@ -233,10 +236,10 @@ All LLM logic lives in `intelligence/modules/`. Every `dspy.Module` is end-to-en
 
 | Removed | Reason |
 |---|---|
-| `TalkDecider` | ReActActor `speak_to(target, opening_line)` |
-| `ReactionDecider` | ReActActor `wait` / `speak_to` |
-| `Contextualizer` | No callers — deleted |
-| `spatial.py` (entire file) | `SectorSelector` + `ArenaSelector` + `ObjectSelector` → ReActActor `move_to(destination)` |
+| `TalkDecider` | 1 call/tick | 0 (ReActActor) |
+| `ReactionDecider` | 1 call/tick | 0 (ReActActor) |
+| `SectorSelector+ArenaSelector+ObjectSelector` | 3 calls/move | 0 (ReActActor) |
+| `EventParser` | 1 call/action | 0 (Removed S/P/O triples) |
 
 ---
 

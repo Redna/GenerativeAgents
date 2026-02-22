@@ -19,18 +19,15 @@ class SensoryProcessingLayer(dspy.Module):
         processed_events = []
         
         for event in percept.events:
-            if not event.predicate:
-                event.predicate = "is"
-
             type_ = EventType.EVENT
             
             # Identify Chat events
-            if event.subject == state.name and event.predicate == "chat with":
+            if event.entity_id == state.name and "chat with" in event.description:
                 type_ = EventType.CHAT
 
-            # Format description if address is subject
-            if type_ == EventType.EVENT and ":" in event.subject:
-                event.description = f"{event.subject.split(':')[-1]} is {event.description}"
+            # Format description if address is entity_id
+            if type_ == EventType.EVENT and ":" in event.entity_id:
+                event.description = f"{event.entity_id.split(':')[-1]} is {event.description}"
 
             # Calculate Poignancy
             poignancy = self._rate_perception_poignancy(state.name, state.identity_description, type_, event.description)
@@ -42,9 +39,7 @@ class SensoryProcessingLayer(dspy.Module):
                 poignancy=poignancy,
                 depth=1,
                 description=event.description,
-                subject=event.subject,
-                predicate=event.predicate,
-                object_=event.object_,
+                entity_id=event.entity_id,
                 created=getattr(event, 'created', None) or global_state.time.time,
                 expiration=getattr(event, 'expiration', None),
                 tile=event.tile

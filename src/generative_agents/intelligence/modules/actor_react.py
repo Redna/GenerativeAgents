@@ -17,10 +17,10 @@ from pydantic import BaseModel, Field
 TOOL_NAMES = Literal["move_to", "speak_to", "wait", "update_action"]
 
 TOOLS_DESCRIPTION = """Available tools:
-1. move_to(destination: str)         — Navigate to a location (sector, arena, or object name).
+1. move_to(action_description: str)  — PRIMARY tool for starting any new physical activity. Provide a natural language event description containing the action and location (e.g. 'Making breakfast in the kitchen' or 'Walking to the cafe'). The system will automatically pathfind you there.
 2. speak_to(target_agent: str, opening_line: str) — Initiate dialogue with a nearby agent.
-3. wait()                            — Stay in place for this tick (current action continues).
-4. update_action(activity: str)      — Change the current background activity description.
+3. wait()                            — Do nothing. Stay in place and let your current action continue.
+4. update_action(activity: str)      — ONLY use this if you are changing your state but STAYING EXACTLY WHERE YOU ARE (e.g. 'Reading a book on the current couch'). If your new activity requires interacting with a new object or room, use move_to instead!
 """
 
 

@@ -45,8 +45,8 @@ class WorkingMemory:
     attention_bandwidth: int = 4
     
     # System 2 Triggers
-    reflection_trigger_counter: int = 255
-    reflection_trigger_max: int = 255
+    reflection_trigger_counter: int = 500
+    reflection_trigger_max: int = 800
     
     def is_action_finished(self) -> bool:
         """

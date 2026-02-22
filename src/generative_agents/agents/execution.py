@@ -61,6 +61,10 @@ class Execution:
                 y = int(plan.split()[2])
                 target_tiles = [[x, y]]
 
+            elif "<current>" in plan:
+                # The agent will stay in their current position for this action.
+                target_tiles = [self.agent.working_memory.tile]
+
             elif "<random>" in plan:
                 # Executing a random location action.
                 target_tiles = [self.maze.get_random_tile(self.agent.working_memory.tile)]
@@ -149,11 +153,12 @@ class Execution:
             )
 
         if self.agent.working_memory.action:
-            description = f"{self.agent.working_memory.action.event.description}"
-            description += f" @ {self.agent.working_memory.action.address}"
+            activity_desc = f"{self.agent.working_memory.action.event.description}"
+            if self.agent.working_memory.action.address and self.agent.working_memory.action.address not in ["<current>", "<random>"]:
+                activity_desc += f" @ {self.agent.working_memory.action.address}"
             self.agent.emoji = self.agent.working_memory.action.emoji
-            self.agent.description = description
+            self.agent.activity = activity_desc
         else:
             # Fallback if no action is set (e.g. idle)
-            pass
+            self.agent.activity = "idle"
         return {"next_tile": ret}

@@ -90,13 +90,21 @@ class SimulationEngine:
             # Remove old events from old tile
             while agent.working_memory.finished_actions:
                 action = agent.working_memory.finished_actions.pop(0)
-                if action.event.subject in old_tile.events:
-                    del old_tile.events[action.event.subject]
+                if action.event.entity_id in old_tile.events:
+                    del old_tile.events[action.event.entity_id]
+                
+                # Also remove old object event if it exists
+                if action.object_action and action.object_action.event:
+                    obj_event = action.object_action.event
+                    if action.object_action.address in self.maze.address_tiles:
+                        target_tile = self.maze.address_tiles[action.object_action.address][0]
+                        if obj_event.entity_id in target_tile.events:
+                            del target_tile.events[obj_event.entity_id]
 
             # Add new event to new tile
             if agent.working_memory.action and agent.working_memory.action.event:
                 event = agent.working_memory.action.event
-                new_tile.events[event.subject] = event
+                new_tile.events[event.entity_id] = event
 
             # Handle object actions (interactions with objects)
             if agent.working_memory.action and agent.working_memory.action.object_action:
@@ -106,7 +114,7 @@ class SimulationEngine:
                     if object_action.address in self.maze.address_tiles:
                         # Note: accessing [0] might be risky if multiple tiles, but follows original logic
                         target_tile = self.maze.address_tiles[object_action.address][0]
-                        target_tile.events[object_event.subject] = object_event
+                        target_tile.events[object_event.entity_id] = object_event
                     else:
                         print(f"WARNING: {object_action.address} not in maze")
 
@@ -150,11 +158,12 @@ class SimulationEngine:
 
             try:
                 for event in tile.events.values():
-                    # Avoid duplicates
-                    if event.spo_summary not in percept_events_dict:
+                    # Avoid duplicates using the new signature
+                    event_sig = (event.entity_id, getattr(event, 'description', ''))
+                    if event_sig not in percept_events_dict:
                         percept_events_list.append((dist, event))
-                        percept_events_dict[event.spo_summary] = event
-            except Exception as e:
+                        percept_events_dict[event_sig] = event
+            except AttributeError as e:
                 print(f"Error reading events from tile: {e}")
 
         # Sort by distance

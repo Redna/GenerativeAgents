@@ -105,6 +105,22 @@ class UnifiedDayPlanSignature(dspy.Signature):
     relevant_memories: str = dspy.InputField(desc="Key memories relevant for today's planning.", default="")
     day_plan: UnifiedDayPlan = dspy.OutputField(desc="Complete structured day plan.")
 
+class ReplanResult(BaseModel):
+    should_replan: bool = Field(description="True if the schedule must change due to the event, False otherwise.")
+    new_hourly_slots: list[UnifiedDayScheduleItem] = Field(
+        description="If should_replan is True, provide the updated hourly activities for the REST of the day. If False, leave empty.",
+        default_factory=list
+    )
+
+class ReplanEvaluatorSignature(dspy.Signature):
+    """Evaluate if a new high-poignancy event requires the agent to change their current daily schedule. If yes, generate the updated remaining hours of the day."""
+    name: str = dspy.InputField(desc="Agent name.")
+    identity: str = dspy.InputField(desc="Agent identity and backstory.")
+    current_time: str = dspy.InputField(desc="Current time of day.")
+    current_schedule: str = dspy.InputField(desc="The agent's current plan for the rest of today.")
+    interrupting_event: str = dspy.InputField(desc="The highly poignant event that just occurred.")
+    replan: ReplanResult = dspy.OutputField(desc="Decision on whether to replan, and the new schedule if applicable.")
+
 
 class UnifiedDayPlanner(dspy.Module):
     """
@@ -140,17 +156,73 @@ class UnifiedDayPlanner(dspy.Module):
             # Build 24-slot schedule; fill pre-wakeup with "Sleeping"
             hourly_schedule: List[Tuple[str, int]] = []
             slot_map: Dict[int, str] = {item.hour: item.activity for item in plan.hourly_slots}
+            last_activity = "Idle"
+            
             for h in range(24):
                 if h < plan.wake_up_hour:
                     hourly_schedule.append(("Sleeping", 60))
                 else:
-                    hourly_schedule.append((slot_map.get(h, "Idle"), 60))
+                    # Forward-fill: if an explicit hour slot is missing, continue previous activity
+                    current_activity = slot_map.get(h, last_activity)
+                    hourly_schedule.append((current_activity, 60))
+                    last_activity = current_activity
 
             return plan.plan_narrative, hourly_schedule
         except Exception:
             # Graceful fallback: basic sleeping → working day
             fallback = [("Sleeping", 60)] * 7 + [("Morning routine", 60), ("Work", 60) * 8] + [("Evening routine", 60)] * 3 + [("Sleeping", 60)] * 5  # noqa: E501
             return "", [("Sleeping", 60)] * 7 + [("Morning routine", 60)] + [("Work", 60)] * 8 + [("Evening", 60)] * 3 + [("Sleeping", 60)] * 5
+
+class ReplanEvaluator(dspy.Module):
+    """
+    Evaluates if an agent should dynamically alter their schedule mid-day due to a sharp interruption.
+    Uses thinking_lm to reason about the schedule change before outputting.
+    """
+    def __init__(self):
+        super().__init__()
+        self.predict = dspy.Predict(ReplanEvaluatorSignature)
+
+    def forward(
+        self,
+        name: str,
+        identity: str,
+        current_time: str,
+        current_schedule: str,
+        interrupting_event: str
+    ) -> Tuple[bool, List[Tuple[str, int]]]:
+        try:
+            with dspy.context(lm=thinking_lm) if thinking_lm else dspy.context():
+                result = self.predict(
+                    name=name,
+                    identity=identity,
+                    current_time=current_time,
+                    current_schedule=current_schedule,
+                    interrupting_event=interrupting_event,
+                )
+            
+            replan_data = result.replan
+            if not replan_data.should_replan or not replan_data.new_hourly_slots:
+                return False, []
+                
+            # Convert new slots to (activity, 60) tuples
+            new_schedule: List[Tuple[str, int]] = []
+            slot_map: Dict[int, str] = {item.hour: item.activity for item in replan_data.new_hourly_slots}
+            
+            # Forward-fill specifically the remaining hours outputted by the LLM
+            if not slot_map:
+                return False, []
+                
+            start_hour = min(slot_map.keys())
+            last_activity = slot_map[start_hour]
+            
+            for h in range(start_hour, 24):
+                current_activity = slot_map.get(h, last_activity)
+                new_schedule.append((current_activity, 60))
+                last_activity = current_activity
+                
+            return True, new_schedule
+        except Exception as e:
+            return False, []
 
 
 # --- Legacy Modules (kept for backward compatibility / fallback) ---

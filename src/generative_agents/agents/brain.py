@@ -8,7 +8,7 @@ from generative_agents.persistence.database import MemoryEntry
 
 from generative_agents.agents.layers.perception import SensoryProcessingLayer
 from generative_agents.agents.layers.retrieval import AssociativeMemoryLayer
-from generative_agents.agents.layers.planning import PlanningLayer
+from generative_agents.agents.layers.planning import PlanningLayer, ReplanningLayer
 from generative_agents.agents.layers.actor import ActorLayer
 
 
@@ -26,6 +26,7 @@ class AgentBrain(dspy.Module):
         self.perception = SensoryProcessingLayer()
         self.retrieval = AssociativeMemoryLayer()
         self.planning = PlanningLayer()
+        self.replanning = ReplanningLayer()
         self.actor = ActorLayer()
 
     def forward(
@@ -62,6 +63,15 @@ class AgentBrain(dspy.Module):
 
         # 3. Planning — unified day plan if it's a new day (1 LLM call, else 0)
         plan_signal = self.planning(state)
+
+        # 3.5 Replanning — evaluate if any recent event breaks the schedule (1 LLM call if triggered)
+        replan_event = next((e for e in state.recent_events if getattr(e, 'poignancy', 0) >= 0.8), None)
+        if replan_event:
+            replan_signal = self.replanning(state, replan_event)
+            if replan_signal.updated_daily_schedule:
+                # Override the schedule so the Actor uses it immediately
+                plan_signal.updated_daily_schedule = replan_signal.updated_daily_schedule
+                plan_signal.new_memories.extend(replan_signal.new_memories)
 
         # 4. Actor — single ReActActor tool-choice call (1 LLM call)
         action_signal = self.actor(state, plan_signal, maze=maze)

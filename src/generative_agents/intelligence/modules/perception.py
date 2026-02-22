@@ -34,6 +34,7 @@ _TYPE_BASE: dict[str, float] = {
 _HIGH_SIGNAL = [
     "died", "death", "killed", "accident", "emergency", "fired", "married",
     "promoted", "argument", "fight", "crisis", "arrest", "diagnosed",
+    "invited", "meet", "plan", "canceled", "changed", "cancelled"
 ]
 _LOW_SIGNAL = [
     "sleeping", "idle", "waiting", "eating", "walking",
@@ -48,7 +49,7 @@ def heuristic_poignance(event_type: str, description: str) -> float:
     base = _TYPE_BASE.get(event_type.lower(), 0.4)
     text = description.lower()
 
-    boost = sum(0.08 for kw in _HIGH_SIGNAL if kw in text)
+    boost = sum(0.15 for kw in _HIGH_SIGNAL if kw in text)
     penalty = sum(0.06 for kw in _LOW_SIGNAL if kw in text)
 
     score = base + boost - penalty
@@ -87,52 +88,3 @@ def heuristic_emoji(action_description: str) -> str:
     return "⚡"
 
 
-# ---------------------------------------------------------------------------
-# EventParser — kept: triple extraction used in ActorLayer dispatch (1 LLM call)
-# ---------------------------------------------------------------------------
-
-class ActionEventTripleSignature(dspy.Signature):
-    """Given a sentence, identify the subject, predicate, and object."""
-    name: str = dspy.InputField(desc="Name of the agent.")
-    action_description: str = dspy.InputField(desc="Description of action.")
-    subject: str = dspy.OutputField(desc="The subject (usually the agent name).")
-    predicate: str = dspy.OutputField(desc="The action being performed.")
-    object: str = dspy.OutputField(desc="The entity the action is performed on.")
-
-
-class ObjectEventSignature(dspy.Signature):
-    """Determine the new state of an object being used by an agent."""
-    name: str = dspy.InputField(desc="Name of the agent.")
-    object_name: str = dspy.InputField(desc="Name of the object.")
-    action_description: str = dspy.InputField(desc="Description of the action.")
-    state: str = dspy.OutputField(desc="The new state of the object.")
-
-
-class EventParser(dspy.Module):
-    """
-    Extracts event triples (subject, predicate, object) from action strings.
-    Used in ActorLayer._dispatch_* — 1 LLM call per dispatched action.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.triple = dspy.Predict(ActionEventTripleSignature)
-        self.object_state = dspy.Predict(ObjectEventSignature)
-
-    def get_triple(self, name: str, action_description: str, address: str = None) -> Tuple[str, str, str]:
-        try:
-            response = self.triple(name=name, action_description=action_description)
-            subject = address if address else response.subject
-            return (subject, response.predicate, response.object)
-        except Exception:
-            return (address if address else name, "is", "doing something")
-
-    def get_object_state(self, name: str, object_name: str, object_address: str,
-                         action_description: str) -> Tuple[str, Tuple[str, str, str]]:
-        try:
-            response = self.object_state(
-                name=name, object_name=object_name, action_description=action_description
-            )
-            return f"{object_name} is {response.state}", (object_address, "is", response.state)
-        except Exception:
-            return f"{object_name} is in use", (object_address, "is", "in use")

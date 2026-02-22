@@ -20,9 +20,7 @@ class EventType(Enum):
 @dataclass
 class Event:
     depth: int
-    subject: str
-    predicate: str
-    object_: str
+    entity_id: str
     description: str
     filling: List[ConversationFilling | str] = field(default_factory=list)
     hash_key: str = None
@@ -32,12 +30,8 @@ class Event:
         if not self.hash_key:
             tile_hash = "" if not self.tile else hash(self.tile)
             self.hash_key = hash_string(
-                f"{self.filling} {self.description} {self.spo_summary} {tile_hash}"
+                f"{self.filling} {self.description} {tile_hash}"
             )
-
-    @property
-    def spo_summary(self):
-        return (self.subject, self.predicate, self.object_)
 
 
 @dataclass
@@ -55,9 +49,7 @@ class PerceivedEvent(Event):
         return cls(
             id=entry.id,
             depth=entry.depth,
-            subject=entry.subject,
-            predicate=entry.predicate,
-            object_=entry.object_,
+            entity_id=entry.entity_id,
             description=entry.content,
             event_type=EventType(entry.memory_type),
             poignancy=entry.poignancy,
@@ -80,9 +72,7 @@ class PerceivedEvent(Event):
             created_at=self.created,
             last_accessed_at=self.last_accessed,
             expiration_date=self.expiration, # Warning: Pydantic field name might differ if not careful
-            subject=self.subject,
-            predicate=self.predicate,
-            object_=self.object_,
+            entity_id=self.entity_id,
             poignancy=self.poignancy,
             keywords=self.keywords,
             filling=self.filling,
@@ -114,6 +104,6 @@ class Action:
             duration=0,
             emoji="⏳",
             event=Event(
-                depth=0, subject="", predicate="", object_="", description="idle"
+                depth=0, entity_id="idle", description="idle"
             ),
         )

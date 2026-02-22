@@ -14,7 +14,7 @@ from generative_agents.common.logging import log_agent
 from generative_agents.simulation.maze import Maze
 
 from generative_agents.intelligence.modules.actor_react import ReActActor, ToolCall
-from generative_agents.intelligence.modules.perception import EventParser, heuristic_emoji
+from generative_agents.intelligence.modules.perception import heuristic_emoji
 
 # How poignant an event must be to interrupt a running action
 INTERRUPT_POIGNANCY_THRESHOLD = 0.7
@@ -29,8 +29,8 @@ class ActorLayer(dspy.Module):
 
     def __init__(self):
         super().__init__()
+        super().__init__()
         self.react_actor = ReActActor()
-        self.event_parser = EventParser()
 
     # ------------------------------------------------------------------
     # Main forward pass — ONE LLM call
@@ -80,31 +80,41 @@ class ActorLayer(dspy.Module):
         elif t == "update_action":
             return self._dispatch_update_action(state, args)
         else:  # "wait"
-            # Wander toward current schedule location instead of standing still
-            return self._dispatch_move(state, {"destination": current_plan}, current_plan, maze)
+            # Stay in place and continue current scheduled activity
+            return self._dispatch_update_action(state, {"activity": current_plan})
 
     def _dispatch_move(self, state: AgentState, args: dict, fallback_plan: str, maze: Maze = None) -> ActionSignal:
-        destination = args.get("destination", fallback_plan) or fallback_plan
+        destination = args.get("action_description", fallback_plan) or fallback_plan
 
         # Resolve natural-language destination to a valid maze address
         resolved_address = self._resolve_address(destination, maze)
         log_agent(state.name, f"Resolved '{destination}' → '{resolved_address}'", "DEBUG")
 
-        subject, predicate, object_ = self.event_parser.get_triple(state.name, destination)
         action = Action(
             address=resolved_address,
             start_time=state.time.time,
             duration=DEFAULT_ACTION_DURATION,
             emoji=heuristic_emoji(destination),
             event=Event(
-                subject=subject,
-                predicate=predicate,
-                object_=object_,
+                entity_id=state.name,
                 description=destination,
                 tile=state.current_tile,
                 depth=0,
             ),
         )
+
+        # Detect if destination is a Game Object (World:Sector:Arena:Object format)
+        if resolved_address and resolved_address.count(":") >= 3:
+            object_name = resolved_address.split(":")[-1]
+            action.object_action = ObjectAction(
+                address=resolved_address,
+                emoji="⚡",
+                event=Event(
+                    entity_id=object_name,
+                    description=f"is in use by {state.name}",
+                    depth=0
+                )
+            )
         return ActionSignal(next_action=action)
 
     def _dispatch_speak(self, state: AgentState, args: dict) -> ActionSignal:
@@ -114,16 +124,13 @@ class ActorLayer(dspy.Module):
         if not target or state.chatting_with or state.chatting_with_buffer.get(target, 0) > 0:
             return ActionSignal()
 
-        subject, predicate, object_ = self.event_parser.get_triple(state.name, f"chat with {target}")
         chat_action = Action(
             address=f"<persona> {target}",
             start_time=state.time.time,
             duration=10,
             emoji="💬",
             event=Event(
-                subject=subject,
-                predicate=predicate,
-                object_=object_,
+                entity_id=state.name,
                 description=f"chatting with {target}",
                 tile=state.current_tile,
                 depth=0,
@@ -138,9 +145,7 @@ class ActorLayer(dspy.Module):
             poignancy=0.6,
             depth=1,
             description=f"{state.name} said to {target}: {line}",
-            subject=state.name,
-            predicate="said",
-            object_=target,
+            entity_id=state.name,
             created=state.time.time,
             expiration=state.time.time + datetime.timedelta(days=7),
             tile=state.current_tile,
@@ -150,16 +155,13 @@ class ActorLayer(dspy.Module):
 
     def _dispatch_update_action(self, state: AgentState, args: dict) -> ActionSignal:
         activity = args.get("activity", "idle")
-        subject, predicate, object_ = self.event_parser.get_triple(state.name, activity)
         action = Action(
             address="<current>",
             start_time=state.time.time,
             duration=DEFAULT_ACTION_DURATION,
             emoji=heuristic_emoji(activity),
             event=Event(
-                subject=subject,
-                predicate=predicate,
-                object_=object_,
+                entity_id=state.name,
                 description=activity,
                 tile=state.current_tile,
                 depth=0,

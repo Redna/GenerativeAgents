@@ -36,9 +36,7 @@ class MemoryEntry(BaseModel):
     # Metadata
     memory_type: str
     depth: int = 1
-    subject: str = ""
-    predicate: str = ""
-    object_: str = ""
+    entity_id: str = ""
     # Optional
     poignancy: float = 0.5
     keywords: List[str] = []
@@ -99,7 +97,7 @@ def get_active_chat(agent_name: str, with_agent: str) -> Optional[MemoryEntry]:
     repo = get_repository(agent_name)
     results = repo.retrieve(f"chatting with {with_agent}", limit=20)
     for d in results:
-        if d.get("memory_type") == MemoryType.CHAT.value and d.get("object_") == with_agent:
+        if d.get("memory_type") == MemoryType.CHAT.value and with_agent in d.get("content", ""):
             filling = d.get("filling", [])
             if filling:
                 last = filling[-1]
@@ -115,7 +113,7 @@ def get_last_chat(agent_name: str, with_agent: str) -> Optional[MemoryEntry]:
     repo = get_repository(agent_name)
     results = repo.retrieve(f"chatting with {with_agent}", limit=20)
     for d in results:
-        if d.get("memory_type") == MemoryType.CHAT.value and d.get("object_") == with_agent:
+        if d.get("memory_type") == MemoryType.CHAT.value and with_agent in d.get("content", ""):
             return _to_entry(d)
     return None
 
