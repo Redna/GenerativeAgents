@@ -73,13 +73,18 @@ class MemoryConsolidator(dspy.Module):
             
             expiration = state.time.time + datetime.timedelta(days=30)
             
-            # Rate poignance
-            poignancy = heuristic_poignance(EventType.THOUGHT.value, thought)
+            # Heuristic check for causal/rule-based language
+            causal_keywords = ["because", "when", "causes", "dangerous", "always", "never", "must"]
+            is_rule = any(kw in thought.lower() for kw in causal_keywords)
+            
+            # Standard poignancy for abstract thoughts, heavily boosted for actionable rules
+            base_poignancy = heuristic_poignance(EventType.THOUGHT.value, thought)
+            final_poignancy = min(0.95, base_poignancy + 0.3) if is_rule else base_poignancy
             
             thought_event = PerceivedEvent(
                 event_type=EventType.THOUGHT,
-                poignancy=poignancy, 
-                depth=1,
+                poignancy=final_poignancy, 
+                depth=2, # Mark as deep insight
                 description=thought,
                 entity_id=state.name,
                 created=state.time.time,

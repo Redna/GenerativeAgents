@@ -7,6 +7,7 @@ from generative_agents.simulation.time import SimulationTime, DayType
 
 
 from generative_agents.agents.memory.working import WorkingMemory
+from generative_agents.agents.memory.spatial import WorldMap
 
 @dataclass
 class AgentState:
@@ -17,6 +18,7 @@ class AgentState:
     working_memory: WorkingMemory
     daytype: DayType
     recent_events: List[PerceivedEvent] = field(default_factory=list)
+    map: Optional[WorldMap] = None
 
     @property
     def name(self) -> str:

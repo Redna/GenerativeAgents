@@ -142,7 +142,8 @@ class Agent:
         state = AgentState(
             working_memory=self.working_memory,
             daytype=daytype,
-            recent_events=percept.events
+            recent_events=percept.events,
+            map=self.map
         )
 
         # 3. Brain Forward Pass (Reasoning)

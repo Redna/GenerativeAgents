@@ -129,5 +129,22 @@ class WorldMap:
     def __deepcopy__(self, memo):
         return WorldMap(tree=self.tree.copy())
 
+    @property
+    def known_addresses(self) -> set[str]:
+        """Returns a set of all unique tile addresses the agent has physically perceived."""
+        addresses = set()
+        for world_name, world_memory in self.tree.items():
+            addresses.add(world_name)
+            if hasattr(world_memory, 'sectors'):
+                for sector_name, sector_memory in world_memory.sectors.items():
+                    addresses.add(f"{world_name}:{sector_name}")
+                    if hasattr(sector_memory, 'arenas'):
+                        for arena_name, arena_memory in sector_memory.arenas.items():
+                            addresses.add(f"{world_name}:{sector_name}:{arena_name}")
+                            if hasattr(arena_memory, 'game_objects'):
+                                for object_name in arena_memory.game_objects.keys():
+                                    addresses.add(f"{world_name}:{sector_name}:{arena_name}:{object_name}")
+        return addresses
+
 # Alias for backward compatibility during refactor
 MemoryTree = WorldMap

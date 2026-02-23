@@ -12,6 +12,12 @@ from generative_agents.common.models import AgentDTO, RoundUpdateDTO
 from generative_agents.common.percept import Percept
 from generative_agents.simulation.maze import Level, Maze, Tile
 from generative_agents.simulation.time import SimulationTime
+from generative_agents.common.events import Action, Event, EventType
+from generative_agents.common.logging import log_agent
+from generative_agents.intelligence.modules.environment import WorldPhysicsSimulator
+from generative_agents.simulation.dialogue_coordinator import DialogueCoordinator
+import asyncio
+import random
 
 
 class SimulationEngine:
@@ -20,6 +26,8 @@ class SimulationEngine:
         self.agents = {agent.name: agent for agent in agents}
         self.time = time
         self.round_updates: List[RoundUpdateDTO] = []
+        self.physics_simulator = WorldPhysicsSimulator()
+        self.dialogue_coordinator = DialogueCoordinator()
 
     def step(self):
         """
@@ -52,13 +60,16 @@ class SimulationEngine:
                 except Exception as exc:
                     print(f"Agent {agent_name} generated an exception during run_step: {exc}")
 
-        # 3. Update the environment (Tile events) sequentially to avoid race conditions
+        # 3. Intercept and resolve conversations without blocking
+        self._process_dialogues()
+
+        # 4. Update the environment (Tile events) sequentially to avoid race conditions
         self._update_map_events(old_tiles)
 
-        # 4. Record State for API
+        # 5. Record State for API
         self._record_round_update()
 
-        # 5. Advance simulation clock
+        # 6. Advance simulation clock
         self.time.tick()
 
     def _record_round_update(self):
@@ -77,6 +88,61 @@ class SimulationEngine:
         print(f"Spawning agent {data.name} at {data.movement.col}, {data.movement.row}")
         new_agent = Agent.from_dto(data, self.maze, self.time)
         self.agents[new_agent.name] = new_agent
+
+    def _process_dialogues(self):
+        """Detects chat initiations, locks states, updates broadcasts, and fires background tasks."""
+        for initiator_name, initiator in self.agents.items():
+            if initiator.working_memory.chatting_with:
+                continue
+
+            action = initiator.working_memory.action
+            if action and action.address and action.address.startswith("<persona>"):
+                target_name = action.address.split("<persona>")[-1].strip()
+                
+                if target_name in self.agents:
+                    target_agent = self.agents[target_name]
+                    
+                    if target_agent.working_memory.chatting_with:
+                        continue 
+                        
+                    # A. Lock internal states
+                    initiator.working_memory.chatting_with = target_name
+                    target_agent.working_memory.chatting_with = initiator_name
+                    
+                    # B. Update Initiator's broadcast event so they stay in place
+                    initiator.working_memory.action.address = "<current>"
+                    initiator.working_memory.action.emoji = "💬"
+                    initiator.working_memory.action.event.description = f"chatting with {target_name}"
+
+                    # C. Overwrite the Target's current action so bystanders see them talking
+                    target_agent.working_memory.action_path_set = False 
+                    target_agent.working_memory.planned_path = []
+                    target_agent.activity = f"chatting with {initiator_name}"
+                    target_agent.working_memory.action = Action(
+                        address="<current>",
+                        start_time=self.time.time,
+                        duration=10, 
+                        emoji="💬",
+                        event=Event(
+                            entity_id=target_name,
+                            description=f"chatting with {initiator_name}",
+                            tile=target_agent.working_memory.tile,
+                            depth=0
+                        )
+                    )
+                    
+                    # D. Extract opening line and fire the background task
+                    opening_line = "Hello!"
+                    for mem in reversed(initiator.working_memory.recent_events): 
+                        if target_name in mem.description and "said to" in mem.description:
+                            opening_line = mem.description.split(":")[-1].strip()
+                            break
+                    
+                    asyncio.create_task(
+                        self.dialogue_coordinator.run_conversation_async(
+                            initiator, target_agent, opening_line
+                        )
+                    )
 
     def _update_map_events(self, old_tiles: Dict[str, Tile]):
         """
@@ -114,7 +180,34 @@ class SimulationEngine:
                     if object_action.address in self.maze.address_tiles:
                         # Note: accessing [0] might be risky if multiple tiles, but follows original logic
                         target_tile = self.maze.address_tiles[object_action.address][0]
+                        
+                        # 1. Place the standard interaction event on the tile
                         target_tile.events[object_event.entity_id] = object_event
+                        
+                        # 2. Generate dynamic environmental feedback (with a probability check to avoid API spam)
+                        if random.random() < 0.2:
+                            action_desc = agent.working_memory.action.event.description
+                            object_name = object_event.entity_id
+                            
+                            consequence_text = self.physics_simulator(
+                                agent_name=agent.name, 
+                                action_description=action_desc, 
+                                object_name=object_name
+                            )
+                            
+                            # 3. Inject the consequence as a new event on the tile
+                            if consequence_text:
+                                consequence_event = Event(
+                                    entity_id=f"Env_{object_name}",
+                                    description=consequence_text,
+                                    tile=target_tile,
+                                    depth=0,
+                                )
+                                
+                                # The agent will perceive this during the NEXT tick's _calculate_percepts
+                                target_tile.events[consequence_event.entity_id] = consequence_event
+                                log_agent("Environment", f"{consequence_text} (Triggered by {agent.name} interacting with {object_name})", "INFO")
+
                     else:
                         print(f"WARNING: {object_action.address} not in maze")
 

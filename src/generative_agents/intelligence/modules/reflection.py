@@ -12,10 +12,13 @@ class ReflectionPointsSignature(dspy.Signature):
     questions: list[str] = dspy.OutputField(desc="List of salient questions.")
 
 class EvidenceAndInsightsSignature(dspy.Signature):
-    """Infer high-level standalone insights from statements."""
-    statements: str = dspy.InputField(desc="List of statements.")
+    """
+    Infer high-level standalone insights AND causal environmental rules from the statements.
+    Look specifically for cause-and-effect relationships (e.g., 'The stove is dangerous when left on', 'Hobbs Cafe is closed at night').
+    """
+    statements: str = dspy.InputField(desc="List of recent memory statements.")
     number_of_insights: int = dspy.InputField(desc="Number of insights to generate.")
-    insights: list[str] = dspy.OutputField(desc="List of insights inferred from the statements.")
+    insights: list[str] = dspy.OutputField(desc="List of insights and environmental rules inferred from the statements.")
 
 class IdentitySignature(dspy.Signature):
     """Write a concise description about the agent's personality, family situation and characteristics."""

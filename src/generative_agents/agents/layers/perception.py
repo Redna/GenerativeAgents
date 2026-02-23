@@ -22,11 +22,27 @@ class SensoryProcessingLayer(dspy.Module):
             type_ = EventType.EVENT
             
             # Identify Chat events
-            if event.entity_id == state.name and "chat with" in event.description:
+            if event.entity_id == state.name and "chatting with" in event.description:
                 type_ = EventType.CHAT
 
+            # ---> NEW: Identify Overheard Conversations (Someone else is talking) <---
+            elif ", saying: '" in event.description:
+                speaker_name = event.entity_id
+                # Extract listener name from the string "chatting with [Name], saying:"
+                try:
+                    listener_name = event.description.split("chatting with ")[1].split(",")[0]
+                    # If the perceiving agent is NOT the speaker and NOT the listener, they are a bystander
+                    if state.name != speaker_name and state.name != listener_name:
+                        type_ = EventType.OBSERVATION
+                        # Restructure the description so the bystander remembers it in the 3rd person
+                        utterance = event.description.split(", saying: '")[1].rstrip("'")
+                        event.description = f"overheard {speaker_name} say to {listener_name}: '{utterance}'"
+                        log_agent(state.name, f"Overheard snippet: {utterance}", "DEBUG")
+                except IndexError:
+                     pass
+
             # Format description if address is entity_id
-            if type_ == EventType.EVENT and ":" in event.entity_id:
+            elif type_ == EventType.EVENT and ":" in event.entity_id:
                 event.description = f"{event.entity_id.split(':')[-1]} is {event.description}"
 
             # Calculate Poignancy

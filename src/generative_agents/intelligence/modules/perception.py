@@ -34,7 +34,8 @@ _TYPE_BASE: dict[str, float] = {
 _HIGH_SIGNAL = [
     "died", "death", "killed", "accident", "emergency", "fired", "married",
     "promoted", "argument", "fight", "crisis", "arrest", "diagnosed",
-    "invited", "meet", "plan", "canceled", "changed", "cancelled"
+    "invited", "meet", "plan", "canceled", "changed", "cancelled",
+    "secret", "hate", "love", "stole", "lied", "overheard"
 ]
 _LOW_SIGNAL = [
     "sleeping", "idle", "waiting", "eating", "walking",
@@ -51,6 +52,10 @@ def heuristic_poignance(event_type: str, description: str) -> float:
 
     boost = sum(0.15 for kw in _HIGH_SIGNAL if kw in text)
     penalty = sum(0.06 for kw in _LOW_SIGNAL if kw in text)
+
+    # Give a slight baseline boost to overheard dialogue so it isn't easily forgotten
+    if "overheard" in text and "say to" in text:
+        boost += 0.15 
 
     score = base + boost - penalty
     return round(max(0.0, min(1.0, score)), 3)

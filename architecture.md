@@ -61,6 +61,16 @@ agent.run_step(percept, maze, agents, time)
   6. [conditional] MemoryConsolidator     → System 2 reflection (poignancy-triggered)
 ```
 
+### World Engine (Environmental Physics)
+As of Phase 6, the `SimulationEngine._update_map_events` loop includes an asynchronous probability check against the `WorldPhysicsSimulator` (a fast LLM).
+- **Behavior**: Evaluates open-ended semantic interactions (e.g. "fixing coffee machine") and injects dynamic environmental consequences.
+
+### Non-Blocking Dialogue & Overhearing
+Also in Phase 6, multi-turn dialogues are executed asynchronously so they do not block the deterministic `SimulationEngine.step()` tick loop.
+- **The Coordinator**: When an agent invokes the `speak_to` action tool, the engine intercepts the request and spins up `DialogueCoordinator.run_conversation_async(...)` in a background thread via `asyncio.to_thread`.
+- **Physical Broadcasting**: While the background chat generates utterances, the `DialogueCoordinator` mutates the physical `Action.event.description` of the active speaker (e.g., `"chatting with Maria, saying: 'Hello!'"`). This text is immediately synced to the environment `Tile`.
+- **The Overhearing Mechanic**: Bystanders running their concurrent `SensoryProcessingLayer` perception sweeps pick up these tile events. If they are not the active speaker or listener, the event is reformatted from a Chat into a 3rd-person `EventType.OBSERVATION` (`"overheard X say to Y: '...'"`). The `heuristic_poignance` rater gives these overheard events an automatic `+0.15` boost to ensure secrets are deeply remembered and subjected to System 2 reflection.
+
 ---
 
 ## AgentBrain: 4-Layer Forward Pass

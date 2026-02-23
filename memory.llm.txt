@@ -1,306 +1,43 @@
-# GENERATIVE AGENTS SANDBOX - HANDOVER MEMORY
+# Memory Storage & Retrieval System (LLM Guidelines)
 
-This file contains critical context, architectural decisions, and operational knowledge for any agent picking up development on the Generative Agents Sandbox.
+## Core Philosophy
+The Generative Agents memory system is built around a single unifying principle: **Vectors AND graph edges live in the same Qdrant store.**
+There are no external JSON files mapping relationships, and no numpy arrays floating around. All memory interactions flow through a tightly controlled schema.
 
-## 1. Project Overview & Current State
-**Goal**: Create a standalone sandbox environment to visualize generative agents in a 2D world (Phaser.js) driven by a Python backend.
-**Current Status**: 
--   **Frontend**: Fully functional Phaser 3 UI with split-pane layout (Map Left, Sidebar Right).
--   **Backend**: Mock Python server (`mock_server.py`) simulating agent data via Socket.IO.
--   **Environment**: Uses `.venv` virtual environment for Python dependencies.
--   **Integration**: Successful end-to-end communication via local Socket.IO (Port 8000).
+## Database Backend
+- **Repository**: `QdrantMemoryRepository` (`agents/memory/repository.py`)
+- **Backend Type**: Qdrant Vector Database
+- **Embeddings**: `FastBGEEmbedding` model converts text to 384-dimensional vectors.
 
-## 2. Key Architecture & Files
+## Memory Types (EventType)
+Every memory explicitly belongs to one of these types:
+1. `EVENT` - A direct physical action the agent took.
+2. `OBSERVATION` - Something the agent saw someone else do, or an overheard snippet of conversation.
+3. `CHAT` - A direct semantic conversation the agent participated in.
+4. `THOUGHT` - An internally generated reflection, insight, or plan.
 
-### Frontend (`frontend/`)
--   **Framework**: Phaser 3 + TypeScript + Vite.
--   **Entry Point**: `src/scenes/game.ts` (Main Game Loop & Rendering).
--   **UI Logic**: `src/ui.ts` (Sidebar management, DOM manipulation).
--   **Communication**: `src/connector/simulationConnector.ts` (Socket.IO client wrapper).
--   **Data Types**: `src/connector/dtos.ts` (Shared DTOs between FE/BE).
-
-### Backend (`src/generative_agents/`)
--   **Mock Server**: `mock_server.py`
-    -   Uses `python-socketio` and `aiohttp`.
-    -   Simulates game loop and broadcasts state updates (`update` event).
-    -   **Port**: 8000 (Hardcoded). Note: User sometimes refers to 8080, but process runs on 8000.
-
-### Scripts
--   **`run_sandbox.sh`**: Main entry point. Usage: `./run_sandbox.sh mock` (or `real`).
-    -   Handles process management (starts BE & FE).
-    -   **Auto-detects `.venv`**: Prefers `.venv/bin/python` if available.
-
-## 3. Implemented Features (Verified)
-
-### A. Visuals & Map
--   **Map**: 'The Ville' (`the_ville_jan7.json`).
--   **Zoom/Pan**: Mouse wheel zooms, drag pans the camera.
--   **Highlighting**: 
-    -   "FIFA-style" red pulsing circle under selected agent's feet.
-    -   Graphic Logic: `game.ts -> updateHighlight()`. Uses alpha sine wave for pulsing.
-    -   Z-Index: Layered correctly (Ground < Highlight < Agent).
-
-### B. Agent Interaction
--   **Selection**: Clicking agent in sidebar OR map selects them.
--   **Camera Follow**: 
-    -   Camera smoothly tracks selected agent (`camera.startFollow`).
-    -   **Break Follow**: Manual pan (drag) breaks the lock.
--   **Deselection**:
-    -   "Unfocus Camera" button in sidebar.
-    -   Clears highlight, stops camera follow, hides details panel.
-    -   Event: `deselect-agent`.
-
-## 4. Operational Knowledge & Gotchas
-
-### Running the Sandbox
-```bash
-./run_sandbox.sh mock
+## The Qdrant Payload Schema
+When an event is stored, it is embedded and saved with the following rigid payload structure:
+```json
+{
+  "str_id": "uuid-string-here",
+  "content": "The actual memory text (e.g., 'overheard Klaus say to Maria: I love coffee')",
+  "memory_type": "observation",
+  "depth": 1,
+  "created_ts": 1708892345.0,
+  "importance": 0.85,
+  "entity_id": "Giorgio Rossi",
+  "related_events": [{"id": "uuid-of-other-event", "relation": "derived_from"}]
+}
 ```
-*Note: Ensure `.venv` is active or configured. The script handles this, but manual pip installs need `.venv/bin/pip`.*
 
-### Python Dependencies
--   Requires: `python-socketio`, `aiohttp`.
--   Install: `.venv/bin/pip install python-socketio aiohttp`.
+## Insertion Rules
+1. All semantic memories must be converted to `PerceivedEvent` objects before insertion.
+2. `poignancy` (importance) determines how quickly a memory decays and whether it triggers System 2 reflection.
+3. Overheard snippets (`"overheard X say to Y: ..."`) receive an automatic high-signal heuristic boost to ensure they are retained.
 
-### Common Issues
--   **Port Conflicts**: If the server fails to start, check port **8000**.
-    -   Command: `lsof -i :8000` (or sometimes 8080 mixed up by user).
-    -   Kill: `kill -9 <PID>`.
--   **Asset Loading**: If sprites are missing, ensure `frontend/public/assets` matches the `game.ts` loader paths.
--   **Socket Disconnects**: If frontend loops connecting, backend is likely crashed or port blocked.
-
-## 5. Next Steps / Roadmap
--   **Real Backend**: Connect `generative_agents/__main__.py` to the frontend (currently only `mock_server.py` is fully integrated).
--   **Chat & Interaction**: Add ability to "talk" to agents via UI.
--   **Pathfinding Visualization**: Show agent destination/path on map.
-
-## 6. Phase 1: Decouple Perception & Simulation Loop (Feb 2026)
-
-### Objective
-Decouple the agent's internal logic from the simulation loop to allow for cleaner state updates and easier debugging.
-
-### Key Changes
-- **SimulationEngine**: Introduced `src/generative_agents/core/simulation_engine.py` to handle the game loop, state broadcasting, and agent orchestration. It acts as the single source of truth for the world state.
-- **Percept Dataclass**: created `src/generative_agents/core/percept.py` to encapsulate all sensory data (local tiles, nearby agents) passed to an agent.
-- **Agent Refactor**:
-    -   Added `agent.perceive(percept)`: Agents now receive a `Percept` object instead of querying the global `Maze` directly.
-    -   Added `agent.run_step()`: Replaces the ambiguous `update()` method. This method executes the agent's cognitive cycle (Perceive -> Plan -> Act) in a linear, predictable manner.
-    -   Removed direct `Maze` dependency from the `Agent` class, improving testability.
-
-## 7. Phase 2: Remove LangGraph & Architecture Simplification (Feb 2026)
-
-### Objective
-Simplify the agent's execution flow by removing the complex graph-based orchestration (`langgraph`) in favor of standard Python control flow.
-
-### Key Changes
-- **Removed LangGraph**: Deleted all `langgraph` dependencies and graph definitions. The execution flow is now imperative and contained within `Agent.run_step()`.
-- **Deleted AgentRunner**: Removed the `AgentRunner` and `executor` abstractions which added unnecessary complexity for a single-agent-per-process model (or simple loop). The `SimulationEngine` now calls `agent.run_step()` directly.
-- **Cognitive Components**: Refactored `perception`, `plan`, `reflection`, etc. to be standalone functions or classes that are called sequentially by the agent, rather than being nodes in a graph.
-
-## 8. Phase 3: DSPy Integration (Feb 16, 2026)
-
-### Key Achievements
-- **DSPy 3.1.3 Integration**: Successfully configured the backend to use DSPy for all LLM interactions.
-- **Local LLM**: Configured to use **Ollama** with `qwen2.5:4b` model (running locally on port 11434) via `dspy.LM`.
-- **Pipeline Migration**: Migrated **24** conversational pipelines from the legacy `grammar_llm_pipeline` (which used Groq/Instructor) to `dspy.ChainOfThought` with strictly typed Signatures.
-    - Examples: `daily_plan`, `decide_to_talk`, `action_location_*`, `identity`, etc.
-- **Legacy Cleanup**: Removed `grammar_llm_pipeline.py` and its dependencies (`groq`, `instructor`).
-- **Testing**: Updated `tests/test_pipelines_dspy.py` to fully test all migrated pipelines using `unittest.mock.MagicMock` to simulate LLM responses without network calls.
-
-### Architecture Update
-- **Config**: `src/generative_agents/core/dspy_config.py` handles DSPy setup.
-- **Startup**: `src/generative_agents/__main__.py` initializes the DSPy configuration on launch.
-- **Signatures**: Each pipeline now uses a dedicated `dspy.Signature` class (e.g., `DecideToTalkSignature`) for type-safe inputs/outputs.
-
-### Next Steps / Hints
-1.  **Simulation Verification**: Run the full simulation (`./run_sandbox.sh`) and observe agent behavior. Local LLMs may have higher latency or different "personality" quirks than cloud models.
-2.  **Prompt Tuning**: If agents behave erratically, inspect the DSPy Signatures and consider adding `dspy.Teleprompter` (optimizers) to automatically tune prompts.
-3.  **Performance**: Monitor the performance impact of the local LLM. If too slow, consider:
-    -   Using a smaller model (e.g., `qwen2.5:1.5b` or `llama3.2:3b`).
-    -   Moving to a hosted LLM provider if local compute is insufficient.
-4.  **Memory Management**: DSPy traces can grow; ensure extensive runs don't consume excessive memory if compiling/optimizing.
-
-## 9. Other Recent Updates & Fixes (Feb 16, 2026)
-
-### Map Update
-- **Switched to "The Ville"**: The codebase now uses `assets/matrix/the_ville` instead of `half_ville`.
-- **Maze Logic**: `src/generative_agents/simulation/maze.py` `BASE_PATH` updated.
-
-### Pathfinding Fixes (Critical)
-- **Heuristic**: Fixed A* heuristic typo (`start.y - start.y` -> `start.y - end.y`).
-- **Hashing**: Fixed `Tile.__hash__` to call `self.get_unique_name()`.
-- **Enum**: Fixed `Tile.get_path` enum comparison (`level == Level.WORLD`).
-- **Return Types**: `_find_path` now correctly returns `List[Tile]` compatible with `SimplePathFinder`.
-
-### Mock Server Upgrade
-- **Integrated Pathfinding**: `mock_server.py` now instantiates `Maze` and uses `maze.find_path()` for agent movement.
-- **Reachable Targets**: Agents (Klaus, Maria) now navigate to verified reachable locations (Library, Park) instead of mock coordinates.
-- **Dependencies**: `python-socketio` (replacing `socketio`), `aiohttp`, `pathfinding`, and `colorama` are required and added to `pyproject.toml`.
-
----
-**Last Updated**: 2026-02-16
-**Author**: Antigravity (Agent)
-
-## 10. Phase 4: Module Refactoring (Feb 17, 2026)
-
-### Objective
-Improve codebase structure and organization by grouping related components into logical directories.
-
-### Key Changes
-- **Directory Restructure**:
-    - `core/agent.py` -> `agents/agent.py`
-    - `core/memory/` -> `agents/memory/`
-    - `core/cognitive_components/` -> `agents/components/`
-    - `core/simulation_engine.py` -> `simulation/engine.py`
-    - `conversational/pipelines/` -> `intelligence/`
-    - `mock_server.py` -> `server/mock.py`
-    - `communication/` -> `server/` (api.py) & `common/` (models.py)
-    - `core/` files (events, percept, logging) -> `common/`
-- **Import Updates**: All imports updated to reflect new structure.
-- **Fixes**:
-    - Resolved `global_state` import circulars (`from generative_agents.common import global_state`).
-    - Fixed asset path resolution in `common/utils.py` (added parent directory traversal).
-
-### Verification
-- **Run Mock Server**: `uv run python -m generative_agents.server.mock`
-- **Status**: Verified working with agent pathfinding and movement.
-
-## 11. Phase 5: Intelligence & Brain Refactor (Feb 18, 2026)
-
-### Objective
-Transition the agent's cognitive architecture to a modular, optimizable `dspy.Module` system ("AgentBrain") and remove legacy functional code.
-
-### Key Changes
-- **AgentBrain**: Introduced `src/generative_agents/agents/brain.py` as the central orchestrator.
-- **Cognitive Layers**:
-    - `SensoryProcessingLayer`: Perception filtering, poignancy, & event creation. (`agents/layers/perception.py`)
-    - `AssociativeMemoryLayer`: Context retrieval based on current state & recent events. (`agents/layers/retrieval.py`)
-    - `PlanningLayer`: Long-term scheduling (`intelligence/modules/planning.py`).
-    - `ActorLayer`: Immediate actions & dialogue (`intelligence/modules/perception.py`, `dialogue.py`, `spatial.py`).
-    - `MemoryConsolidator`: Reflection and Identity updates (`intelligence/modules/reflection.py`).
-- **Intelligence Modules**: Refactored ~30 standalone functions into clustered `dspy.Module` classes:
-    - `planning.py`: WakeUp, DailyPlan, HourlySchedule.
-    - `perception.py`: EventParser, Poignance, Reaction.
-    - `dialogue.py`: TalkDecider, DialogueGenerator.
-    - `reflection.py`: Insights, Identity.
-    - `spatial.py`: Sector/Arena/Object selection.
-- **Legacy Cleanup**: 
-    - Deleted `agents/components/plan.py`, `reflection.py`, `retrieval.py`.
-    - Deleted all standalone intelligence function files.
-    - Moved `intelligence/whisper/thought.py` to `common/thought.py`.
-    - Deleted `intelligence/whisper/` directory.
-
-### Verification
-- **Manual Test**: `tests/verify_brain_manual.py` validates the entire brain pipeline (Plan -> Act -> Reflect).
-- **Status**: Verified w/ `Agent` integration. The system is now fully modular and ready for DSPy optimization.
-## 12. Phase 6: LLM Call Consolidation & Hierarchical Memory (Feb 20, 2026)
-
-### Objective
-Reduce per-agent LLM calls from ~7-10/tick to 1-2. Introduce pure-Qdrant graph memory with contextual reranking.
-
-### A. Unified Day Planner (3-5 calls → 1)
-- **Before**: WakeUpHourPredictor + DailyPlanGenerator (remember+feelings+reflection+plan) + HourlyScheduler = 3-5 sequential calls.
-- **After**: UnifiedDayPlanner(dspy.ChainOfThought(UnifiedDayPlanSignature)) → one call → typed UnifiedDayPlan (wake_up_hour, plan_narrative, hourly_slots).
-- **Files**: intelligence/modules/planning.py (added), agents/layers/planning.py (rewritten).
-
-### B. ReAct Tool-Choice Actor (7+ calls → 1)
-- **Before**: TalkDecider + ReactionDecider + SectorSelector + ArenaSelector + ObjectSelector + EventParser + EmojiMapper = 7+ sequential calls.
-- **After**: ReActActor(dspy.ChainOfThought(AgentStepSignature)) → model picks tool → Python dispatches (0 extra LLM calls).
-- **Tools**: move_to(destination) | speak_to(target, opening_line) | wait() | update_action(activity).
-- **Files**: intelligence/modules/actor_react.py (new), agents/layers/actor.py (rewritten).
-
-### C. Pure Qdrant Memory + ContextualReranker (N calls → 1 batched)
-- **Before**: JSONMemoryRepository with numpy cosine similarity from in-RAM array, JSON file for persistence + graph edges. Rebuilt every startup.
-- **After**: QdrantMemoryRepository — everything in Qdrant:
-  - Vectors: ANN via query_points() (embedded local client, no server).
-  - Graph edges: in payload field related_events: [{id, relation}].
-  - Persistence: QdrantClient(path=...) for disk, QdrantClient(location=":memory:") for tests.
-- ContextualReranker(dspy.ChainOfThought) — 1 batched LLM call ranks all candidates by contextual relevance.
-- AssociativeMemoryLayer 3-stage pipeline: (1) Qdrant ANN top-20 → (2) BFS graph expansion → (3) ContextualReranker top-10.
-- expand_fn=self.memory.get_context wired: agent.run_step() → brain.forward() → AssociativeMemoryLayer.
-- database.py no longer accesses repo.memories list — all ops via Qdrant.
-- **Files**: repository.py, system.py, database.py, agents/layers/retrieval.py (rewritten), intelligence/modules/retrieval.py (new), brain.py, agent.py.
-
-### Qdrant Embedded API Gotchas (critical, version-specific)
-- QdrantClient(":memory:") does NOT work → use location=":memory:" or path="/dir".
-- .search() is gRPC/server-mode only → use .query_points() for embedded.
-- recreate_collection() removed → use collection_exists() + create_collection().
-- Local path uses file locking (portalocker) → client.close() before re-opening same path.
-- Lazy-load sentence transformer via _get_model() getter to avoid network calls at import time.
-
-### LLM Budget After Phase 6
-| Tick Type          | Before          | After          |
-|--------------------|-----------------|----------------|
-| New Day            | ~8 calls/agent  | 2 calls/agent  |
-| Normal             | ~3-5 calls/agent| 1 call/agent   |
-| 25 agents, normal  | ~75-125 calls   | 25 calls       |
-
-### Verification
-- uv run pytest tests/ -v → 3/3 passed (ANN retrieval, graph edge add/retrieve, restart persistence).
-- Key test: tests/test_memory_persistence_pytest.py::test_qdrant_persistence.
-
----
-**Last Updated**: 2026-02-20
-**Author**: Antigravity (Agent)
-
-## 13. Phase 6 Follow-up: Intelligence Modules Cleanup (Feb 20, 2026)
-
-### Modules removed (all replaced by ReActActor tools)
-- ReactionDecider — replaced by ReActActor `wait` / `speak_to` tools
-- TalkDecider — replaced by ReActActor `speak_to` tool
-- Contextualizer — no callers, deleted
-- SectorSelector, ArenaSelector, ObjectSelector (spatial.py) — replaced by ReActActor `move_to(destination)` tool
-- spatial.py FILE DELETED entirely
-
-### Modules converted to heuristics (0 LLM calls)
-- PoignanceRater → heuristic_poignance(event_type, description)
-  Rule: base score from event type + keyword boosts (death/fired/married = +0.08) + penalties (sleeping/idle = -0.06)
-  Used in SensoryProcessingLayer._rate_perception_poignancy() — no LLM call.
-- EmojiMapper → heuristic_emoji(action_description)
-  Rule: keyword pattern match against lookup table of (keywords, emoji) pairs.
-  Used in ActorLayer._dispatch_move() and _dispatch_update_action() — no LLM call.
-
-### Modules kept (still active)
-- EventParser (perception.py) — triple extraction for ActorLayer dispatch (1 LLM call per move/update action)
-- DialogueGenerator, DialogueSummarizer, DialogueMemoer, DialoguePlanner (dialogue.py) — for future multi-turn chat loop
-- RelationshipSummarizer (dialogue.py) — reflection pipeline
-- reflection.py: ReflectionPointGenerator, InsightGenerator, IdentityFormulator — System 2, fully active
-- retrieval.py: ContextualReranker — batched LLM reranking in AssociativeMemoryLayer
-
-### LLM Calls Saved By Cleanup
-| Module | Before | After |
-|---|---|---|
-| PoignanceRater | 1 call/event | 0 (heuristic) |
-| EmojiMapper | 1 call/action | 0 (lookup) |
-| TalkDecider | 1 call/tick | 0 (ReActActor) |
-| ReactionDecider | 1 call/tick | 0 (ReActActor) |
-| SectorSelector+ArenaSelector+ObjectSelector | 3 calls/move | 0 (ReActActor) |
-| EventParser | 1 call/action | 0 (Removed S/P/O triples) |
-
----
-
-## 14. Phase 7: S/P/O Eradication, Object States, and Dynamic Replanning (Feb 22, 2026)
-
-### Objective
-Further optimize the simulation by completely removing legacy NLP concepts (Event Triples), restoring native object interactions, and enabling agents to react dynamically to significant daily events through on-the-fly mid-day replanning.
-
-### Key Changes
-- **Eradicating S/P/O Variables**:
-    - The Stanford-style knowledge graph triples (`subject`, `predicate`, `object_`) were rendered vestigial by semantic vector search. 
-    - Purged completely from `events.py` (`Event`, `PerceivedEvent`), `database.py` (Pydantic models), `repository.py` (Qdrant schema), and all cognitive layers.
-    - Replaced with a single lightweight `entity_id` tracking the originating agent or game object.
-- **EventParser Removal**:
-    - Deleted `EventParser` from `perception.py`, removing 1 unnecessary LLM call per action.
-- **Restoring Object Tracking**:
-    - `ActorLayer` now natively detects interactions with Game Objects (checking for `World:Sector:Arena:Object` pattern).
-    - It dispatches an `ObjectAction`, tracking the target object using `entity_id`.
-    - `SimulationEngine` correctly caches these object states on Maze tiles and clears them when the agent departs (e.g. `bed is in use by John Lin`).
-- **Dynamic Mid-Day Replanning**:
-    - `perception.py`: Boosted `heuristic_poignance` math to detect scheduling keywords (`"invited"`, `"canceled"`, `"plan"` -> `+0.15`), allowing them to breach the `0.8` interrupt threshold.
-    - Added `ReplanningLayer` + `ReplanEvaluator`: If an agent perceives an event with `poignancy >= 0.8`, `AgentBrain` halts their normal flow. The agent executes a fast `thinking_lm` logic pass to determine if their daily schedule must change. If yes, they instantly regenerate the remaining hourly slots for the entire day.
-- **"Idle" Fix (Forward-fill)**:
-    - Updated `UnifiedDayPlanner` to use a "forward-fill" algorithm when casting broad schedule outputs into a strict 24-slot hourly array. Agents now seamlessly continue underlying activities without dropping into accidental `"Idle"` states.
-
----
-**Last Updated**: 2026-02-22
-**Author**: Antigravity (Agent)
+## Retrieval Process (The 3-Stage Pipeline)
+When the `AgentBrain` needs to remember something, it uses the `AssociativeMemoryLayer`, which executes a 3-stage pipeline:
+1. **Semantic Search (ANN)**: Uses `QdrantMemoryRepository.retrieve()` to fetch the top 20 memories semantically similar to the current context query.
+2. **Graph Expansion**: Uses `QdrantMemoryRepository.get_context()` to execute a Breadth-First Search (BFS) over the `related_events` payload field, discovering associated memories (like thoughts derived from a core observation) that might not match the query textually.
+3. **Contextual Reranking**: Passes the combined expanded pool to a DSPy `ContextualReranker`, which executes a single LLM call to score and return the top 10 most contextually vital memories for the current situation.

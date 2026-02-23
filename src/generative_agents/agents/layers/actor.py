@@ -11,7 +11,7 @@ from typing import Optional, Tuple, List
 from generative_agents.common.neural_types import AgentState, ActionSignal
 from generative_agents.common.events import Action, Event, EventType, ObjectAction, PerceivedEvent
 from generative_agents.common.logging import log_agent
-from generative_agents.simulation.maze import Maze
+from generative_agents.simulation.maze import Maze, Level
 
 from generative_agents.intelligence.modules.actor_react import ReActActor, ToolCall
 from generative_agents.intelligence.modules.perception import heuristic_emoji
@@ -75,6 +75,8 @@ class ActorLayer(dspy.Module):
 
         if t == "speak_to":
             return self._dispatch_speak(state, args)
+        elif t == "explore":
+            return self._dispatch_explore(state, args)
         elif t == "move_to":
             return self._dispatch_move(state, args, current_plan, maze)
         elif t == "update_action":
@@ -87,8 +89,12 @@ class ActorLayer(dspy.Module):
         destination = args.get("action_description", fallback_plan) or fallback_plan
 
         # Resolve natural-language destination to a valid maze address
-        resolved_address = self._resolve_address(destination, maze)
+        resolved_address = self._resolve_address(destination, state, maze)
         log_agent(state.name, f"Resolved '{destination}' → '{resolved_address}'", "DEBUG")
+
+        if resolved_address == "UNKNOWN_LOCATION":
+            explore_args = {"strategy": f"searching for {destination}"}
+            return self._dispatch_explore(state, explore_args)
 
         action = Action(
             address=resolved_address,
@@ -115,6 +121,24 @@ class ActorLayer(dspy.Module):
                     depth=0
                 )
             )
+        return ActionSignal(next_action=action)
+
+    def _dispatch_explore(self, state: AgentState, args: dict) -> ActionSignal:
+        strategy = args.get("strategy", "wandering randomly")
+
+        # <random> is natively supported by the Execution layer to pick an unknown/edge tile
+        action = Action(
+            address="<random>",
+            start_time=state.time.time,
+            duration=DEFAULT_ACTION_DURATION,
+            emoji="🗺️",
+            event=Event(
+                entity_id=state.name,
+                description=f"exploring the area by {strategy}",
+                tile=state.current_tile,
+                depth=0,
+            ),
+        )
         return ActionSignal(next_action=action)
 
     def _dispatch_speak(self, state: AgentState, args: dict) -> ActionSignal:
@@ -155,6 +179,15 @@ class ActorLayer(dspy.Module):
 
     def _dispatch_update_action(self, state: AgentState, args: dict) -> ActionSignal:
         activity = args.get("activity", "idle")
+        
+        # Check if the agent accidentally used update_action for a move
+        resolved_address = self._resolve_address(activity, state)
+        if resolved_address != "UNKNOWN_LOCATION" and resolved_address != activity:
+            current_arena = state.current_tile.get_path(Level.ARENA) if state.current_tile else ""
+            if current_arena not in resolved_address:
+                log_agent(state.name, f"Re-routing update_action to move_to due to new location: {resolved_address}", "DEBUG")
+                return self._dispatch_move(state, {"action_description": activity}, activity)
+
         action = Action(
             address="<current>",
             start_time=state.time.time,
@@ -198,37 +231,41 @@ class ActorLayer(dspy.Module):
                 return True
         return False
 
-    def _resolve_address(self, activity: str, maze: Maze = None) -> str:
-        """Resolve a natural-language activity to a valid maze address via fuzzy matching."""
-        if maze is None:
+    def _resolve_address(self, activity: str, state: AgentState, maze: Maze = None) -> str:
+        """Resolve destination against the agent's INTERNAL memory, not the global maze."""
+        if not state.map:
             return activity
-        # Exact match first
-        if activity in maze.address_tiles:
+            
+        known_locations = state.map.known_addresses
+
+        # Exact match in internal memory
+        if activity in known_locations:
             return activity
+
         # Fuzzy match: find addresses containing the activity string (case-insensitive)
-        matches = {
-            addr: tiles
-            for addr, tiles in maze.address_tiles.items()
+        matches = [
+            addr for addr in known_locations
             if activity.lower() in addr.lower()
-        }
+        ]
         if matches:
             # Pick the shortest matching address (most specific)
-            best = min(matches.keys(), key=len)
+            best = min(matches, key=len)
             return best
+
         # Try matching individual words from the activity
         words = [w for w in activity.lower().split() if len(w) > 3]
         for word in words:
-            word_matches = {
-                addr: tiles
-                for addr, tiles in maze.address_tiles.items()
+            word_matches = [
+                addr for addr in known_locations
                 if word in addr.lower()
-            }
+            ]
             if word_matches:
-                best = min(word_matches.keys(), key=len)
+                best = min(word_matches, key=len)
                 return best
-        # No match — pick a random known address
-        log_agent("System", f"No maze address found for '{activity}', using random", "WARNING")
-        return random.choice(list(maze.address_tiles.keys()))
+
+        # If not found in internal memory, the agent is spatially ignorant of this target
+        log_agent(state.name, f"Location '{activity}' is unknown to the agent.", "WARNING")
+        return "UNKNOWN_LOCATION"
 
     def _current_schedule_item(self, state: AgentState, schedule: List[Tuple[str, int]]) -> str:
         """Returns the description of the current schedule slot."""

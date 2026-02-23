@@ -14,13 +14,14 @@ from pydantic import BaseModel, Field
 # Tool definitions (typed, no dspy.Tool dependency)
 # ---------------------------------------------------------------------------
 
-TOOL_NAMES = Literal["move_to", "speak_to", "wait", "update_action"]
+TOOL_NAMES = Literal["move_to", "speak_to", "wait", "update_action", "explore"]
 
 TOOLS_DESCRIPTION = """Available tools:
 1. move_to(action_description: str)  — PRIMARY tool for starting any new physical activity. Provide a natural language event description containing the action and location (e.g. 'Making breakfast in the kitchen' or 'Walking to the cafe'). The system will automatically pathfind you there.
 2. speak_to(target_agent: str, opening_line: str) — Initiate dialogue with a nearby agent.
 3. wait()                            — Do nothing. Stay in place and let your current action continue.
 4. update_action(activity: str)      — ONLY use this if you are changing your state but STAYING EXACTLY WHERE YOU ARE (e.g. 'Reading a book on the current couch'). If your new activity requires interacting with a new object or room, use move_to instead!
+5. explore(strategy: str) — Use this when you need to go somewhere but DO NOT know the location (e.g. if a move_to fails or you are lost). Strategies: 'wander randomly', 'search for [item/person]', or 'map area'.
 """
 
 
@@ -55,7 +56,7 @@ class AgentStepSignature(dspy.Signature):
         desc="Description of the tools the agent can call."
     )
     tool_name: str = dspy.OutputField(
-        desc="Exactly one tool name: move_to | speak_to | wait | update_action"
+        desc="Exactly one tool name: move_to | speak_to | wait | update_action | explore"
     )
     tool_args: str = dspy.OutputField(
         desc='Tool arguments as a compact JSON object, e.g. {"destination": "library"}. Empty object {} for wait.'
@@ -100,7 +101,7 @@ class ReActActor(dspy.Module):
             # Parse tool name (strip whitespace/quotes defensively)
             raw_tool = result.tool_name.strip().strip('"').strip("'").lower()
             # Map to valid literal
-            valid_tools = {"move_to", "speak_to", "wait", "update_action"}
+            valid_tools = {"move_to", "speak_to", "wait", "update_action", "explore"}
             tool_name = raw_tool if raw_tool in valid_tools else "wait"
 
             # Parse args JSON
