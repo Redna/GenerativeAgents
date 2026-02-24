@@ -79,6 +79,7 @@ class TestSimulationEngine(unittest.TestCase):
         event = MagicMock(spec=Event)
         event.spo_summary = ("Subject", "Predicate", "Object")
         event.dist = 1
+        event.entity_id = "Subject"
         tile_with_event.events = {"Subject": event}
 
         self.maze.get_nearby_tiles.return_value = [tile_with_event]

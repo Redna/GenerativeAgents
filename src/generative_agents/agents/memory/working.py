@@ -43,10 +43,12 @@ class WorkingMemory:
     retention: int = 5
     vision_radius: int = 6
     attention_bandwidth: int = 4
+    last_observations_cache: set[str] = field(default_factory=set)
     
     # System 2 Triggers
-    reflection_trigger_counter: int = 500
-    reflection_trigger_max: int = 800
+    reflection_trigger_counter: int = 255
+    reflection_trigger_max: int = 255
+    events_since_last_reflection: int = 800
     
     def is_action_finished(self) -> bool:
         """

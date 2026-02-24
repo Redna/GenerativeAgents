@@ -53,7 +53,14 @@ class MemoryEntry(BaseModel):
 
 def get_repository(agent_name: str) -> QdrantMemoryRepository:
     if agent_name not in _repositories:
-        _repositories[agent_name] = QdrantMemoryRepository(agent_name, path=":memory:")
+        from generative_agents.common.utils import get_project_root
+        import os
+        
+        # Save Qdrant persistent collections to physical disk to survive server restarts
+        storage_path = os.path.join(get_project_root(), "storage", "qdrant", agent_name)
+        os.makedirs(storage_path, exist_ok=True)
+        
+        _repositories[agent_name] = QdrantMemoryRepository(agent_name, path=storage_path)
     return _repositories[agent_name]
 
 

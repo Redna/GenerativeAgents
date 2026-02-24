@@ -42,23 +42,55 @@ async def main():
     maze = Maze()
     initialize_database(True)
 
-    # Load agents
-    with open(os.path.join(BASE_PATH, "agents/agent_backstory.json"), "r") as f:
-        agent_data_list = json.load(f)["agents"]
+    from generative_agents.common.utils import get_project_root
+    import glob
+    import pickle
+    
+    checkpoints_dir = os.path.join(get_project_root(), "storage", "checkpoints")
+    latest_checkpoint = None
+    
+    if os.path.exists(checkpoints_dir):
+        files = glob.glob(os.path.join(checkpoints_dir, "*.pkl"))
+        if files:
+            latest_checkpoint = max(files, key=os.path.getctime)
 
-    # Initial vision logic (from original code)
-    vision_start_tile = maze.get_random_tile()
+    if latest_checkpoint:
+        print(f"Loading simulation state from {latest_checkpoint}...")
+        with open(latest_checkpoint, "rb") as f:
+            state = pickle.load(f)
+            
+        agents = list(state["agents"].values())
+        engine = SimulationEngine(maze, agents, state["time"])
+        engine.round_updates = state.get("round_updates", [])
+        
+        print(f"Resumed {len(agents)} agents at {state['time'].as_string()}")
+    else:
+        print("Starting fresh simulation...")
+        # Load agents
+        with open(os.path.join(BASE_PATH, "agents/agent_backstory.json"), "r") as f:
+            agent_data_list = json.load(f)["agents"]
 
-    agents = []
-    for agent_data in agent_data_list:
-        agent = initialize_agent(agent_data, maze, vision_start_tile)
-        agents.append(agent)
+        # Initial vision logic (from original code)
+        vision_start_tile = maze.get_random_tile()
 
-    # Initialize Engine
-    engine = SimulationEngine(maze, agents, global_state.time)
+        agents = []
+        for agent_data in agent_data_list:
+            agent = initialize_agent(agent_data, maze, vision_start_tile)
+            agents.append(agent)
+
+        # Initialize Engine
+        engine = SimulationEngine(maze, agents, global_state.time)
 
     # Initialize the API app
-    app = api.get_app(engine.get_latest_round_update, engine.spawn_agent)
+    app = api.get_app(
+        engine.get_latest_round_update, 
+        engine.spawn_agent,
+        engine.get_agent_xray,
+        engine.query_agent_memory,
+        engine.pause,
+        engine.resume,
+        lambda: engine.is_paused
+    )
 
     runner = web.AppRunner(app)
     await runner.setup()
@@ -71,7 +103,8 @@ async def main():
     try:
         while True:
             # Execute step in a separate thread so sync DSPy calls don't block socket.io
-            await asyncio.to_thread(engine.step)
+            if not engine.is_paused:
+                await asyncio.to_thread(engine.step)
 
             # Yield control to asyncio event loop to allow API requests processing
             await asyncio.sleep(0.01)

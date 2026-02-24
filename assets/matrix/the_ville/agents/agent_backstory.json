@@ -3,7 +3,6 @@
         {
             "name": "Giorgio Rossi",
             "age": 25,
-            "time": "global_state.time",
             "innate_traits": [
                 "Easy going",
                 "Competitive",
@@ -12,14 +11,11 @@
             "location": "the Ville:Giorgio Rossi's apartment:main room:bed",
             "emoji": "🤖",
             "activity": "idle",
-            "tree": "self.initialize_visible_memory_tree()",
-            "tile": "self.maze.address_tiles['the Ville:Giorgio Rossi's apartment:main room:bed'][0]",
             "description": "Giorgio Rossi, known for his warm and attentive service, is a popular waiter at Hobbs Cafe, a local favorite for both its ambiance and cuisine. When he's not bustling around the cafe, Giorgio indulges in his love for reading, often losing himself in the pages of a good book. He also enjoys taking long, leisurely walks through the village, embracing the tranquility and charm of his surroundings, a perfect contrast to the lively atmosphere of the cafe. Giorgio's simple pleasures and dedication to his job make him a well-regarded member of the community."
         },
         {
             "name": "John Lin",
             "age": 25,
-            "time": "global_state.time",
             "innate_traits": [
                 "Easy going",
                 "Competitive",
@@ -28,9 +24,33 @@
             "location": "the Ville:Lin family's house:Mei and John Lin's bedroom",
             "emoji": "🤖",
             "activity": "idle",
-            "tree": "self.initialize_visible_memory_tree()",
-            "tile": "self.maze.address_tiles['the Ville:Lin family's house:Mei and John Lin's bedroom'][0]",
             "description": "John Lin, a dedicated pharmacist, is a familiar face at the Willows Market and Pharmacy, where his expertise and friendly demeanor are well appreciated by the community. Outside of work, he cherishes time with his family, including his wife, Mei Lin, and their son, Eddy. Although Mein and Eddy are currently enjoying a vacation in Alfter near Bonn in Germany. John is likely missing his favorite coffee from Hobbs Cafe, a testament to his love for their unique brews."
+        },
+        {
+            "name": "Klaus Mueller",
+            "age": 42,
+            "innate_traits": [
+                "Analytical",
+                "Patient",
+                "Observant"
+            ],
+            "location": "the Ville:Hobbs Cafe:cafe:cafe customer seating",
+            "emoji": "🤖",
+            "activity": "idle",
+            "description": "Klaus Mueller is a retired academic who spends his mornings at Hobbs Cafe, observing the bustling village life. He enjoys engaging in deep, philosophical conversations and is known for his calm, thoughtful demeanor."
+        },
+        {
+            "name": "Maria Lopez",
+            "age": 28,
+            "innate_traits": [
+                "Energetic",
+                "Friendly",
+                "Creative"
+            ],
+            "location": "the Ville:Harvey Oak Supply Store:supply store:supply store counter",
+            "emoji": "🤖",
+            "activity": "idle",
+            "description": "Maria Lopez is an aspiring artist who currently works at the Harvey Oak Supply Store to fund her projects. She is always sketching ideas on her notepad and loves chatting with customers about their day."
         }
     ]
 }

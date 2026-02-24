@@ -161,7 +161,8 @@ class Agent:
 
         # Update reflection trigger based on new memories
         for memory in signal.new_memories:
-             if hasattr(memory, 'poignancy'):
+             self.working_memory.events_since_last_reflection += 1
+             if hasattr(memory, 'poignancy') and memory.poignancy > 0.2:
                  self.working_memory.reflection_trigger_counter -= memory.poignancy
 
         # 5. Execution (Motor Control)
@@ -176,7 +177,7 @@ class Agent:
 
         # 6. Reflection (System 2 / Offline Learning)
         # Check trigger defined in working memory
-        if self.working_memory.reflection_trigger_counter <= 0:
+        if self.working_memory.reflection_trigger_counter <= 0 and self.working_memory.events_since_last_reflection >= 15:
             from generative_agents.agents.layers.reflection import MemoryConsolidator
             system2 = MemoryConsolidator()
             
@@ -191,8 +192,9 @@ class Agent:
             signal_s2 = system2(reflection_state, retrieve_fn=self.memory.retrieve)
             self._apply_action_signal(signal_s2)
             
-            # Reset trigger
+            # Reset triggers
             self.working_memory.reflection_trigger_counter = self.working_memory.reflection_trigger_max
+            self.working_memory.events_since_last_reflection = 0
             
             log_agent(self.name, "System 2 Reflection Completed", "INFO")
 

@@ -76,4 +76,33 @@ export default class SimulationConnector {
     this.socket.emit('subscribe_agent_log', { agent_name: agentName });
     console.log('Connector: Emit called.');
   }
+
+  async pauseSimulation() {
+    try {
+      await fetch('http://localhost:8000/api/pause', { method: 'POST' });
+      console.log('Connector: Pause emitted');
+    } catch (e) {
+      console.error('Failed to pause:', e);
+    }
+  }
+
+  async resumeSimulation() {
+    try {
+      await fetch('http://localhost:8000/api/resume', { method: 'POST' });
+      console.log('Connector: Resume emitted');
+    } catch (e) {
+      console.error('Failed to resume:', e);
+    }
+  }
+
+  async fetchXRay(agentName: string) {
+    try {
+      const res = await fetch(`http://localhost:8000/api/xray?agent=${encodeURIComponent(agentName)}`);
+      if (!res.ok) throw new Error('X-Ray API returned ' + res.status);
+      return await res.json();
+    } catch (e) {
+      console.error('Failed to fetch X-Ray:', e);
+      return null;
+    }
+  }
 }

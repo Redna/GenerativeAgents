@@ -21,10 +21,11 @@ class SimulationUpdateEngine {
     this.pointer = 0;
     this.characters = {};
     this.gameScene = GameScene;
-    this.ui = new UI();
 
     console.log('SimulationUpdateEngine: Initializing...');
     this.connector = new SimulationConnector();
+    this.ui = new UI(this.connector);
+
     this.connector.onUpdate((update: RoundUpdateDTO) => {
       this.add(update);
     });

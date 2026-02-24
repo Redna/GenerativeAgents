@@ -39,13 +39,15 @@ $$\text{ActionSignal} = \text{Brain}(\text{Percept}, \text{State})$$
 ### Simulation Loop
 ```
 SimulationEngine.step()
+  0. [Intercept]            → Halt execution if `self.is_paused == True`
   1. Sequential perception  → _calculate_percepts() for all agents
   2. Concurrent cognition   → ThreadPoolExecutor: agent.run_step() per agent (LLM I/O in parallel)
   3. Sequential execution   → _update_map_events() (no race conditions)
   4. Record state           → _record_round_update() for API
+  5. Checkpointing          → Every 100 ticks, `save_checkpoint()` binary-pickles the world.
 ```
 
-All LLM calls happen inside Step 2. This shrinks wall-clock time from `O(N × LLM_latency)` to `O(LLM_latency)` for N agents.
+All LLM calls happen inside Step 2. This shrinks wall-clock time from `O(N × LLM_latency)` to `O(LLM_latency)` for N agents. Note that the frontend API allows for live freezing (`POST /api/pause`) without killing the `aiohttp` web server itself.
 
 ### Agent Step
 ```
@@ -186,7 +188,7 @@ class AgentBrain(dspy.Module):
   }
   ```
 - **Important API notes** (qdrant-client embedded, version-specific):
-  - Use `QdrantClient(location=":memory:")` or `QdrantClient(path="/dir")` — not `QdrantClient(":memory:")`.
+  - In earlier versions, this was an ephemeral `:memory:` configuration. As of Phase 6, memories map entirely to the physical `storage/qdrant/` directory, synchronizing natively with the 100-tick `.pkl` Simulation Engine checkpoints.
   - Use `.query_points()` — `.search()` is gRPC/server-mode only.
   - Use `collection_exists()` + `create_collection()` — `recreate_collection()` removed.
   - Local path uses file locking: always `client.close()` before re-opening the same path.

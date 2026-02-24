@@ -17,6 +17,7 @@ class SensoryProcessingLayer(dspy.Module):
 
     def forward(self, percept: Percept, state: AgentState) -> List[PerceivedEvent]:
         processed_events = []
+        current_observations = set()
         
         for event in percept.events:
             type_ = EventType.EVENT
@@ -45,10 +46,17 @@ class SensoryProcessingLayer(dspy.Module):
             elif type_ == EventType.EVENT and ":" in event.entity_id:
                 event.description = f"{event.entity_id.split(':')[-1]} is {event.description}"
 
+            current_observations.add(event.description)
+
+            # Deduplicate generic world events to prevent hyper-frequent reflection triggers
+            if type_ == EventType.EVENT and event.description in state.working_memory.last_observations_cache:
+                continue
+
             # Calculate Poignancy
             poignancy = self._rate_perception_poignancy(state.name, state.identity_description, type_, event.description)
             
-            log_agent(state.name, f"Event '{event.description}' poignancy rated as {poignancy}", "DEBUG")
+            if poignancy > 0.1: # Only log non-trivial poignancy scores above idle to reduce noise
+                 log_agent(state.name, f"Event '{event.description}' poignancy rated as {poignancy}", "DEBUG")
             
             processed_event = PerceivedEvent(
                 event_type=type_,
@@ -62,6 +70,7 @@ class SensoryProcessingLayer(dspy.Module):
             )
             processed_events.append(processed_event)
             
+        state.working_memory.last_observations_cache = current_observations
         return processed_events
 
     def _rate_perception_poignancy(self, agent_name: str, identity: str, event_type: EventType, description: str) -> float:

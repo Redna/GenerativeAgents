@@ -26,7 +26,13 @@ The memory architecture unifies **Vectors** and **Graph Edges** inside a single 
 - **Graph Expansion (BFS)** transverses relationship payload edges to discover causally connected thoughts and observations.
 - A **Contextual Reranker** then uses a rapid LLM pass to surface the most vital memories for the current situation.
 
-### 4. Asynchronous Ambient Mechanics
+### 4. Play/Pause & Live Snapshots
+To preserve determinism and simplify runtime debugging, the `SimulationEngine` supports dynamic state manipulation:
+- **Live HTTP Triggers**: `POST /api/pause` instantly freezes the engine's execution loops, safely stopping time without disconnecting clients. `POST /api/resume` unthaws it.
+- **Automated Checkpoints**: Every 100 ticks, a full binary `pickle` dump of the active world logic (agents, spatial matrices, paths) saves to `storage/checkpoints/`. 
+- **Persistent Qdrant**: The vector store runs completely localized on disk (in `storage/qdrant/`). Upon a server boot, `__main__.py` seamlessly detects the latest snapshot and re-hydrates the exact state of the world to survive restarts seamlessly.
+
+### 5. Asynchronous Ambient Mechanics
 To maintain the illusion of a living, breathing world, complex interactions unfold asynchronously:
 - **Non-Blocking Dialogues**: When agents initiate conversations, a background thread handles the ongoing dialogue generation, summarization, and physical broadcasting of the utterances to the world map.
 - **The Overhearing Mechanic**: Uninvolved bystanders running their concurrent perception sweeps can detect broadcasted utterances, formatting them as third-person observations and committing them to memory. 

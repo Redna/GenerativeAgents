@@ -103,6 +103,99 @@
       color: #555;
       margin-top: 4px;
     }
+
+    .control-btn {
+      padding: 6px 12px;
+      margin-right: 5px;
+      margin-top: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .control-btn:hover {
+      background: #e0e0e0;
+    }
+
+    /* Modal Overlay Styles */
+    #xray-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: 1000;
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #xray-modal {
+      background: #1e1e1e;
+      color: #eee;
+      width: 80%;
+      max-width: 900px;
+      height: 80%;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    }
+
+    #xray-header {
+      padding: 15px 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #252526;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+    }
+
+    #xray-header h2 {
+      margin: 0;
+      color: #4a90e2;
+    }
+
+    #btn-close-xray {
+      background: none;
+      border: none;
+      color: #aaa;
+      font-size: 1.5em;
+      cursor: pointer;
+    }
+
+    #btn-close-xray:hover {
+      color: #fff;
+    }
+
+    #xray-content {
+      padding: 20px;
+      overflow-y: auto;
+      flex-grow: 1;
+      font-family: monospace;
+      font-size: 0.95em;
+      line-height: 1.5;
+    }
+
+    .xray-section {
+      margin-bottom: 20px;
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 6px;
+    }
+
+    .xray-label {
+      color: #888;
+      font-size: 0.8em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
   </style>
   <script type="module" src="/src/index.ts"></script>
 </head>
@@ -117,6 +210,12 @@
       <div class="status-item">
         <div class="status-label">Current Time</div>
         <div id="status-time" class="status-value">--:--</div>
+        <div class="status-label" style="margin-top: 10px;">Current Tick</div>
+        <div id="status-round" class="status-value">--</div>
+        <div style="margin-top: 15px;">
+          <button id="btn-toggle-play" class="control-btn" style="border-left: 4px solid #ff9800; width: 140px;">⏸ Pause
+            Engine</button>
+        </div>
       </div>
 
       <div class="sidebar-header" style="margin-top: 20px; font-size: 1.2em;">Selected Agent</div>
@@ -136,9 +235,13 @@
         <div class="status-label">Activity</div>
         <div id="detail-act" class="status-value" style="font-size: 0.9em; font-weight: normal;"></div>
 
-        <button id="btn-unfocus"
-          style="margin-top: 15px; width: 100%; padding: 8px; background: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: #333;">Unfocus
-          Camera</button>
+        <div style="display: flex; gap: 8px; margin-top: 15px;">
+          <button id="btn-unfocus"
+            style="flex: 1; padding: 8px; background: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: #333;">Unfocus</button>
+          <button id="btn-xray"
+            style="flex: 1; padding: 8px; background: #2b2b2b; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: #4a90e2; box-shadow: 0 0 5px rgba(74, 144, 226, 0.4);">Deep
+            X-Ray</button>
+        </div>
       </div>
 
       <!-- Logs Section -->
@@ -154,6 +257,18 @@
         <div class="agent-card">
           <div class="agent-name">Waiting for data...</div>
         </div>
+      </div>
+    </div>
+  </div>
+  <!-- X-Ray Modal Overlay -->
+  <div id="xray-overlay">
+    <div id="xray-modal">
+      <div id="xray-header">
+        <h2 id="xray-title">Agent X-Ray</h2>
+        <button id="btn-close-xray">&times;</button>
+      </div>
+      <div id="xray-content">
+        Loading neural state...
       </div>
     </div>
   </div>

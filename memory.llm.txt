@@ -7,6 +7,7 @@ There are no external JSON files mapping relationships, and no numpy arrays floa
 ## Database Backend
 - **Repository**: `QdrantMemoryRepository` (`agents/memory/repository.py`)
 - **Backend Type**: Qdrant Vector Database
+- **Storage**: Maps to a physical persistent directory (`storage/qdrant/`) rather than an ephemeral `:memory:` configuration, allowing memory vectors to survive application restarts alongside the 100-tick world checkpoints.
 - **Embeddings**: `FastBGEEmbedding` model converts text to 384-dimensional vectors.
 
 ## Memory Types (EventType)

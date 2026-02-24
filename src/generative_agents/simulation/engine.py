@@ -28,6 +28,14 @@ class SimulationEngine:
         self.round_updates: List[RoundUpdateDTO] = []
         self.physics_simulator = WorldPhysicsSimulator()
         self.dialogue_coordinator = DialogueCoordinator()
+        self.is_paused = False
+        self.ticks_since_last_save = 0
+
+    def pause(self):
+        self.is_paused = True
+
+    def resume(self):
+        self.is_paused = False
 
     def step(self):
         """
@@ -72,6 +80,34 @@ class SimulationEngine:
         # 6. Advance simulation clock
         self.time.tick()
 
+        # 7. Checkpoint Auto-Save
+        self.ticks_since_last_save += 1
+        if self.ticks_since_last_save >= 100:
+            self.save_checkpoint()
+            self.ticks_since_last_save = 0
+
+    def save_checkpoint(self):
+        import os
+        import pickle
+        import time
+        from generative_agents.common.utils import get_project_root
+        
+        checkpoints_dir = os.path.join(get_project_root(), "storage", "checkpoints")
+        os.makedirs(checkpoints_dir, exist_ok=True)
+        filename = f"checkpoint_{int(time.time())}.pkl"
+        filepath = os.path.join(checkpoints_dir, filename)
+        
+        state = {
+            "agents": self.agents,
+            "time": self.time,
+            "round_updates": self.round_updates
+        }
+        
+        with open(filepath, "wb") as f:
+            pickle.dump(state, f)
+            
+        print(f"Simulation Checkpoint saved to {filepath}")
+
     def _record_round_update(self):
         agents_dto = [agent.to_dto() for agent in self.agents.values()]
         round_update = RoundUpdateDTO(
@@ -83,6 +119,64 @@ class SimulationEngine:
         if self.round_updates:
             return self.round_updates[-1]
         return None
+
+    def get_agent_xray(self, agent_name: str) -> dict | None:
+        if agent_name not in self.agents:
+            return None
+            
+        agent = self.agents[agent_name]
+        wm = agent.working_memory
+
+        # Fetch recent core memories for overarching context
+        try:
+            core_memories = agent.memory.retrieve(wm.identity_description, limit=5)
+        except Exception:
+            core_memories = []
+            
+        action_dict = None
+        if wm.action:
+             action_dict = {
+                 "address": wm.action.address,
+                 "description": wm.action.event.description if wm.action.event else None,
+                 "emoji": wm.action.emoji,
+                 "start_time": wm.action.start_time.isoformat() if hasattr(wm.action.start_time, "isoformat") else str(wm.action.start_time),
+                 "duration": wm.action.duration
+             }
+
+        xray = {
+            "name": agent.name,
+            "time": self.time.as_string(),
+            "identity": wm.identity_description,
+            "daily_plan": wm.daily_requirements,
+            "daily_schedule": wm.daily_schedule_hourly_organized,
+            "current_action": action_dict,
+            "chatting_with": wm.chatting_with,
+            "recent_observations": list(wm.last_observations_cache),
+            "core_memories": [m.content for m in core_memories if hasattr(m, 'content')],
+            "reflection_trigger_counter": wm.reflection_trigger_counter,
+            "reflection_trigger_max": wm.reflection_trigger_max,
+        }
+        return xray
+
+    def query_agent_memory(self, agent_name: str, query: str, limit: int = 10) -> list[dict]:
+        if agent_name not in self.agents:
+            return []
+            
+        agent = self.agents[agent_name]
+        memories = agent.memory.retrieve(query, limit=limit)
+        
+        results = []
+        for m in memories:
+            entry = {}
+            if hasattr(m, "id"): entry["id"] = m.id
+            if hasattr(m, "content"): entry["content"] = m.content
+            if hasattr(m, "memory_type"): entry["memory_type"] = str(m.memory_type)
+            if hasattr(m, "created_at"): entry["created_at"] = str(m.created_at)
+            if hasattr(m, "poignancy"): entry["poignancy"] = getattr(m, "poignancy", 0)
+            if hasattr(m, "depth"): entry["depth"] = m.depth
+            results.append(entry)
+            
+        return results
 
     def spawn_agent(self, data: AgentDTO):
         print(f"Spawning agent {data.name} at {data.movement.col}, {data.movement.row}")

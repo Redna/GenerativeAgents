@@ -18,6 +18,8 @@ class ArenaMemory:
         return self.game_objects[key]
 
     def __getattr__(self, name):
+        if name in ('__getstate__', '__setstate__') or 'game_objects' not in self.__dict__:
+            raise AttributeError(name)
         return getattr(self.game_objects, name)
 
     def __deepcopy__(self, memo):
@@ -44,6 +46,8 @@ class SectorMemory:
         self.arenas[key] = value
 
     def __getattr__(self, name):
+        if name in ('__getstate__', '__setstate__') or 'arenas' not in self.__dict__:
+            raise AttributeError(name)
         return getattr(self.arenas, name)
 
     def __deepcopy__(self, memo):
@@ -70,6 +74,8 @@ class WorldMemory:
         self.sectors[key] = value
 
     def __getattr__(self, name):
+        if name in ('__getstate__', '__setstate__') or 'sectors' not in self.__dict__:
+            raise AttributeError(name)
         return getattr(self.sectors, name)
 
     def __deepcopy__(self, memo):

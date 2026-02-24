@@ -33,13 +33,18 @@ class MemoryConsolidator(dspy.Module):
         log_agent(state.name, "System 2: Starting Memory Consolidation (Reflection)", "INFO")
         
         # 2. Generate Focal Points (What to think about?)
-        # We use recent memories provided in the state for focal point generation.
+        # Filter out sleeping and very low-value events so we don't reflect on idle noise.
+        meaningful_events = [
+            e for e in state.recent_events
+            if e.poignancy is not None and e.poignancy > 0.3 and "sleep" not in e.description.lower()
+        ]
         
-        if not state.recent_events or len(state.recent_events) < 5:
+        if not meaningful_events or len(meaningful_events) < 5:
+            log_agent(state.name, "System 2: Not enough meaningful events for reflection. Skipping.", "INFO")
             return signal
 
         # Convert events to string for reflection
-        memory_str = "\n".join([e.description for e in state.recent_events])
+        memory_str = "\n".join([e.description for e in meaningful_events])
         focal_points = self.reflection_generator(memory_str, 3)
         log_agent(state.name, f"Generated focal points: {focal_points}", "DEBUG")
         
