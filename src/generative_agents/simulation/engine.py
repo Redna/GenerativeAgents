@@ -15,8 +15,7 @@ from generative_agents.simulation.time import SimulationTime
 from generative_agents.common.events import Action, Event, EventType
 from generative_agents.common.logging import log_agent
 from generative_agents.intelligence.modules.environment import WorldPhysicsSimulator
-from generative_agents.simulation.dialogue_coordinator import DialogueCoordinator
-import asyncio
+from generative_agents.common.events import PerceivedEvent
 import random
 
 
@@ -27,7 +26,6 @@ class SimulationEngine:
         self.time = time
         self.round_updates: List[RoundUpdateDTO] = []
         self.physics_simulator = WorldPhysicsSimulator()
-        self.dialogue_coordinator = DialogueCoordinator()
         self.is_paused = False
         self.ticks_since_last_save = 0
 
@@ -48,6 +46,11 @@ class SimulationEngine:
         old_tiles = {name: agent.working_memory.tile for name, agent in self.agents.items()}
 
         # 2. Agents decide and execute actions concurrently
+        old_activity = {
+            name: (agent.working_memory.action.event.description if agent.working_memory.action and agent.working_memory.action.event else "")
+            for name, agent in self.agents.items()
+        }
+
         def _run_agent_step(agent, percept, maze, agents, time):
             import asyncio
             async def _run():
@@ -68,8 +71,8 @@ class SimulationEngine:
                 except Exception as exc:
                     print(f"Agent {agent_name} generated an exception during run_step: {exc}")
 
-        # 3. Intercept and resolve conversations without blocking
-        self._process_dialogues()
+        # 3. Detect agents that walked away from a conversation and summarize it
+        self._check_conversation_ends(old_activity)
 
         # 4. Update the environment (Tile events) sequentially to avoid race conditions
         self._update_map_events(old_tiles)
@@ -150,7 +153,7 @@ class SimulationEngine:
             "daily_plan": wm.daily_requirements,
             "daily_schedule": wm.daily_schedule_hourly_organized,
             "current_action": action_dict,
-            "chatting_with": wm.chatting_with,
+            "chatting_with": "", # Extracted dynamically by the frontend if needed
             "recent_observations": list(wm.last_observations_cache),
             "core_memories": [m.content for m in core_memories if hasattr(m, 'content')],
             "reflection_trigger_counter": wm.reflection_trigger_counter,
@@ -183,66 +186,102 @@ class SimulationEngine:
         new_agent = Agent.from_dto(data, self.maze, self.time)
         self.agents[new_agent.name] = new_agent
 
-    def _process_dialogues(self):
-        """Detects chat initiations, locks states, updates broadcasts, and fires background tasks."""
-        for initiator_name, initiator in self.agents.items():
-            if initiator.working_memory.chatting_with:
-                continue
+    # ------------------------------------------------------------------
+    # Emergent Dialogue Lifecycle Management
+    # ------------------------------------------------------------------
 
-            action = initiator.working_memory.action
-            if action and action.address and action.address.startswith("<persona>"):
-                target_name = action.address.split("<persona>")[-1].strip()
-                
-                if target_name in self.agents:
-                    target_agent = self.agents[target_name]
+    def _check_conversation_ends(self, old_activity: Dict[str, str]):
+        """
+        Detect if an agent was chatting last tick, but is doing something else now.
+        If so, the conversation has ended organically. Summarize and inject memory.
+        """
+        # Dynamic import to avoid circular dependency
+        from generative_agents.intelligence.modules.dialogue import DialogueSummarizer, DialoguePlanner
+        
+        # We only instantiate these if needed this tick
+        summarizer = None
+        planner = None
+
+        for name, agent in self.agents.items():
+            last_act = old_activity.get(name, "")
+            
+            # Were they chatting last tick?
+            if "chatting with" in last_act:
+                # Are they STILL chatting this tick?
+                current_activity = ""
+                if agent.working_memory.action and agent.working_memory.action.event:
+                    current_activity = agent.working_memory.action.event.description
+
+                if "chatting with" not in current_activity:
+                    # They just walked away!
+                    partner_name = last_act.split("chatting with ")[1].split(",")[0].strip()
+                    log_agent("Dialogue", f"{agent.name} walked away from conversation with {partner_name}.", "INFO")
                     
-                    if target_agent.working_memory.chatting_with:
-                        continue 
+                    # Fetch history from memory
+                    raw_memories = agent.memory.retrieve(f"conversation with {partner_name}", limit=15)
+                    
+                    # Filter for recent CHAT events
+                    chat_history = []
+                    for mem in sorted(raw_memories, key=lambda x: getattr(x, 'created_at', 0)):
+                        # Look for 'NAME said to PARTNER:' or 'PARTNER said to NAME:'
+                        content = getattr(mem, 'content', str(mem))
+                        if "said to" in content and (agent.name in content and partner_name in content):
+                             # Format as "Speaker: Utterance"
+                             try:
+                                 speaker = content.split(" said to ")[0].strip()
+                                 utterance = content.split(": ")[1].strip()
+                                 chat_history.append(f"{speaker}: {utterance}")
+                             except IndexError:
+                                 pass
+
+                    if chat_history:
+                        if not summarizer:
+                            summarizer = DialogueSummarizer()
+                            planner = DialoguePlanner()
+                            
+                        full_chat = "\n".join(chat_history)
+                        summary = str(summarizer(full_chat))
+                        takeaway = str(planner(agent.name, full_chat))
                         
-                    # A. Lock internal states
-                    initiator.working_memory.chatting_with = target_name
-                    target_agent.working_memory.chatting_with = initiator_name
-                    
-                    # B. Update Initiator's broadcast event so they stay in place
-                    initiator.working_memory.action.address = "<current>"
-                    initiator.working_memory.action.emoji = "💬"
-                    initiator.working_memory.action.event.description = f"chatting with {target_name}"
+                        log_agent("Dialogue", f"Conversation summary: {summary}", "INFO")
+                        self._inject_conversation_memory(agent, partner_name, summary, takeaway)
 
-                    # C. Overwrite the Target's current action so bystanders see them talking
-                    target_agent.working_memory.action_path_set = False 
-                    target_agent.working_memory.planned_path = []
-                    target_agent.activity = f"chatting with {initiator_name}"
-                    target_agent.working_memory.action = Action(
-                        address="<current>",
-                        start_time=self.time.time,
-                        duration=10, 
-                        emoji="💬",
-                        event=Event(
-                            entity_id=target_name,
-                            description=f"chatting with {initiator_name}",
-                            tile=target_agent.working_memory.tile,
-                            depth=0
-                        )
-                    )
-                    
-                    # D. Extract opening line and fire the background task
-                    opening_line = "Hello!"
-                    for mem in reversed(initiator.working_memory.recent_events): 
-                        if target_name in mem.description and "said to" in mem.description:
-                            opening_line = mem.description.split(":")[-1].strip()
-                            break
-                    
-                    asyncio.create_task(
-                        self.dialogue_coordinator.run_conversation_async(
-                            initiator, target_agent, opening_line
-                        )
-                    )
+    def _inject_conversation_memory(self, agent, partner_name: str, summary: str, takeaway: str):
+        """Creates formal memory events from the conversation."""
+        summary_event = PerceivedEvent(
+            event_type=EventType.CHAT,
+            poignancy=0.8,
+            depth=1,
+            description=f"Had a conversation with {partner_name}. Summary: {summary}",
+            entity_id=agent.name,
+        )
+        agent.memory.add(summary_event)
+
+        takeaway_event = PerceivedEvent(
+            event_type=EventType.THOUGHT,
+            poignancy=0.7,
+            depth=2,
+            description=f"After talking to {partner_name}, I need to remember: {takeaway}",
+            entity_id=agent.name,
+        )
+        agent.memory.add(takeaway_event)
 
     def _update_map_events(self, old_tiles: Dict[str, Tile]):
         """
         Updates the events on the map tiles based on agent movements and actions.
         Ported from __main__.py _reflect_changes.
         """
+        # 0. Global Event Garbage Collection (Sweep Expired Environmental quirks)
+        for row in self.maze.tiles:
+            for tile in row:
+                expired_keys = [
+                    key for key, event in tile.events.items()
+                    if getattr(event, 'expiration', None) and event.expiration <= self.time.time
+                ]
+                for key in expired_keys:
+                    log_agent("Environment", f"Event '{tile.events[key].description}' on {tile} faded away naturally.", "DEBUG")
+                    del tile.events[key]
+
         for name, agent in self.agents.items():
             old_tile = old_tiles[name]
             new_tile = agent.working_memory.tile  # Agent has already moved in run_step
@@ -291,12 +330,17 @@ class SimulationEngine:
                             
                             # 3. Inject the consequence as a new event on the tile
                             if consequence_text:
+                                import datetime
+                                # Environmental quirks persist for 30 in-game minutes before fading
+                                expiration_time = self.time.time + datetime.timedelta(minutes=30)
                                 consequence_event = Event(
-                                    entity_id=f"Env_{object_name}",
+                                    entity_id=f"Env_{object_name}_{int(self.time.time.timestamp())}",
                                     description=consequence_text,
                                     tile=target_tile,
                                     depth=0,
                                 )
+                                # Attach expiration dynamically (duck-typing for the cleanup loop)
+                                consequence_event.expiration = expiration_time
                                 
                                 # The agent will perceive this during the NEXT tick's _calculate_percepts
                                 target_tile.events[consequence_event.entity_id] = consequence_event
@@ -304,9 +348,6 @@ class SimulationEngine:
 
                     else:
                         print(f"WARNING: {object_action.address} not in maze")
-
-            # Logging (Optional, but good for debug)
-            # print(f"{agent.name} is {agent.emoji} at {new_tile}")
 
     def _calculate_percepts(self) -> Dict[str, Percept]:
         """

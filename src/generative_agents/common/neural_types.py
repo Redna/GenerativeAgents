@@ -53,10 +53,6 @@ class AgentState:
         return self.working_memory.action
 
     @property
-    def chatting_with(self) -> Optional[str]:
-        return self.working_memory.chatting_with
-
-    @property
     def chatting_with_buffer(self) -> Dict[str, int]:
         return self.working_memory.chatting_with_buffer
 
@@ -80,7 +76,6 @@ class ActionSignal:
     
     # 4. State Updates
     update_chat_buffer: Optional[Dict[str, int]] = None
-    stop_chatting: bool = False
     
     # 5. Metadata for Debugging/Optimization
     thought_trace: str = ""

@@ -17,6 +17,9 @@ class AgentDTO(BaseModel):
     emoji: str
     activity: str
     movement: MovementDTO
+    reflection_trigger_counter: float = 500.0
+    reflection_trigger_max: float = 500.0
+    events_since_last_reflection: int = 0
 
 
 class RoundUpdateDTO(BaseModel):

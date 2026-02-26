@@ -72,6 +72,9 @@ class Agent:
             emoji=self.emoji,
             activity=self.activity,
             movement=MovementDTO(col=self.working_memory.tile.x, row=self.working_memory.tile.y),
+            reflection_trigger_counter=self.working_memory.reflection_trigger_counter,
+            reflection_trigger_max=self.working_memory.reflection_trigger_max,
+            events_since_last_reflection=self.working_memory.events_since_last_reflection,
         )
 
     @staticmethod
@@ -87,6 +90,13 @@ class Agent:
             time=time,
             tile=maze.get_tile(dto.movement.col, dto.movement.row),
         )
+        
+        # Restore System 2 counters
+        agent.working_memory.reflection_trigger_counter = dto.reflection_trigger_counter
+        agent.working_memory.reflection_trigger_max = dto.reflection_trigger_max
+        agent.working_memory.events_since_last_reflection = dto.events_since_last_reflection
+        
+        return agent
 
     @property
     def observation(self):
@@ -159,10 +169,10 @@ class Agent:
         # 4. Apply Action Signal (Effectors)
         self._apply_action_signal(signal)
 
-        # Update reflection trigger based on new memories
+        # Update reflection trigger based on new highly salient memories
         for memory in signal.new_memories:
-             self.working_memory.events_since_last_reflection += 1
-             if hasattr(memory, 'poignancy') and memory.poignancy > 0.2:
+             if hasattr(memory, 'poignancy') and memory.poignancy >= 0.5:
+                 self.working_memory.events_since_last_reflection += 1
                  self.working_memory.reflection_trigger_counter -= memory.poignancy
 
         # 5. Execution (Motor Control)

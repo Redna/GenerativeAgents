@@ -67,11 +67,13 @@ agent.run_step(percept, maze, agents, time)
 As of Phase 6, the `SimulationEngine._update_map_events` loop includes an asynchronous probability check against the `WorldPhysicsSimulator` (a fast LLM).
 - **Behavior**: Evaluates open-ended semantic interactions (e.g. "fixing coffee machine") and injects dynamic environmental consequences.
 
-### Non-Blocking Dialogue & Overhearing
-Also in Phase 6, multi-turn dialogues are executed asynchronously so they do not block the deterministic `SimulationEngine.step()` tick loop.
-- **The Coordinator**: When an agent invokes the `speak_to` action tool, the engine intercepts the request and spins up `DialogueCoordinator.run_conversation_async(...)` in a background thread via `asyncio.to_thread`.
-- **Physical Broadcasting**: While the background chat generates utterances, the `DialogueCoordinator` mutates the physical `Action.event.description` of the active speaker (e.g., `"chatting with Maria, saying: 'Hello!'"`). This text is immediately synced to the environment `Tile`.
-- **The Overhearing Mechanic**: Bystanders running their concurrent `SensoryProcessingLayer` perception sweeps pick up these tile events. If they are not the active speaker or listener, the event is reformatted from a Chat into a 3rd-person `EventType.OBSERVATION` (`"overheard X say to Y: '...'"`). The `heuristic_poignance` rater gives these overheard events an automatic `+0.15` boost to ensure secrets are deeply remembered and subjected to System 2 reflection.
+### Emergent Dialogue & Overhearing
+Multi-turn dialogues emerge from the standard perceive → plan → act loop. There is no special "conversation mode" that bypasses cognition.
+- **The Mechanic**: Every tick, an agent runs their full ReAct brain. If they are near someone, they can choose to `speak_to(target, "Hello!")`. This creates a tile event (`"chatting with target, saying 'Hello!'"`).
+- **Emergent Response**: The target agent perceives this tile event via their `SensoryProcessingLayer`, which converts it into an `EventType.CHAT` memory. Because it just happened, it surfaces in `state.recent_events`. The target's `ReActActor` sees this in its `visible_events` context and can actively choose to respond (`speak_to`) or walk away (`move_to`).
+- **Physical Broadcasting**: Both the utterance and the listening action are broadcast as tile events, making them fully visible to bystanders.
+- **The Overhearing Mechanic**: Bystanders running their concurrent `SensoryProcessingLayer` perception sweeps pick up these tile events. If they are not a conversation participant, the event is reformatted into a 3rd-person `EventType.OBSERVATION` (`"overheard X say to Y: '...'"`). The `heuristic_poignance` rater gives these overheard events an automatic `+0.15` boost to ensure they are deeply remembered and subjected to System 2 reflection.
+- **Conversation Lifecycle**: Since conversations are emergent, there is no explicit end. When an agent decides to change their physical action (e.g., from `"chatting with Maria"` to `"moving to the cafe"`), the Simulation Engine notices they walked away, summarizes the `ConversationState.history`, and injects the summary and takeaway into their memory organically.
 
 ---
 
@@ -114,6 +116,7 @@ class AgentBrain(dspy.Module):
 - **File**: `agents/layers/perception.py`
 - **Calls**: 0 LLM calls (heuristic filter + poignancy threshold)
 - Filters `Percept.events` → `List[PerceivedEvent]` based on relevance and retention.
+- **Memory Fade Filter**: Implements habituation. If an agent perceives the exact same string across consecutive ticks (e.g. "Klaus is sleeping"), its poignancy is decayed exponentially (base * 0.5^ticks). Once the decayed poignancy drops below `0.1`, the event is considered background noise and is not saved to long-term memory. This drastically reduces Qdrant DB bloat for continuous actions.
 
 ### Layer 2: `AssociativeMemoryLayer` (Retrieval)
 - **File**: `agents/layers/retrieval.py`
@@ -135,7 +138,10 @@ class AgentBrain(dspy.Module):
 - **Calls**: 1 LLM call (`ReActActor`) — skipped if current action is still running and no interrupt
 - **Interrupt threshold**: If any perceived event has `poignancy >= 0.7` (`INTERRUPT_POIGNANCY_THRESHOLD`), the agent re-evaluates even if its current action hasn't finished. Configurable at module level.
 - **Action duration**: `DEFAULT_ACTION_DURATION = 10` minutes (configurable). Agents cycle through actions every ~60 ticks at 10-second tick resolution.
-- **Location resolution**: `_resolve_address(activity, maze)` fuzzy-matches natural-language activities (e.g. `"Morning routine"`) to real maze addresses (e.g. `"the Ville:Hobbs Cafe:cafe"`) using `maze.address_tiles`. Falls back to word matching, then random.
+- **Location resolution**: `_resolve_address(target_location, maze)` maps natural-language intent (e.g. `"living room"`) to real maze addresses (e.g. `"the Ville:Lin family's house:living room"`) using a 3-tier intelligence stack against `maze.known_addresses`:
+  1. **Exact Match**: Instant $O(1)$ substring matching.
+  2. **Lexical Match (Typo Correction)**: Instant $O(n)$ Levenshtein matching via `difflib.get_close_matches(cutoff=0.5)`. Automatically corrects spelling errors (e.g. "Hobs Cafe" → "Hobbs Cafe") with zero memory overhead.
+  3. **Semantic Match (Intent Routing)**: If the target is a synonym/abstract concept (e.g. "grocery store"), the engine uses `dspy.settings.lm` embeddings to compute Cosine Similarity between the target vector and locally-cached vectors of all known addresses.
 - `ReActActor` picks one of 4 tools; Python dispatches (zero extra LLM calls):
   - `move_to(destination)` → resolve address via maze, build `Action`
   - `speak_to(target, opening_line)` → create chat `Action` + memory event

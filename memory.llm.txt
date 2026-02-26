@@ -36,6 +36,7 @@ When an event is stored, it is embedded and saved with the following rigid paylo
 1. All semantic memories must be converted to `PerceivedEvent` objects before insertion.
 2. `poignancy` (importance) determines how quickly a memory decays and whether it triggers System 2 reflection.
 3. Overheard snippets (`"overheard X say to Y: ..."`) receive an automatic high-signal heuristic boost to ensure they are retained.
+4. **Memory Fade Filter**: Continuous static actions (e.g. "is sleeping") that are observed across consecutive ticks have their poignancy decayed exponentially. If the decayed poignancy falls below `< 0.1`, it is completely ignored by the database to prevent duplicate row bloat.
 
 ## Retrieval Process (The 3-Stage Pipeline)
 When the `AgentBrain` needs to remember something, it uses the `AssociativeMemoryLayer`, which executes a 3-stage pipeline:

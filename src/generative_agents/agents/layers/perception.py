@@ -18,51 +18,59 @@ class SensoryProcessingLayer(dspy.Module):
     def forward(self, percept: Percept, state: AgentState) -> List[PerceivedEvent]:
         processed_events = []
         current_observations = set()
+        new_fade_tracker = {}
         
         for event in percept.events:
             type_ = EventType.EVENT
+            # Use a local variable to avoid mutating the original Event object in-place on the map
+            desc = event.description
             
             # Identify Chat events
-            if event.entity_id == state.name and "chatting with" in event.description:
+            if event.entity_id == state.name and "chatting with" in desc:
                 type_ = EventType.CHAT
 
-            # ---> NEW: Identify Overheard Conversations (Someone else is talking) <---
-            elif ", saying: '" in event.description:
+            # Identify Overheard Conversations
+            elif ", saying: '" in desc:
                 speaker_name = event.entity_id
-                # Extract listener name from the string "chatting with [Name], saying:"
                 try:
-                    listener_name = event.description.split("chatting with ")[1].split(",")[0]
-                    # If the perceiving agent is NOT the speaker and NOT the listener, they are a bystander
+                    listener_name = desc.split("chatting with ")[1].split(",")[0]
                     if state.name != speaker_name and state.name != listener_name:
                         type_ = EventType.OBSERVATION
-                        # Restructure the description so the bystander remembers it in the 3rd person
-                        utterance = event.description.split(", saying: '")[1].rstrip("'")
-                        event.description = f"overheard {speaker_name} say to {listener_name}: '{utterance}'"
+                        utterance = desc.split(", saying: '")[1].rstrip("'")
+                        desc = f"overheard {speaker_name} say to {listener_name}: '{utterance}'"
                         log_agent(state.name, f"Overheard snippet: {utterance}", "DEBUG")
                 except IndexError:
                      pass
 
             # Format description if address is entity_id
             elif type_ == EventType.EVENT and ":" in event.entity_id:
-                event.description = f"{event.entity_id.split(':')[-1]} is {event.description}"
+                desc = f"{event.entity_id.split(':')[-1]} is {desc}"
 
-            current_observations.add(event.description)
+            current_observations.add(desc)
 
-            # Deduplicate generic world events to prevent hyper-frequent reflection triggers
-            if type_ == EventType.EVENT and event.description in state.working_memory.last_observations_cache:
+            # Calculate Base Poignancy
+            base_poignancy = self._rate_perception_poignancy(state.name, state.identity_description, type_, desc)
+            
+            # --- Memory Fade Filter ---
+            # If we've seen this exact description recently, decay its impact
+            fade_factor = state.working_memory.repeated_event_fade.get(desc, 1.0)
+            final_poignancy = base_poignancy * fade_factor
+            
+            # We carry over the fade to the next tick, and decay it further (halving its impact each tick)
+            new_fade_tracker[desc] = fade_factor * 0.5
+            
+            # If the decayed poignancy falls below 0.1, it's considered background "noise" and ignored
+            if final_poignancy < 0.1:
                 continue
 
-            # Calculate Poignancy
-            poignancy = self._rate_perception_poignancy(state.name, state.identity_description, type_, event.description)
-            
-            if poignancy > 0.1: # Only log non-trivial poignancy scores above idle to reduce noise
-                 log_agent(state.name, f"Event '{event.description}' poignancy rated as {poignancy}", "DEBUG")
+            if final_poignancy >= 0.15: # Only log non-trivial poignancy scores above idle to reduce console noise
+                 log_agent(state.name, f"Event '{desc}' poignancy rated as {final_poignancy:.2f} (Base: {base_poignancy:.2f})", "DEBUG")
             
             processed_event = PerceivedEvent(
                 event_type=type_,
-                poignancy=poignancy,
+                poignancy=final_poignancy,
                 depth=1,
-                description=event.description,
+                description=desc,
                 entity_id=event.entity_id,
                 created=getattr(event, 'created', None) or global_state.time.time,
                 expiration=getattr(event, 'expiration', None),
@@ -70,6 +78,8 @@ class SensoryProcessingLayer(dspy.Module):
             )
             processed_events.append(processed_event)
             
+        # Update caches (events that weren't seen this tick will be naturally dropped from the tracker)
+        state.working_memory.repeated_event_fade = new_fade_tracker
         state.working_memory.last_observations_cache = current_observations
         return processed_events
 

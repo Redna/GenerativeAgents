@@ -35,20 +35,19 @@ class WorkingMemory:
     finished_actions: List[Action] = field(default_factory=list)
     
     # Social Context
-    chatting_with: str = ""
-    chatting_with_buffer: Dict[str, Any] = field(default_factory=dict)
-    chatting_end_time: Optional[datetime.datetime] = None
+    chatting_with_buffer: Dict[str, int] = field(default_factory=dict)  # cooldown tracker
     
     # Metadata
     retention: int = 5
     vision_radius: int = 6
     attention_bandwidth: int = 4
     last_observations_cache: set[str] = field(default_factory=set)
+    repeated_event_fade: Dict[str, float] = field(default_factory=dict) # Tracks decay factor for repetitive events
     
     # System 2 Triggers
-    reflection_trigger_counter: int = 255
-    reflection_trigger_max: int = 255
-    events_since_last_reflection: int = 800
+    reflection_trigger_counter: int = 500  # Starts higher to allow for natural day progression
+    reflection_trigger_max: int = 500
+    events_since_last_reflection: int = 0  # Starts at 0 instead of 800 to prevent immediate first-day trigger
     
     def is_action_finished(self) -> bool:
         """
@@ -57,14 +56,11 @@ class WorkingMemory:
         if not self.action:
             return True
 
-        if self.chatting_with:
-            end_time = self.chatting_end_time
-        else:
-            start = self.action.start_time
-            # Adjust for 0 seconds if needed, legacy logic preserved
-            if start.second != 0:
-                start = start.replace(second=0) + datetime.timedelta(minutes=1)
-            end_time = start + datetime.timedelta(minutes=self.action.duration)
+        start = self.action.start_time
+        # Adjust for 0 seconds if needed, legacy logic preserved
+        if start.second != 0:
+            start = start.replace(second=0) + datetime.timedelta(minutes=1)
+        end_time = start + datetime.timedelta(minutes=self.action.duration)
 
         if end_time and self.time.time >= end_time:
             return True

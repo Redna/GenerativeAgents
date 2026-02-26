@@ -88,7 +88,6 @@ class AgentBrain(dspy.Module):
         merged.updated_daily_schedule = plan_signal.updated_daily_schedule
         merged.next_action = action_signal.next_action
         merged.update_chat_buffer = action_signal.update_chat_buffer
-        merged.stop_chatting = action_signal.stop_chatting
         merged.new_memories = plan_signal.new_memories + action_signal.new_memories
         merged.thought_trace = f"Planning: {plan_signal.thought_trace} | Actor: {action_signal.thought_trace}"
         return merged
